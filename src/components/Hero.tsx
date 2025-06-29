@@ -20,7 +20,7 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
       description: 'Total warranty claims our users have recovered'
     },
     {
-      value: '50,000+',
+      value: '50k+',
       label: 'Active users within 1 year',
       description: 'Growing community of smart receipt users'
     },
@@ -45,7 +45,7 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
   return (
     <section className="bg-background pt-20 pb-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
+        <div className="grid lg:grid-cols-2 gap-12 items-start lg:items-center">
           {/* Left Column - Content */}
           <div className="text-center lg:text-left">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-text-primary leading-tight mb-6">
@@ -76,13 +76,13 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
               {trustStats.map((stat, index) => (
                 <div
                   key={index}
-                  className="group relative bg-white p-4 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-gray-100"
+                  className="group relative bg-white p-3 lg:p-4 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-gray-100"
                 >
                   <div className="flex items-center justify-center mb-2">
                     {getStatIcon(index)}
                   </div>
-                  <div className="text-2xl font-bold text-text-primary mb-1">{stat.value}</div>
-                  <div className="text-sm text-text-secondary font-medium">{stat.label}</div>
+                  <div className="text-xl lg:text-2xl font-bold text-text-primary mb-1 break-words">{stat.value}</div>
+                  <div className="text-xs lg:text-sm text-text-secondary font-medium leading-tight">{stat.label}</div>
                   
                   {/* Tooltip */}
                   <div className="absolute invisible group-hover:visible bg-text-primary text-white text-xs rounded-lg px-3 py-2 -mt-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap z-10">
@@ -95,7 +95,7 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
           </div>
 
           {/* Right Column - Demo Video */}
-          <div className="relative">
+          <div className="relative lg:mt-0">
             <div className="bg-white rounded-2xl shadow-card p-8 relative overflow-hidden">
               {/* Background Pattern */}
               <div className="absolute inset-0 opacity-5">
@@ -111,7 +111,7 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
                   <h3 className="text-lg font-bold text-text-primary mb-2">
                     See Smart Receipts in Action
                   </h3>
-                  <p className="text-text-secondary">
+                  <p className="text-text-secondary text-sm lg:text-base">
                     Watch our 30-second demo showing receipt scanning, warranty tracking, and claim support
                   </p>
                 </div>

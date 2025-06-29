@@ -4,7 +4,6 @@ import {
   FolderOpen, 
   Search, 
   Bell, 
-  Settings, 
   User, 
   LogOut,
   Receipt,
@@ -18,7 +17,11 @@ import {
   Clock,
   Loader2,
   X,
-  Edit3
+  Edit3,
+  Settings,
+  Database,
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 import { signOut, getCurrentUser, supabase } from '../lib/supabase';
 
@@ -65,13 +68,44 @@ interface SearchResult {
   relevanceScore: number;
 }
 
+interface NotificationSettings {
+  warranty_alerts: boolean;
+  auto_system_update: boolean;
+  marketing_notifications: boolean;
+}
+
+interface PrivacySettings {
+  data_collection: boolean;
+  data_analysis: 'allowed' | 'not_allowed';
+  biometric_login: boolean;
+  two_factor_auth: boolean;
+}
+
 const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning, onShowProfile }) => {
   const [user, setUser] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [alertsCount, setAlertsCount] = useState(3);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
+
+  // Settings states
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
+    warranty_alerts: true,
+    auto_system_update: true,
+    marketing_notifications: false
+  });
+
+  const [privacySettings, setPrivacySettings] = useState<PrivacySettings>({
+    data_collection: true,
+    data_analysis: 'allowed',
+    biometric_login: false,
+    two_factor_auth: false
+  });
+
+  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
 
   // Search states
   const [searchQuery, setSearchQuery] = useState('');
@@ -99,6 +133,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         
         if (currentUser) {
           await loadDashboardData(currentUser.id);
+          await loadUserSettings(currentUser.id);
           
           // Load profile picture if exists
           if (currentUser.user_metadata?.avatar_url) {
@@ -151,6 +186,125 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       subscription.unsubscribe();
     };
   }, [user]);
+
+  const loadUserSettings = async (userId: string) => {
+    try {
+      // Load notification settings
+      const { data: notifData, error: notifError } = await supabase
+        .from('user_notification_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (notifError && notifError.code !== 'PGRST116') {
+        console.error('Error loading notification settings:', notifError);
+      } else if (notifData) {
+        setNotificationSettings({
+          warranty_alerts: notifData.warranty_alerts,
+          auto_system_update: notifData.auto_system_update,
+          marketing_notifications: notifData.marketing_notifications
+        });
+      }
+
+      // Load privacy settings
+      const { data: privacyData, error: privacyError } = await supabase
+        .from('user_privacy_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (privacyError && privacyError.code !== 'PGRST116') {
+        console.error('Error loading privacy settings:', privacyError);
+      } else if (privacyData) {
+        setPrivacySettings({
+          data_collection: privacyData.data_collection,
+          data_analysis: privacyData.data_analysis,
+          biometric_login: privacyData.biometric_login,
+          two_factor_auth: privacyData.two_factor_auth
+        });
+      }
+    } catch (error) {
+      console.error('Error loading user settings:', error);
+    }
+  };
+
+  const updateNotificationSettings = async (newSettings: Partial<NotificationSettings>) => {
+    if (!user) return;
+
+    setIsUpdatingSettings(true);
+    try {
+      const updatedSettings = { ...notificationSettings, ...newSettings };
+      
+      const { error } = await supabase
+        .from('user_notification_settings')
+        .upsert({
+          user_id: user.id,
+          ...updatedSettings
+        });
+
+      if (error) throw error;
+
+      setNotificationSettings(updatedSettings);
+    } catch (error) {
+      console.error('Error updating notification settings:', error);
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
+
+  const updatePrivacySettings = async (newSettings: Partial<PrivacySettings>) => {
+    if (!user) return;
+
+    setIsUpdatingSettings(true);
+    try {
+      const updatedSettings = { ...privacySettings, ...newSettings };
+      
+      const { error } = await supabase
+        .from('user_privacy_settings')
+        .upsert({
+          user_id: user.id,
+          ...updatedSettings
+        });
+
+      if (error) throw error;
+
+      setPrivacySettings(updatedSettings);
+    } catch (error) {
+      console.error('Error updating privacy settings:', error);
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
+
+  const handleDataManagementAction = async (action: 'backup' | 'clean_cache' | 'sync') => {
+    if (!user) return;
+
+    setIsUpdatingSettings(true);
+    try {
+      switch (action) {
+        case 'backup':
+          // Implement backup logic
+          console.log('Backing up user data...');
+          // You could create an edge function to handle data export
+          break;
+        case 'clean_cache':
+          // Clear local storage and refresh
+          localStorage.clear();
+          sessionStorage.clear();
+          window.location.reload();
+          break;
+        case 'sync':
+          // Reload all user data
+          await loadDashboardData(user.id);
+          await loadUserSettings(user.id);
+          break;
+      }
+    } catch (error) {
+      console.error(`Error performing ${action}:`, error);
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
 
   const loadDashboardData = async (userId: string) => {
     try {
@@ -398,11 +552,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                 )}
               </button>
 
-              {/* Settings */}
-              <button className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
-                <Settings className="h-6 w-6" />
-              </button>
-
               {/* User Menu */}
               <div className="relative">
                 <button
@@ -474,7 +623,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                         </button>
                       )}
                       
-                      <button className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-3">
+                      <button 
+                        onClick={() => {
+                          setShowAccountSettings(true);
+                          setShowUserMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-3"
+                      >
                         <Settings className="h-4 w-4" />
                         <div>
                           <div className="font-medium">Account Settings</div>
@@ -482,7 +637,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                         </div>
                       </button>
 
-                      <button className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-3">
+                      <button 
+                        onClick={() => {
+                          setShowNotificationSettings(true);
+                          setShowUserMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-3"
+                      >
                         <Bell className="h-4 w-4" />
                         <div>
                           <div className="font-medium">Notifications</div>
@@ -727,6 +888,254 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </div>
         </div>
       </main>
+
+      {/* Notification Settings Modal */}
+      {showNotificationSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-card max-w-2xl w-full max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-text-primary">Notification Settings</h2>
+              <button
+                onClick={() => setShowNotificationSettings(false)}
+                className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-6">
+              {/* Warranty Alerts */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <h3 className="font-medium text-text-primary">Warranty Alerts</h3>
+                  <p className="text-sm text-text-secondary">Get notified before warranties expire</p>
+                </div>
+                <button
+                  onClick={() => updateNotificationSettings({ warranty_alerts: !notificationSettings.warranty_alerts })}
+                  disabled={isUpdatingSettings}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+                    notificationSettings.warranty_alerts ? 'bg-primary' : 'bg-gray-300'
+                  } ${isUpdatingSettings ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                      notificationSettings.warranty_alerts ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Auto System Update */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <h3 className="font-medium text-text-primary">Auto System Update</h3>
+                  <p className="text-sm text-text-secondary">Automatically update the app when new versions are available</p>
+                </div>
+                <button
+                  onClick={() => updateNotificationSettings({ auto_system_update: !notificationSettings.auto_system_update })}
+                  disabled={isUpdatingSettings}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+                    notificationSettings.auto_system_update ? 'bg-primary' : 'bg-gray-300'
+                  } ${isUpdatingSettings ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                      notificationSettings.auto_system_update ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Marketing Notifications */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <h3 className="font-medium text-text-primary">Marketing Notifications</h3>
+                  <p className="text-sm text-text-secondary">Receive updates about new features and promotions</p>
+                </div>
+                <button
+                  onClick={() => updateNotificationSettings({ marketing_notifications: !notificationSettings.marketing_notifications })}
+                  disabled={isUpdatingSettings}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+                    notificationSettings.marketing_notifications ? 'bg-primary' : 'bg-gray-300'
+                  } ${isUpdatingSettings ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                      notificationSettings.marketing_notifications ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Account Settings Modal */}
+      {showAccountSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-card max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-text-primary">Account Settings</h2>
+              <button
+                onClick={() => setShowAccountSettings(false)}
+                className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-8">
+              {/* Privacy and Security Section */}
+              <div>
+                <h3 className="text-xl font-bold text-text-primary mb-4 flex items-center">
+                  <Shield className="h-5 w-5 mr-2" />
+                  Privacy and Security
+                </h3>
+                <div className="space-y-4">
+                  {/* Data Collection */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <h4 className="font-medium text-text-primary">Data Collection</h4>
+                      <p className="text-sm text-text-secondary">Allow collection of usage data to improve the service</p>
+                    </div>
+                    <button
+                      onClick={() => updatePrivacySettings({ data_collection: !privacySettings.data_collection })}
+                      disabled={isUpdatingSettings}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+                        privacySettings.data_collection ? 'bg-primary' : 'bg-gray-300'
+                      } ${isUpdatingSettings ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                          privacySettings.data_collection ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Data Analysis */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <h4 className="font-medium text-text-primary">Data Analysis</h4>
+                      <p className="text-sm text-text-secondary">Allow analysis of your data for personalized insights</p>
+                    </div>
+                    <select
+                      value={privacySettings.data_analysis}
+                      onChange={(e) => updatePrivacySettings({ data_analysis: e.target.value as 'allowed' | 'not_allowed' })}
+                      disabled={isUpdatingSettings}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 disabled:opacity-50"
+                    >
+                      <option value="allowed">Allowed</option>
+                      <option value="not_allowed">Not Allowed</option>
+                    </select>
+                  </div>
+
+                  {/* Biometric Login */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <h4 className="font-medium text-text-primary">Biometric Login</h4>
+                      <p className="text-sm text-text-secondary">Use fingerprint or face recognition to sign in</p>
+                    </div>
+                    <button
+                      onClick={() => updatePrivacySettings({ biometric_login: !privacySettings.biometric_login })}
+                      disabled={isUpdatingSettings}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+                        privacySettings.biometric_login ? 'bg-primary' : 'bg-gray-300'
+                      } ${isUpdatingSettings ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                          privacySettings.biometric_login ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Two Factor Authentication */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <h4 className="font-medium text-text-primary">Two Factor Authentication</h4>
+                      <p className="text-sm text-text-secondary">Add an extra layer of security to your account</p>
+                    </div>
+                    <button
+                      onClick={() => updatePrivacySettings({ two_factor_auth: !privacySettings.two_factor_auth })}
+                      disabled={isUpdatingSettings}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+                        privacySettings.two_factor_auth ? 'bg-primary' : 'bg-gray-300'
+                      } ${isUpdatingSettings ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                          privacySettings.two_factor_auth ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Data Management Section */}
+              <div>
+                <h3 className="text-xl font-bold text-text-primary mb-4 flex items-center">
+                  <Database className="h-5 w-5 mr-2" />
+                  Data Management
+                </h3>
+                <div className="grid md:grid-cols-3 gap-4">
+                  {/* Backup Data */}
+                  <button
+                    onClick={() => handleDataManagementAction('backup')}
+                    disabled={isUpdatingSettings}
+                    className="flex flex-col items-center p-6 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUpdatingSettings ? (
+                      <Loader2 className="h-8 w-8 text-primary animate-spin mb-3" />
+                    ) : (
+                      <Database className="h-8 w-8 text-primary mb-3" />
+                    )}
+                    <h4 className="font-medium text-text-primary mb-2">Backup Data</h4>
+                    <p className="text-sm text-text-secondary text-center">Export your receipts and settings</p>
+                  </button>
+
+                  {/* Clean Cache */}
+                  <button
+                    onClick={() => handleDataManagementAction('clean_cache')}
+                    disabled={isUpdatingSettings}
+                    className="flex flex-col items-center p-6 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUpdatingSettings ? (
+                      <Loader2 className="h-8 w-8 text-accent-yellow animate-spin mb-3" />
+                    ) : (
+                      <Trash2 className="h-8 w-8 text-accent-yellow mb-3" />
+                    )}
+                    <h4 className="font-medium text-text-primary mb-2">Clean Cache</h4>
+                    <p className="text-sm text-text-secondary text-center">Clear temporary files and data</p>
+                  </button>
+
+                  {/* Sync Now */}
+                  <button
+                    onClick={() => handleDataManagementAction('sync')}
+                    disabled={isUpdatingSettings}
+                    className="flex flex-col items-center p-6 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUpdatingSettings ? (
+                      <Loader2 className="h-8 w-8 text-secondary animate-spin mb-3" />
+                    ) : (
+                      <RefreshCw className="h-8 w-8 text-secondary mb-3" />
+                    )}
+                    <h4 className="font-medium text-text-primary mb-2">Sync Now</h4>
+                    <p className="text-sm text-text-secondary text-center">Refresh all data from server</p>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search Modal */}
       {showSearchModal && (

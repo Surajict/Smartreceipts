@@ -194,9 +194,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         .from('user_notification_settings')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
-      if (notifError && notifError.code !== 'PGRST116') {
+      if (notifError) {
         console.error('Error loading notification settings:', notifError);
       } else if (notifData) {
         setNotificationSettings({
@@ -211,9 +211,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         .from('user_privacy_settings')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
-      if (privacyError && privacyError.code !== 'PGRST116') {
+      if (privacyError) {
         console.error('Error loading privacy settings:', privacyError);
       } else if (privacyData) {
         setPrivacySettings({

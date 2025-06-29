@@ -12,7 +12,10 @@ import {
   Check,
   X,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Shield
 } from 'lucide-react';
 import { getCurrentUser, supabase } from '../lib/supabase';
 
@@ -39,6 +42,15 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [alertsCount] = useState(3);
   
+  // Email update states
+  const [isEditingEmail, setIsEditingEmail] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailUpdateError, setEmailUpdateError] = useState<string | null>(null);
+  const [emailUpdateSuccess, setEmailUpdateSuccess] = useState(false);
+  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -59,6 +71,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
         
         setUser(userProfile);
         setEditedName(userProfile.full_name);
+        setNewEmail(userProfile.email);
         
         // Load profile picture if exists
         if (userProfile.avatar_url) {
@@ -170,6 +183,70 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
     }
   };
 
+  const handleEmailUpdate = async () => {
+    if (!user || !newEmail.trim() || !currentPassword.trim()) {
+      setEmailUpdateError('Please fill in all fields');
+      return;
+    }
+
+    if (newEmail === user.email) {
+      setEmailUpdateError('New email must be different from current email');
+      return;
+    }
+
+    if (!/\S+@\S+\.\S+/.test(newEmail)) {
+      setEmailUpdateError('Please enter a valid email address');
+      return;
+    }
+
+    setIsUpdatingEmail(true);
+    setEmailUpdateError(null);
+
+    try {
+      // First verify the current password by attempting to sign in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword
+      });
+
+      if (signInError) {
+        throw new Error('Current password is incorrect');
+      }
+
+      // Update email
+      const { error: updateError } = await supabase.auth.updateUser({
+        email: newEmail
+      });
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setEmailUpdateSuccess(true);
+      setIsEditingEmail(false);
+      setCurrentPassword('');
+      
+      // Update local state
+      setUser(prev => prev ? { ...prev, email: newEmail } : null);
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => setEmailUpdateSuccess(false), 5000);
+
+    } catch (error: any) {
+      console.error('Email update error:', error);
+      setEmailUpdateError(error.message || 'Failed to update email');
+    } finally {
+      setIsUpdatingEmail(false);
+    }
+  };
+
+  const cancelEmailEdit = () => {
+    setIsEditingEmail(false);
+    setNewEmail(user?.email || '');
+    setCurrentPassword('');
+    setEmailUpdateError(null);
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -250,20 +327,23 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
         </div>
 
         {/* Error/Success Messages */}
-        {uploadError && (
+        {(uploadError || emailUpdateError) && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-center">
               <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
-              <p className="text-sm text-red-700">{uploadError}</p>
+              <p className="text-sm text-red-700">{uploadError || emailUpdateError}</p>
             </div>
           </div>
         )}
 
-        {uploadSuccess && (
+        {(uploadSuccess || emailUpdateSuccess) && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
             <div className="flex items-center">
               <Check className="h-5 w-5 text-green-600 mr-2" />
-              <p className="text-sm text-green-700">Profile picture updated successfully!</p>
+              <p className="text-sm text-green-700">
+                {uploadSuccess && 'Profile picture updated successfully!'}
+                {emailUpdateSuccess && 'Email updated successfully! Please check your new email for confirmation.'}
+              </p>
             </div>
           </div>
         )}
@@ -403,12 +483,89 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
                     <Mail className="inline h-4 w-4 mr-1" />
                     Email Address
                   </label>
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <span className="text-text-primary font-medium">{user.email}</span>
-                    <p className="text-sm text-text-secondary mt-1">
-                      Email cannot be changed from this page
-                    </p>
-                  </div>
+                  {isEditingEmail ? (
+                    <div className="space-y-4">
+                      {/* New Email Input */}
+                      <div>
+                        <input
+                          type="email"
+                          value={newEmail}
+                          onChange={(e) => setNewEmail(e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                          placeholder="Enter new email address"
+                        />
+                      </div>
+                      
+                      {/* Current Password Input */}
+                      <div>
+                        <label className="block text-sm font-medium text-text-secondary mb-2">
+                          <Shield className="inline h-4 w-4 mr-1" />
+                          Current Password (required for email change)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            value={currentPassword}
+                            onChange={(e) => setCurrentPassword(e.target.value)}
+                            className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                            placeholder="Enter your current password"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-secondary hover:text-text-primary transition-colors duration-200"
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-5 w-5" />
+                            ) : (
+                              <Eye className="h-5 w-5" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={handleEmailUpdate}
+                          disabled={isUpdatingEmail || !newEmail.trim() || !currentPassword.trim()}
+                          className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                        >
+                          {isUpdatingEmail ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Updating...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="h-4 w-4" />
+                              <span>Update Email</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={cancelEmailEdit}
+                          className="border border-gray-300 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      
+                      <p className="text-sm text-text-secondary">
+                        You'll receive a confirmation email at your new address. Your email won't change until you confirm it.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <span className="text-text-primary font-medium">{user.email}</span>
+                      <button
+                        onClick={() => setIsEditingEmail(true)}
+                        className="text-primary hover:text-primary/80 transition-colors duration-200"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Member Since */}

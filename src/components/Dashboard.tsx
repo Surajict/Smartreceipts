@@ -17,7 +17,8 @@ import {
   CheckCircle,
   Clock,
   Loader2,
-  X
+  X,
+  Edit3
 } from 'lucide-react';
 import { signOut, getCurrentUser, supabase } from '../lib/supabase';
 
@@ -406,9 +407,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+                  className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 group"
                 >
-                  <div className="w-8 h-8 rounded-full overflow-hidden bg-primary">
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-primary ring-2 ring-transparent group-hover:ring-primary/20 transition-all duration-200">
                     {profilePicture ? (
                       <img
                         src={profilePicture}
@@ -421,39 +422,85 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                       </div>
                     )}
                   </div>
-                  <span className="text-sm font-medium text-text-primary hidden sm:inline">
-                    {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
+                  <span className="text-sm font-medium text-text-primary hidden sm:inline group-hover:text-primary transition-colors duration-200 flex items-center space-x-1">
+                    <span>{user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}</span>
+                    <Edit3 className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                   </span>
                 </button>
 
-                {/* User Dropdown */}
+                {/* Enhanced User Dropdown */}
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
-                    <div className="px-4 py-2 border-b border-gray-200">
-                      <p className="text-sm font-medium text-text-primary">
-                        {user?.user_metadata?.full_name || 'User'}
-                      </p>
-                      <p className="text-xs text-text-secondary">{user?.email}</p>
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                    {/* User Info Header */}
+                    <div className="px-4 py-3 border-b border-gray-200">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-full overflow-hidden bg-primary">
+                          {profilePicture ? (
+                            <img
+                              src={profilePicture}
+                              alt="Profile"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <User className="h-5 w-5 text-white" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-text-primary truncate">
+                            {user?.user_metadata?.full_name || 'User'}
+                          </p>
+                          <p className="text-xs text-text-secondary truncate">{user?.email}</p>
+                        </div>
+                      </div>
                     </div>
-                    {onShowProfile && (
-                      <button
-                        onClick={() => {
-                          onShowProfile();
-                          setShowUserMenu(false);
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
-                      >
-                        <User className="h-4 w-4" />
-                        <span>My Profile</span>
+
+                    {/* Menu Items */}
+                    <div className="py-1">
+                      {onShowProfile && (
+                        <button
+                          onClick={() => {
+                            onShowProfile();
+                            setShowUserMenu(false);
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-3"
+                        >
+                          <User className="h-4 w-4" />
+                          <div>
+                            <div className="font-medium">Update Profile</div>
+                            <div className="text-xs text-text-secondary">Change picture, name & email</div>
+                          </div>
+                        </button>
+                      )}
+                      
+                      <button className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-3">
+                        <Settings className="h-4 w-4" />
+                        <div>
+                          <div className="font-medium">Account Settings</div>
+                          <div className="text-xs text-text-secondary">Privacy & security</div>
+                        </div>
                       </button>
-                    )}
-                    <button
-                      onClick={handleSignOut}
-                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      <span>Sign Out</span>
-                    </button>
+
+                      <button className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-3">
+                        <Bell className="h-4 w-4" />
+                        <div>
+                          <div className="font-medium">Notifications</div>
+                          <div className="text-xs text-text-secondary">Manage alerts</div>
+                        </div>
+                      </button>
+                    </div>
+
+                    {/* Sign Out */}
+                    <div className="border-t border-gray-200 pt-1">
+                      <button
+                        onClick={handleSignOut}
+                        className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-3"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

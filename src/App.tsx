@@ -90,7 +90,7 @@ function App() {
 
   // Show dashboard if user is authenticated
   if (user && currentPage === 'dashboard') {
-    return <Dashboard onSignOut={handleSignOut} onShowReceiptScanning={handleShowReceiptScanning} />;
+    return <Dashboard onSignOut={handleSignOut} onShowReceiptScanning={handleShowReceiptScanning} onShowProfile={handleShowProfile} />;
   }
 
   if (currentPage === 'login') {

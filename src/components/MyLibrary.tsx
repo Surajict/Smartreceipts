@@ -511,7 +511,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                 className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 flex items-center space-x-2"
               >
                 <Camera className="h-4 w-4" />
-                <span className="hidden sm:inline">Scan New Receipt</span>
+                <span className="hidden sm:inline leading-none">Scan New Receipt</span>
               </button>
 
               {/* User Menu */}

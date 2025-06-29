@@ -17,7 +17,7 @@ import {
   CheckCircle,
   Clock
 } from 'lucide-react';
-import { signOut, getCurrentUser } from '../lib/supabase';
+import { signOut, getCurrentUser, supabase } from '../lib/supabase';
 
 interface DashboardProps {
   onSignOut: () => void;
@@ -39,6 +39,8 @@ interface RecentReceipt {
   date: string;
   amount: number;
   items: number;
+  product_description?: string;
+  brand_name?: string;
 }
 
 interface SummaryStats {
@@ -53,79 +55,37 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [alertsCount, setAlertsCount] = useState(3);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Mock data - in a real app, this would come from your database
-  const [summaryStats] = useState<SummaryStats>({
-    receiptsScanned: 152,
-    totalAmount: 4320.50,
-    itemsCaptured: 87,
-    warrantiesClaimed: 12
+  // Dynamic data states
+  const [summaryStats, setSummaryStats] = useState<SummaryStats>({
+    receiptsScanned: 0,
+    totalAmount: 0,
+    itemsCaptured: 0,
+    warrantiesClaimed: 0
   });
 
-  const [warrantyAlerts] = useState<WarrantyAlert[]>([
-    {
-      id: '1',
-      itemName: 'MacBook Pro 16"',
-      purchaseDate: '2023-01-15',
-      expiryDate: '2025-01-15',
-      daysLeft: 45,
-      urgency: 'medium'
-    },
-    {
-      id: '2',
-      itemName: 'Samsung 4K Monitor',
-      purchaseDate: '2023-06-20',
-      expiryDate: '2025-06-20',
-      daysLeft: 180,
-      urgency: 'low'
-    },
-    {
-      id: '3',
-      itemName: 'Canon EOS R5 Camera',
-      purchaseDate: '2023-11-10',
-      expiryDate: '2024-11-10',
-      daysLeft: 15,
-      urgency: 'high'
-    }
-  ]);
+  const [recentReceipts, setRecentReceipts] = useState<RecentReceipt[]>([]);
+  const [warrantyAlerts, setWarrantyAlerts] = useState<WarrantyAlert[]>([]);
 
-  const [recentReceipts] = useState<RecentReceipt[]>([
-    {
-      id: '1',
-      merchant: 'Apple Store',
-      date: '2024-01-15',
-      amount: 2499.00,
-      items: 3
-    },
-    {
-      id: '2',
-      merchant: 'Best Buy',
-      date: '2024-01-12',
-      amount: 899.99,
-      items: 2
-    },
-    {
-      id: '3',
-      merchant: 'Amazon',
-      date: '2024-01-10',
-      amount: 156.78,
-      items: 5
-    },
-    {
-      id: '4',
-      merchant: 'Target',
-      date: '2024-01-08',
-      amount: 89.45,
-      items: 8
-    }
-  ]);
-
+  // Load user and initial data
   useEffect(() => {
-    const loadUser = async () => {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
+    const loadUserAndData = async () => {
+      try {
+        const currentUser = await getCurrentUser();
+        setUser(currentUser);
+        
+        if (currentUser) {
+          await loadDashboardData(currentUser.id);
+        }
+      } catch (error) {
+        console.error('Error loading user and data:', error);
+      } finally {
+        setLoading(false);
+      }
     };
-    loadUser();
+
+    loadUserAndData();
 
     // Update time every minute
     const timer = setInterval(() => {
@@ -134,6 +94,139 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
 
     return () => clearInterval(timer);
   }, []);
+
+  // Set up real-time subscription for receipts
+  useEffect(() => {
+    if (!user) return;
+
+    const subscription = supabase
+      .channel('receipts_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'receipts',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('Receipt change detected:', payload);
+          // Reload dashboard data when receipts change
+          loadDashboardData(user.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [user]);
+
+  const loadDashboardData = async (userId: string) => {
+    try {
+      // Fetch receipts data
+      const { data: receipts, error } = await supabase
+        .from('receipts')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching receipts:', error);
+        return;
+      }
+
+      // Calculate summary stats
+      const stats = calculateSummaryStats(receipts || []);
+      setSummaryStats(stats);
+
+      // Format recent receipts
+      const formattedReceipts = formatRecentReceipts(receipts || []);
+      setRecentReceipts(formattedReceipts);
+
+      // Generate warranty alerts
+      const alerts = generateWarrantyAlerts(receipts || []);
+      setWarrantyAlerts(alerts);
+      setAlertsCount(alerts.filter(alert => alert.urgency === 'high').length);
+
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    }
+  };
+
+  const calculateSummaryStats = (receipts: any[]): SummaryStats => {
+    const totalAmount = receipts.reduce((sum, receipt) => {
+      return sum + (parseFloat(receipt.amount) || 0);
+    }, 0);
+
+    return {
+      receiptsScanned: receipts.length,
+      totalAmount: totalAmount,
+      itemsCaptured: receipts.length, // Assuming 1 item per receipt for now
+      warrantiesClaimed: Math.floor(receipts.length * 0.1) // Mock calculation
+    };
+  };
+
+  const formatRecentReceipts = (receipts: any[]): RecentReceipt[] => {
+    return receipts.slice(0, 4).map(receipt => ({
+      id: receipt.id,
+      merchant: receipt.brand_name || 'Unknown Merchant',
+      date: receipt.purchase_date,
+      amount: parseFloat(receipt.amount) || 0,
+      items: 1, // Assuming 1 item per receipt
+      product_description: receipt.product_description,
+      brand_name: receipt.brand_name
+    }));
+  };
+
+  const generateWarrantyAlerts = (receipts: any[]): WarrantyAlert[] => {
+    const alerts: WarrantyAlert[] = [];
+
+    receipts.forEach(receipt => {
+      const purchaseDate = new Date(receipt.purchase_date);
+      const warrantyPeriod = receipt.warranty_period;
+      
+      // Calculate warranty expiry date
+      let expiryDate = new Date(purchaseDate);
+      
+      if (warrantyPeriod.includes('year')) {
+        const years = parseInt(warrantyPeriod.match(/\d+/)?.[0] || '1');
+        expiryDate.setFullYear(expiryDate.getFullYear() + years);
+      } else if (warrantyPeriod.includes('month')) {
+        const months = parseInt(warrantyPeriod.match(/\d+/)?.[0] || '6');
+        expiryDate.setMonth(expiryDate.getMonth() + months);
+      }
+
+      // Calculate days left
+      const today = new Date();
+      const daysLeft = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      // Only include future warranties
+      if (daysLeft > 0) {
+        let urgency: 'low' | 'medium' | 'high' = 'low';
+        if (daysLeft <= 30) urgency = 'high';
+        else if (daysLeft <= 90) urgency = 'medium';
+
+        alerts.push({
+          id: receipt.id,
+          itemName: receipt.product_description || 'Unknown Item',
+          purchaseDate: receipt.purchase_date,
+          expiryDate: expiryDate.toISOString().split('T')[0],
+          daysLeft,
+          urgency
+        });
+      }
+    });
+
+    // Sort by urgency and days left
+    return alerts.sort((a, b) => {
+      const urgencyOrder = { high: 3, medium: 2, low: 1 };
+      if (urgencyOrder[a.urgency] !== urgencyOrder[b.urgency]) {
+        return urgencyOrder[b.urgency] - urgencyOrder[a.urgency];
+      }
+      return a.daysLeft - b.daysLeft;
+    }).slice(0, 5); // Show top 5 alerts
+  };
 
   const handleSignOut = async () => {
     try {
@@ -183,6 +276,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
       year: 'numeric'
     });
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-text-secondary">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
@@ -366,39 +470,47 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
               <span className="text-sm text-text-secondary">Next 6 Months</span>
             </div>
 
-            <div className="space-y-4">
-              {warrantyAlerts.map((alert) => (
-                <div
-                  key={alert.id}
-                  className={`p-4 rounded-lg border-2 ${getUrgencyColor(alert.urgency)} hover:shadow-md transition-shadow duration-200`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        {getUrgencyIcon(alert.urgency)}
-                        <h3 className="font-bold text-text-primary">{alert.itemName}</h3>
+            {warrantyAlerts.length > 0 ? (
+              <div className="space-y-4">
+                {warrantyAlerts.map((alert) => (
+                  <div
+                    key={alert.id}
+                    className={`p-4 rounded-lg border-2 ${getUrgencyColor(alert.urgency)} hover:shadow-md transition-shadow duration-200`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                          {getUrgencyIcon(alert.urgency)}
+                          <h3 className="font-bold text-text-primary">{alert.itemName}</h3>
+                        </div>
+                        <div className="text-sm text-text-secondary space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <Calendar className="h-4 w-4" />
+                            <span>Purchased: {formatDate(alert.purchaseDate)}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Clock className="h-4 w-4" />
+                            <span>Expires: {formatDate(alert.expiryDate)}</span>
+                          </div>
+                          <div className="font-medium text-text-primary">
+                            {alert.daysLeft} days remaining
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-sm text-text-secondary space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <Calendar className="h-4 w-4" />
-                          <span>Purchased: {formatDate(alert.purchaseDate)}</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Clock className="h-4 w-4" />
-                          <span>Expires: {formatDate(alert.expiryDate)}</span>
-                        </div>
-                        <div className="font-medium text-text-primary">
-                          {alert.daysLeft} days remaining
-                        </div>
-                      </div>
+                      <button className="text-primary hover:text-primary/80 transition-colors duration-200">
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
                     </div>
-                    <button className="text-primary hover:text-primary/80 transition-colors duration-200">
-                      <ChevronRight className="h-5 w-5" />
-                    </button>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Shield className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                <p className="text-text-secondary">No warranty alerts at this time</p>
+                <p className="text-sm text-text-secondary mt-2">Add receipts to track warranties</p>
+              </div>
+            )}
 
             <button className="w-full mt-4 text-center text-primary hover:text-primary/80 font-medium py-2 transition-colors duration-200">
               View All Warranties
@@ -414,34 +526,53 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
               </button>
             </div>
 
-            <div className="space-y-4">
-              {recentReceipts.map((receipt) => (
-                <div
-                  key={receipt.id}
-                  className="flex items-center justify-between p-4 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer group"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className="bg-gradient-feature rounded-lg p-3">
-                      <Receipt className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200">
-                        {receipt.merchant}
-                      </h3>
-                      <div className="text-sm text-text-secondary">
-                        {formatDate(receipt.date)} • {receipt.items} items
+            {recentReceipts.length > 0 ? (
+              <div className="space-y-4">
+                {recentReceipts.map((receipt) => (
+                  <div
+                    key={receipt.id}
+                    className="flex items-center justify-between p-4 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer group"
+                  >
+                    <div className="flex items-center space-x-4">
+                      <div className="bg-gradient-feature rounded-lg p-3">
+                        <Receipt className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200">
+                          {receipt.merchant}
+                        </h3>
+                        <div className="text-sm text-text-secondary">
+                          {formatDate(receipt.date)} • {receipt.items} items
+                        </div>
+                        {receipt.product_description && (
+                          <div className="text-xs text-text-secondary mt-1">
+                            {receipt.product_description}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-text-primary">
-                      {formatCurrency(receipt.amount)}
+                    <div className="text-right">
+                      <div className="font-bold text-text-primary">
+                        {formatCurrency(receipt.amount)}
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 ml-auto" />
                     </div>
-                    <ChevronRight className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 ml-auto" />
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Receipt className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                <p className="text-text-secondary">No receipts yet</p>
+                <p className="text-sm text-text-secondary mt-2">Start by scanning your first receipt</p>
+                <button
+                  onClick={onShowReceiptScanning}
+                  className="mt-4 bg-primary text-white px-6 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
+                >
+                  Scan Receipt
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </main>

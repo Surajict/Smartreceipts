@@ -24,6 +24,7 @@ import { signOut, getCurrentUser, supabase } from '../lib/supabase';
 interface DashboardProps {
   onSignOut: () => void;
   onShowReceiptScanning: () => void;
+  onShowProfile?: () => void;
 }
 
 interface WarrantyAlert {
@@ -63,12 +64,13 @@ interface SearchResult {
   relevanceScore: number;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning, onShowProfile }) => {
   const [user, setUser] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [alertsCount, setAlertsCount] = useState(3);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
 
   // Search states
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,6 +98,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
         
         if (currentUser) {
           await loadDashboardData(currentUser.id);
+          
+          // Load profile picture if exists
+          if (currentUser.user_metadata?.avatar_url) {
+            const { data } = supabase.storage
+              .from('profile-pictures')
+              .getPublicUrl(currentUser.user_metadata.avatar_url);
+            setProfilePicture(data.publicUrl);
+          }
         }
       } catch (error) {
         console.error('Error loading user and data:', error);
@@ -398,8 +408,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
                   onClick={() => setShowUserMenu(!showUserMenu)}
                   className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
                 >
-                  <div className="bg-primary rounded-full p-2">
-                    <User className="h-4 w-4 text-white" />
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-primary">
+                    {profilePicture ? (
+                      <img
+                        src={profilePicture}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <User className="h-4 w-4 text-white" />
+                      </div>
+                    )}
                   </div>
                   <span className="text-sm font-medium text-text-primary hidden sm:inline">
                     {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
@@ -415,6 +435,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
                       </p>
                       <p className="text-xs text-text-secondary">{user?.email}</p>
                     </div>
+                    {onShowProfile && (
+                      <button
+                        onClick={() => {
+                          onShowProfile();
+                          setShowUserMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                      >
+                        <User className="h-4 w-4" />
+                        <span>My Profile</span>
+                      </button>
+                    )}
                     <button
                       onClick={handleSignOut}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"

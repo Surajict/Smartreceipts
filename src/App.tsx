@@ -11,9 +11,10 @@ import Login from './components/Login';
 import SignUp from './components/SignUp';
 import Dashboard from './components/Dashboard';
 import ReceiptScanning from './components/ReceiptScanning';
+import ProfilePage from './components/ProfilePage';
 import { getCurrentUser, onAuthStateChange } from './lib/supabase';
 
-type PageState = 'home' | 'login' | 'signup' | 'dashboard' | 'receipt-scanning';
+type PageState = 'home' | 'login' | 'signup' | 'dashboard' | 'receipt-scanning' | 'profile';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<PageState>('home');
@@ -59,6 +60,7 @@ function App() {
   const handleShowHome = () => setCurrentPage('home');
   const handleShowDashboard = () => setCurrentPage('dashboard');
   const handleShowReceiptScanning = () => setCurrentPage('receipt-scanning');
+  const handleShowProfile = () => setCurrentPage('profile');
   const handleSignOut = () => {
     setUser(null);
     setCurrentPage('home');
@@ -74,6 +76,11 @@ function App() {
         </div>
       </div>
     );
+  }
+
+  // Show profile page
+  if (user && currentPage === 'profile') {
+    return <ProfilePage onBackToDashboard={handleShowDashboard} />;
   }
 
   // Show receipt scanning page

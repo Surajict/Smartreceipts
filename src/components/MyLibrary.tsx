@@ -19,9 +19,11 @@ import {
   Receipt,
   Edit3,
   Trash2,
-  Eye
+  Eye,
+  User,
+  LogOut
 } from 'lucide-react';
-import { supabase, getCurrentUser } from '../lib/supabase';
+import { supabase, getCurrentUser, signOut } from '../lib/supabase';
 
 interface MyLibraryProps {
   onBackToDashboard: () => void;
@@ -56,6 +58,7 @@ interface FilterState {
 type SortOption = 'value-desc' | 'value-asc' | 'brand-asc' | 'warranty-expiry' | 'date-desc' | 'date-asc';
 
 const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptScanning }) => {
+  const [user, setUser] = useState<any>(null);
   const [receipts, setReceipts] = useState<ReceiptData[]>([]);
   const [filteredReceipts, setFilteredReceipts] = useState<ReceiptData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +66,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [alertsCount] = useState(3);
   
   // Filter and sort states
@@ -94,27 +98,29 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   ];
 
   useEffect(() => {
-    loadReceipts();
+    loadUserAndReceipts();
   }, []);
 
   useEffect(() => {
     applyFiltersAndSort();
   }, [receipts, filters, sortBy, searchQuery]);
 
-  const loadReceipts = async () => {
+  const loadUserAndReceipts = async () => {
     try {
       setLoading(true);
-      const user = await getCurrentUser();
+      const currentUser = await getCurrentUser();
       
-      if (!user) {
+      if (!currentUser) {
         setError('User not authenticated');
         return;
       }
 
+      setUser(currentUser);
+
       const { data, error: fetchError } = await supabase
         .from('receipts')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', currentUser.id)
         .order('created_at', { ascending: false });
 
       if (fetchError) {
@@ -130,19 +136,59 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     }
   };
 
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      // Navigate to home or login page
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
+  const performSearch = async (query: string) => {
+    if (!query.trim()) {
+      setFilteredReceipts(receipts);
+      return;
+    }
+
+    try {
+      // First, try local search
+      const localResults = receipts.filter(receipt => 
+        receipt.product_description.toLowerCase().includes(query.toLowerCase()) ||
+        receipt.brand_name.toLowerCase().includes(query.toLowerCase()) ||
+        receipt.model_number?.toLowerCase().includes(query.toLowerCase()) ||
+        receipt.store_name?.toLowerCase().includes(query.toLowerCase()) ||
+        receipt.purchase_location?.toLowerCase().includes(query.toLowerCase())
+      );
+
+      setFilteredReceipts(localResults);
+
+      // Optionally, you could also implement server-side search here
+      // const { data } = await supabase
+      //   .from('receipts')
+      //   .select('*')
+      //   .eq('user_id', user.id)
+      //   .or(`product_description.ilike.%${query}%,brand_name.ilike.%${query}%,model_number.ilike.%${query}%,store_name.ilike.%${query}%,purchase_location.ilike.%${query}%`);
+
+    } catch (err) {
+      console.error('Search error:', err);
+      // Fallback to local search
+      const localResults = receipts.filter(receipt => 
+        receipt.product_description.toLowerCase().includes(query.toLowerCase()) ||
+        receipt.brand_name.toLowerCase().includes(query.toLowerCase())
+      );
+      setFilteredReceipts(localResults);
+    }
+  };
+
   const applyFiltersAndSort = () => {
     let filtered = [...receipts];
 
     // Apply search filter
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(receipt => 
-        receipt.product_description.toLowerCase().includes(query) ||
-        receipt.brand_name.toLowerCase().includes(query) ||
-        receipt.model_number?.toLowerCase().includes(query) ||
-        receipt.store_name?.toLowerCase().includes(query) ||
-        receipt.purchase_location?.toLowerCase().includes(query)
-      );
+      performSearch(searchQuery);
+      return;
     }
 
     // Apply brand filter
@@ -403,14 +449,46 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                 <span className="hidden sm:inline">Scan New Receipt</span>
               </button>
 
-              {/* Back to Dashboard */}
-              <button
-                onClick={onBackToDashboard}
-                className="flex items-center space-x-2 bg-white text-primary border-2 border-primary px-4 py-2 rounded-lg font-medium hover:bg-primary hover:text-white transition-all duration-200"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Back to Dashboard</span>
-              </button>
+              {/* User Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+                >
+                  <div className="bg-primary rounded-full p-2">
+                    <User className="h-4 w-4 text-white" />
+                  </div>
+                  <span className="text-sm font-medium text-text-primary hidden sm:inline">
+                    {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
+                  </span>
+                </button>
+
+                {/* User Dropdown */}
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-200">
+                      <p className="text-sm font-medium text-text-primary">
+                        {user?.user_metadata?.full_name || 'User'}
+                      </p>
+                      <p className="text-xs text-text-secondary">{user?.email}</p>
+                    </div>
+                    <button
+                      onClick={onBackToDashboard}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      <span>Back to Dashboard</span>
+                    </button>
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -682,12 +760,13 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
       </main>
 
       {/* Click outside to close dropdowns */}
-      {(showSortMenu || showFilters) && (
+      {(showSortMenu || showFilters || showUserMenu) && (
         <div
           className="fixed inset-0 z-40"
           onClick={() => {
             setShowSortMenu(false);
             setShowFilters(false);
+            setShowUserMenu(false);
           }}
         />
       )}

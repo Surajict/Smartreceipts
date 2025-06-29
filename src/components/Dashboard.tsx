@@ -55,6 +55,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [currentTime, setCurrentTime] = useState(new Date());
   const [alertsCount, setAlertsCount] = useState(3);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showNotificationMenu, setShowNotificationMenu] = useState(false);
 
   // Mock data - in a real app, this would come from your database
   const [summaryStats] = useState<SummaryStats>({
@@ -206,15 +207,49 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
             {/* Header Actions */}
             <div className="flex items-center space-x-4">
-              {/* Alerts */}
-              <button className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
-                <Bell className="h-6 w-6" />
-                {alertsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-accent-red text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
-                    {alertsCount}
-                  </span>
+              {/* Notifications */}
+              <div className="relative">
+                <button 
+                  onClick={() => setShowNotificationMenu(!showNotificationMenu)}
+                  className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                >
+                  <Bell className="h-6 w-6" />
+                  {alertsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-accent-red text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+                      {alertsCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notification Dropdown */}
+                {showNotificationMenu && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-200">
+                      <h3 className="font-medium text-text-primary">Notifications</h3>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {warrantyAlerts.slice(0, 3).map((alert) => (
+                        <div key={alert.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
+                          <div className="flex items-start space-x-3">
+                            {getUrgencyIcon(alert.urgency)}
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-text-primary">{alert.itemName}</p>
+                              <p className="text-xs text-text-secondary">
+                                Warranty expires in {alert.daysLeft} days
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="px-4 py-2 border-t border-gray-200">
+                      <button className="text-sm text-primary hover:text-primary/80 font-medium">
+                        View all notifications
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </button>
+              </div>
 
               {/* User Menu */}
               <div className="relative">
@@ -459,11 +494,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         </div>
       </main>
 
-      {/* Click outside to close user menu */}
-      {showUserMenu && (
+      {/* Click outside to close menus */}
+      {(showUserMenu || showNotificationMenu) && (
         <div
           className="fixed inset-0 z-40"
-          onClick={() => setShowUserMenu(false)}
+          onClick={() => {
+            setShowUserMenu(false);
+            setShowNotificationMenu(false);
+          }}
         />
       )}
     </div>

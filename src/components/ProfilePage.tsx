@@ -15,9 +15,15 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  Shield
+  Shield,
+  LogOut,
+  ToggleLeft,
+  ToggleRight,
+  Download,
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
-import { getCurrentUser, supabase } from '../lib/supabase';
+import { getCurrentUser, supabase, signOut } from '../lib/supabase';
 
 interface ProfilePageProps {
   onBackToDashboard: () => void;
@@ -31,6 +37,19 @@ interface UserProfile {
   created_at: string;
 }
 
+interface NotificationSettings {
+  warranty_alerts: boolean;
+  auto_system_update: boolean;
+  marketing_notifications: boolean;
+}
+
+interface PrivacySettings {
+  data_collection: boolean;
+  data_analysis: 'allowed' | 'not_allowed';
+  biometric_login: boolean;
+  two_factor_auth: boolean;
+}
+
 const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
@@ -41,6 +60,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   const [editedName, setEditedName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [alertsCount] = useState(3);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'privacy' | 'data'>('profile');
   
   // Email update states
   const [isEditingEmail, setIsEditingEmail] = useState(false);
@@ -51,10 +72,28 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   const [emailUpdateSuccess, setEmailUpdateSuccess] = useState(false);
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
   
+  // Settings states
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
+    warranty_alerts: true,
+    auto_system_update: true,
+    marketing_notifications: false
+  });
+  
+  const [privacySettings, setPrivacySettings] = useState<PrivacySettings>({
+    data_collection: true,
+    data_analysis: 'allowed',
+    biometric_login: false,
+    two_factor_auth: false
+  });
+  
+  const [isLoadingSettings, setIsLoadingSettings] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadUserProfile();
+    loadUserSettings();
   }, []);
 
   const loadUserProfile = async () => {
@@ -83,6 +122,63 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       }
     } catch (error) {
       console.error('Error loading user profile:', error);
+    }
+  };
+
+  const loadUserSettings = async () => {
+    try {
+      setIsLoadingSettings(true);
+      const currentUser = await getCurrentUser();
+      if (!currentUser) return;
+
+      // Load notification settings
+      const { data: notifData, error: notifError } = await supabase
+        .from('user_notification_settings')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .single();
+
+      if (notifError && notifError.code !== 'PGRST116') {
+        console.error('Error loading notification settings:', notifError);
+      } else if (notifData) {
+        setNotificationSettings({
+          warranty_alerts: notifData.warranty_alerts,
+          auto_system_update: notifData.auto_system_update,
+          marketing_notifications: notifData.marketing_notifications
+        });
+      }
+
+      // Load privacy settings
+      const { data: privacyData, error: privacyError } = await supabase
+        .from('user_privacy_settings')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .single();
+
+      if (privacyError && privacyError.code !== 'PGRST116') {
+        console.error('Error loading privacy settings:', privacyError);
+      } else if (privacyData) {
+        setPrivacySettings({
+          data_collection: privacyData.data_collection,
+          data_analysis: privacyData.data_analysis,
+          biometric_login: privacyData.biometric_login,
+          two_factor_auth: privacyData.two_factor_auth
+        });
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+      setSettingsError('Failed to load settings');
+    } finally {
+      setIsLoadingSettings(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error signing out:', error);
     }
   };
 
@@ -240,6 +336,50 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
     }
   };
 
+  const updateNotificationSettings = async (newSettings: Partial<NotificationSettings>) => {
+    if (!user) return;
+
+    try {
+      const updatedSettings = { ...notificationSettings, ...newSettings };
+      
+      const { error } = await supabase
+        .from('user_notification_settings')
+        .upsert({
+          user_id: user.id,
+          ...updatedSettings
+        });
+
+      if (error) throw error;
+
+      setNotificationSettings(updatedSettings);
+    } catch (error) {
+      console.error('Error updating notification settings:', error);
+      setSettingsError('Failed to update notification settings');
+    }
+  };
+
+  const updatePrivacySettings = async (newSettings: Partial<PrivacySettings>) => {
+    if (!user) return;
+
+    try {
+      const updatedSettings = { ...privacySettings, ...newSettings };
+      
+      const { error } = await supabase
+        .from('user_privacy_settings')
+        .upsert({
+          user_id: user.id,
+          ...updatedSettings
+        });
+
+      if (error) throw error;
+
+      setPrivacySettings(updatedSettings);
+    } catch (error) {
+      console.error('Error updating privacy settings:', error);
+      setSettingsError('Failed to update privacy settings');
+    }
+  };
+
   const cancelEmailEdit = () => {
     setIsEditingEmail(false);
     setNewEmail(user?.email || '');
@@ -254,6 +394,22 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       day: 'numeric'
     });
   };
+
+  const ToggleSwitch: React.FC<{ enabled: boolean; onChange: (enabled: boolean) => void; disabled?: boolean }> = ({ enabled, onChange, disabled = false }) => (
+    <button
+      onClick={() => !disabled && onChange(!enabled)}
+      disabled={disabled}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+        enabled ? 'bg-primary' : 'bg-gray-300'
+      } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+          enabled ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  );
 
   if (!user) {
     return (
@@ -296,42 +452,69 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
                 )}
               </button>
 
-              {/* Settings */}
-              <button className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
-                <Settings className="h-6 w-6" />
-              </button>
+              {/* User Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+                >
+                  <div className="bg-primary rounded-full p-2">
+                    <User className="h-4 w-4 text-white" />
+                  </div>
+                  <span className="text-sm font-medium text-text-primary hidden sm:inline">
+                    {user?.full_name || user?.email?.split('@')[0] || 'User'}
+                  </span>
+                </button>
 
-              {/* Back to Dashboard */}
-              <button
-                onClick={onBackToDashboard}
-                className="flex items-center space-x-2 bg-white text-primary border-2 border-primary px-4 py-2 rounded-lg font-medium hover:bg-primary hover:text-white transition-all duration-200"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Back to Dashboard</span>
-              </button>
+                {/* User Dropdown */}
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-200">
+                      <p className="text-sm font-medium text-text-primary">
+                        {user?.full_name || 'User'}
+                      </p>
+                      <p className="text-xs text-text-secondary">{user?.email}</p>
+                    </div>
+                    <button
+                      onClick={onBackToDashboard}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      <span>Back to Dashboard</span>
+                    </button>
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Title */}
         <div className="text-center mb-8">
           <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
-            My Profile
+            Account Settings
           </h1>
           <p className="text-xl text-text-secondary">
-            Manage your account settings and profile information
+            Manage your profile, notifications, and privacy settings
           </p>
         </div>
 
         {/* Error/Success Messages */}
-        {(uploadError || emailUpdateError) && (
+        {(uploadError || emailUpdateError || settingsError) && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-center">
               <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
-              <p className="text-sm text-red-700">{uploadError || emailUpdateError}</p>
+              <p className="text-sm text-red-700">{uploadError || emailUpdateError || settingsError}</p>
             </div>
           </div>
         )}
@@ -348,288 +531,466 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
           </div>
         )}
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Profile Picture Card */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-8">
-              <div className="text-center">
-                <h2 className="text-xl font-bold text-text-primary mb-6">Profile Picture</h2>
-                
-                {/* Profile Picture Display */}
-                <div className="relative mb-6">
-                  <div className="w-32 h-32 mx-auto rounded-full overflow-hidden bg-gradient-to-br from-primary/10 to-secondary/10 border-4 border-white shadow-card">
-                    {profilePicture ? (
-                      <img
-                        src={profilePicture}
-                        alt="Profile"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <User className="h-16 w-16 text-text-secondary" />
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Upload Overlay */}
+        {/* Tab Navigation */}
+        <div className="bg-white rounded-2xl shadow-card border border-gray-100 mb-8">
+          <div className="border-b border-gray-200">
+            <nav className="flex space-x-8 px-6">
+              {[
+                { id: 'profile', label: 'Profile', icon: User },
+                { id: 'notifications', label: 'Notifications', icon: Bell },
+                { id: 'privacy', label: 'Privacy & Security', icon: Shield },
+                { id: 'data', label: 'Data Management', icon: Settings }
+              ].map((tab) => {
+                const Icon = tab.icon;
+                return (
                   <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="absolute bottom-0 right-1/2 transform translate-x-1/2 translate-y-2 bg-primary text-white rounded-full p-3 shadow-card hover:shadow-card-hover hover:bg-primary/90 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`flex items-center space-x-2 py-4 px-2 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                      activeTab === tab.id
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-text-secondary hover:text-text-primary hover:border-gray-300'
+                    }`}
                   >
-                    {isUploading ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <Camera className="h-5 w-5" />
-                    )}
+                    <Icon className="h-4 w-4" />
+                    <span>{tab.label}</span>
                   </button>
-                </div>
-
-                {/* Upload Button */}
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="w-full bg-gradient-to-r from-primary to-secondary text-white py-3 px-6 rounded-lg font-medium hover:from-primary/90 hover:to-secondary/90 transition-all duration-200 shadow-card hover:shadow-card-hover disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-                >
-                  {isUploading ? (
-                    <>
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      <span>Uploading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-5 w-5" />
-                      <span>Upload Profile Picture</span>
-                    </>
-                  )}
-                </button>
-
-                <p className="text-sm text-text-secondary mt-3">
-                  JPG, PNG or GIF. Max size 5MB.
-                </p>
-
-                {/* Hidden File Input */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-              </div>
-            </div>
+                );
+              })}
+            </nav>
           </div>
 
-          {/* Profile Information Card */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-8">
-              <h2 className="text-xl font-bold text-text-primary mb-6">Profile Information</h2>
-              
-              <div className="space-y-6">
-                {/* Full Name */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <User className="inline h-4 w-4 mr-1" />
-                    Full Name
-                  </label>
-                  {isEditing ? (
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="text"
-                        value={editedName}
-                        onChange={(e) => setEditedName(e.target.value)}
-                        className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                        placeholder="Enter your full name"
-                      />
-                      <button
-                        onClick={handleNameUpdate}
-                        disabled={isSaving || !editedName.trim()}
-                        className="bg-primary text-white p-3 rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isSaving ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+          {/* Tab Content */}
+          <div className="p-6">
+            {/* Profile Tab */}
+            {activeTab === 'profile' && (
+              <div className="grid lg:grid-cols-3 gap-8">
+                {/* Profile Picture Card */}
+                <div className="lg:col-span-1">
+                  <div className="text-center">
+                    <h2 className="text-xl font-bold text-text-primary mb-6">Profile Picture</h2>
+                    
+                    {/* Profile Picture Display */}
+                    <div className="relative mb-6">
+                      <div className="w-32 h-32 mx-auto rounded-full overflow-hidden bg-gradient-to-br from-primary/10 to-secondary/10 border-4 border-white shadow-card">
+                        {profilePicture ? (
+                          <img
+                            src={profilePicture}
+                            alt="Profile"
+                            className="w-full h-full object-cover"
+                          />
                         ) : (
-                          <Check className="h-4 w-4" />
+                          <div className="w-full h-full flex items-center justify-center">
+                            <User className="h-16 w-16 text-text-secondary" />
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Upload Overlay */}
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                        className="absolute bottom-0 right-1/2 transform translate-x-1/2 translate-y-2 bg-primary text-white rounded-full p-3 shadow-card hover:shadow-card-hover hover:bg-primary/90 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isUploading ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <Camera className="h-5 w-5" />
                         )}
                       </button>
-                      <button
-                        onClick={() => {
-                          setIsEditing(false);
-                          setEditedName(user.full_name);
-                        }}
-                        className="border border-gray-300 text-text-secondary p-3 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <span className="text-text-primary font-medium">
-                        {user.full_name || 'Not set'}
-                      </span>
-                      <button
-                        onClick={() => setIsEditing(true)}
-                        className="text-primary hover:text-primary/80 transition-colors duration-200"
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
 
-                {/* Email */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <Mail className="inline h-4 w-4 mr-1" />
-                    Email Address
-                  </label>
-                  {isEditingEmail ? (
-                    <div className="space-y-4">
-                      {/* New Email Input */}
-                      <div>
-                        <input
-                          type="email"
-                          value={newEmail}
-                          onChange={(e) => setNewEmail(e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                          placeholder="Enter new email address"
-                        />
-                      </div>
-                      
-                      {/* Current Password Input */}
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-2">
-                          <Shield className="inline h-4 w-4 mr-1" />
-                          Current Password (required for email change)
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={showPassword ? 'text' : 'password'}
-                            value={currentPassword}
-                            onChange={(e) => setCurrentPassword(e.target.value)}
-                            className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                            placeholder="Enter your current password"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-secondary hover:text-text-primary transition-colors duration-200"
-                          >
-                            {showPassword ? (
-                              <EyeOff className="h-5 w-5" />
-                            ) : (
-                              <Eye className="h-5 w-5" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
+                    {/* Upload Button */}
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="w-full bg-gradient-to-r from-primary to-secondary text-white py-3 px-6 rounded-lg font-medium hover:from-primary/90 hover:to-secondary/90 transition-all duration-200 shadow-card hover:shadow-card-hover disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                    >
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-5 w-5" />
+                          <span>Upload Profile Picture</span>
+                        </>
+                      )}
+                    </button>
 
-                      {/* Action Buttons */}
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={handleEmailUpdate}
-                          disabled={isUpdatingEmail || !newEmail.trim() || !currentPassword.trim()}
-                          className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                        >
-                          {isUpdatingEmail ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              <span>Updating...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Check className="h-4 w-4" />
-                              <span>Update Email</span>
-                            </>
-                          )}
-                        </button>
-                        <button
-                          onClick={cancelEmailEdit}
-                          className="border border-gray-300 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                      
-                      <p className="text-sm text-text-secondary">
-                        You'll receive a confirmation email at your new address. Your email won't change until you confirm it.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <span className="text-text-primary font-medium">{user.email}</span>
-                      <button
-                        onClick={() => setIsEditingEmail(true)}
-                        className="text-primary hover:text-primary/80 transition-colors duration-200"
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
+                    <p className="text-sm text-text-secondary mt-3">
+                      JPG, PNG or GIF. Max size 5MB.
+                    </p>
 
-                {/* Member Since */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <Calendar className="inline h-4 w-4 mr-1" />
-                    Member Since
-                  </label>
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <span className="text-text-primary font-medium">
-                      {formatDate(user.created_at)}
-                    </span>
+                    {/* Hidden File Input */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
                   </div>
                 </div>
 
-                {/* User ID */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    User ID
-                  </label>
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <span className="text-text-secondary font-mono text-sm break-all">
-                      {user.id}
-                    </span>
+                {/* Profile Information Card */}
+                <div className="lg:col-span-2">
+                  <h2 className="text-xl font-bold text-text-primary mb-6">Profile Information</h2>
+                  
+                  <div className="space-y-6">
+                    {/* Full Name */}
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        <User className="inline h-4 w-4 mr-1" />
+                        Full Name
+                      </label>
+                      {isEditing ? (
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            value={editedName}
+                            onChange={(e) => setEditedName(e.target.value)}
+                            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                            placeholder="Enter your full name"
+                          />
+                          <button
+                            onClick={handleNameUpdate}
+                            disabled={isSaving || !editedName.trim()}
+                            className="bg-primary text-white p-3 rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isSaving ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Check className="h-4 w-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsEditing(false);
+                              setEditedName(user.full_name);
+                            }}
+                            className="border border-gray-300 text-text-secondary p-3 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                          <span className="text-text-primary font-medium">
+                            {user.full_name || 'Not set'}
+                          </span>
+                          <button
+                            onClick={() => setIsEditing(true)}
+                            className="text-primary hover:text-primary/80 transition-colors duration-200"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        <Mail className="inline h-4 w-4 mr-1" />
+                        Email Address
+                      </label>
+                      {isEditingEmail ? (
+                        <div className="space-y-4">
+                          {/* New Email Input */}
+                          <div>
+                            <input
+                              type="email"
+                              value={newEmail}
+                              onChange={(e) => setNewEmail(e.target.value)}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                              placeholder="Enter new email address"
+                            />
+                          </div>
+                          
+                          {/* Current Password Input */}
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-2">
+                              <Shield className="inline h-4 w-4 mr-1" />
+                              Current Password (required for email change)
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showPassword ? 'text' : 'password'}
+                                value={currentPassword}
+                                onChange={(e) => setCurrentPassword(e.target.value)}
+                                className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                                placeholder="Enter your current password"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-secondary hover:text-text-primary transition-colors duration-200"
+                              >
+                                {showPassword ? (
+                                  <EyeOff className="h-5 w-5" />
+                                ) : (
+                                  <Eye className="h-5 w-5" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={handleEmailUpdate}
+                              disabled={isUpdatingEmail || !newEmail.trim() || !currentPassword.trim()}
+                              className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                            >
+                              {isUpdatingEmail ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <span>Updating...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="h-4 w-4" />
+                                  <span>Update Email</span>
+                                </>
+                              )}
+                            </button>
+                            <button
+                              onClick={cancelEmailEdit}
+                              className="border border-gray-300 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          
+                          <p className="text-sm text-text-secondary">
+                            You'll receive a confirmation email at your new address. Your email won't change until you confirm it.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                          <span className="text-text-primary font-medium">{user.email}</span>
+                          <button
+                            onClick={() => setIsEditingEmail(true)}
+                            className="text-primary hover:text-primary/80 transition-colors duration-200"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Member Since */}
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        <Calendar className="inline h-4 w-4 mr-1" />
+                        Member Since
+                      </label>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <span className="text-text-primary font-medium">
+                          {formatDate(user.created_at)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* User ID */}
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        User ID
+                      </label>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <span className="text-text-secondary font-mono text-sm break-all">
+                          {user.id}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
+            )}
 
-        {/* Account Actions */}
-        <div className="mt-8">
-          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-8">
-            <h2 className="text-xl font-bold text-text-primary mb-6">Account Actions</h2>
-            
-            <div className="grid md:grid-cols-2 gap-6">
-              <button className="flex items-center justify-center space-x-3 p-6 border-2 border-gray-200 rounded-lg hover:border-primary hover:bg-primary/5 transition-all duration-200 group">
-                <Settings className="h-6 w-6 text-text-secondary group-hover:text-primary transition-colors duration-200" />
-                <div className="text-left">
-                  <div className="font-medium text-text-primary group-hover:text-primary transition-colors duration-200">
-                    Account Settings
+            {/* Notifications Tab */}
+            {activeTab === 'notifications' && (
+              <div className="max-w-2xl">
+                <h2 className="text-xl font-bold text-text-primary mb-6">Notification Preferences</h2>
+                
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <h3 className="font-medium text-text-primary">Warranty Alerts</h3>
+                      <p className="text-sm text-text-secondary">Get notified when warranties are about to expire</p>
+                    </div>
+                    <ToggleSwitch
+                      enabled={notificationSettings.warranty_alerts}
+                      onChange={(enabled) => updateNotificationSettings({ warranty_alerts: enabled })}
+                    />
                   </div>
-                  <div className="text-sm text-text-secondary">
-                    Manage privacy and security
+
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <h3 className="font-medium text-text-primary">Auto System Update</h3>
+                      <p className="text-sm text-text-secondary">Automatically update the app with new features</p>
+                    </div>
+                    <ToggleSwitch
+                      enabled={notificationSettings.auto_system_update}
+                      onChange={(enabled) => updateNotificationSettings({ auto_system_update: enabled })}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <h3 className="font-medium text-text-primary">Marketing Notifications</h3>
+                      <p className="text-sm text-text-secondary">Receive updates about new features and promotions</p>
+                    </div>
+                    <ToggleSwitch
+                      enabled={notificationSettings.marketing_notifications}
+                      onChange={(enabled) => updateNotificationSettings({ marketing_notifications: enabled })}
+                    />
                   </div>
                 </div>
-              </button>
+              </div>
+            )}
 
-              <button className="flex items-center justify-center space-x-3 p-6 border-2 border-gray-200 rounded-lg hover:border-primary hover:bg-primary/5 transition-all duration-200 group">
-                <Bell className="h-6 w-6 text-text-secondary group-hover:text-primary transition-colors duration-200" />
-                <div className="text-left">
-                  <div className="font-medium text-text-primary group-hover:text-primary transition-colors duration-200">
-                    Notifications
+            {/* Privacy & Security Tab */}
+            {activeTab === 'privacy' && (
+              <div className="max-w-2xl">
+                <h2 className="text-xl font-bold text-text-primary mb-6">Privacy & Security</h2>
+                
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <h3 className="font-medium text-text-primary">Data Collection</h3>
+                      <p className="text-sm text-text-secondary">Allow us to collect usage data to improve the service</p>
+                    </div>
+                    <ToggleSwitch
+                      enabled={privacySettings.data_collection}
+                      onChange={(enabled) => updatePrivacySettings({ data_collection: enabled })}
+                    />
                   </div>
-                  <div className="text-sm text-text-secondary">
-                    Configure alert preferences
+
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h3 className="font-medium text-text-primary">Data Analysis</h3>
+                        <p className="text-sm text-text-secondary">How we can use your data for analysis</p>
+                      </div>
+                    </div>
+                    <div className="flex space-x-4">
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="data_analysis"
+                          value="allowed"
+                          checked={privacySettings.data_analysis === 'allowed'}
+                          onChange={(e) => updatePrivacySettings({ data_analysis: e.target.value as 'allowed' | 'not_allowed' })}
+                          className="text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-text-secondary">Allowed</span>
+                      </label>
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="data_analysis"
+                          value="not_allowed"
+                          checked={privacySettings.data_analysis === 'not_allowed'}
+                          onChange={(e) => updatePrivacySettings({ data_analysis: e.target.value as 'allowed' | 'not_allowed' })}
+                          className="text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-text-secondary">Not Allowed</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <h3 className="font-medium text-text-primary">Biometric Login</h3>
+                      <p className="text-sm text-text-secondary">Use fingerprint or face recognition to log in</p>
+                    </div>
+                    <ToggleSwitch
+                      enabled={privacySettings.biometric_login}
+                      onChange={(enabled) => updatePrivacySettings({ biometric_login: enabled })}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <h3 className="font-medium text-text-primary">Two Factor Authentication</h3>
+                      <p className="text-sm text-text-secondary">Add an extra layer of security to your account</p>
+                    </div>
+                    <ToggleSwitch
+                      enabled={privacySettings.two_factor_auth}
+                      onChange={(enabled) => updatePrivacySettings({ two_factor_auth: enabled })}
+                    />
                   </div>
                 </div>
-              </button>
-            </div>
+              </div>
+            )}
+
+            {/* Data Management Tab */}
+            {activeTab === 'data' && (
+              <div className="max-w-2xl">
+                <h2 className="text-xl font-bold text-text-primary mb-6">Data Management</h2>
+                
+                <div className="space-y-4">
+                  <button className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 group">
+                    <div className="flex items-center space-x-3">
+                      <Download className="h-5 w-5 text-text-secondary group-hover:text-primary transition-colors duration-200" />
+                      <div className="text-left">
+                        <h3 className="font-medium text-text-primary group-hover:text-primary transition-colors duration-200">
+                          Back up data
+                        </h3>
+                        <p className="text-sm text-text-secondary">
+                          Download a copy of all your receipt data
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowLeft className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 rotate-180" />
+                  </button>
+
+                  <button className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 group">
+                    <div className="flex items-center space-x-3">
+                      <Trash2 className="h-5 w-5 text-text-secondary group-hover:text-primary transition-colors duration-200" />
+                      <div className="text-left">
+                        <h3 className="font-medium text-text-primary group-hover:text-primary transition-colors duration-200">
+                          Clean Cache
+                        </h3>
+                        <p className="text-sm text-text-secondary">
+                          Clear temporary files and cached data
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowLeft className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 rotate-180" />
+                  </button>
+
+                  <button className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 group">
+                    <div className="flex items-center space-x-3">
+                      <RefreshCw className="h-5 w-5 text-text-secondary group-hover:text-primary transition-colors duration-200" />
+                      <div className="text-left">
+                        <h3 className="font-medium text-text-primary group-hover:text-primary transition-colors duration-200">
+                          Sync now
+                        </h3>
+                        <p className="text-sm text-text-secondary">
+                          Manually sync your data across all devices
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowLeft className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 rotate-180" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </main>
+
+      {/* Click outside to close user menu */}
+      {showUserMenu && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowUserMenu(false)}
+        />
+      )}
     </div>
   );
 };

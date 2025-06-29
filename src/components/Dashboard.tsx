@@ -54,75 +54,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [user, setUser] = useState<any>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [alertsCount, setAlertsCount] = useState(3);
+  const [alertsCount, setAlertsCount] = useState(0);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotificationMenu, setShowNotificationMenu] = useState(false);
-
-  // Mock data - in a real app, this would come from your database
-  const [summaryStats] = useState<SummaryStats>({
-    receiptsScanned: 152,
-    totalAmount: 4320.50,
-    itemsCaptured: 87,
-    warrantiesClaimed: 12
+  const [summaryStats, setSummaryStats] = useState<SummaryStats>({
+    receiptsScanned: 0,
+    totalAmount: 0,
+    itemsCaptured: 0,
+    warrantiesClaimed: 0
   });
-
-  const [warrantyAlerts] = useState<WarrantyAlert[]>([
-    {
-      id: '1',
-      itemName: 'MacBook Pro 16"',
-      purchaseDate: '2023-01-15',
-      expiryDate: '2025-01-15',
-      daysLeft: 45,
-      urgency: 'medium'
-    },
-    {
-      id: '2',
-      itemName: 'Samsung 4K Monitor',
-      purchaseDate: '2023-06-20',
-      expiryDate: '2025-06-20',
-      daysLeft: 180,
-      urgency: 'low'
-    },
-    {
-      id: '3',
-      itemName: 'Canon EOS R5 Camera',
-      purchaseDate: '2023-11-10',
-      expiryDate: '2024-11-10',
-      daysLeft: 15,
-      urgency: 'high'
-    }
-  ]);
-
-  const [recentReceipts] = useState<RecentReceipt[]>([
-    {
-      id: '1',
-      merchant: 'Apple Store',
-      date: '2024-01-15',
-      amount: 2499.00,
-      items: 3
-    },
-    {
-      id: '2',
-      merchant: 'Best Buy',
-      date: '2024-01-12',
-      amount: 899.99,
-      items: 2
-    },
-    {
-      id: '3',
-      merchant: 'Amazon',
-      date: '2024-01-10',
-      amount: 156.78,
-      items: 5
-    },
-    {
-      id: '4',
-      merchant: 'Target',
-      date: '2024-01-08',
-      amount: 89.45,
-      items: 8
-    }
-  ]);
+  const [warrantyAlerts, setWarrantyAlerts] = useState<WarrantyAlert[]>([]);
+  const [recentReceipts, setRecentReceipts] = useState<RecentReceipt[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -140,6 +83,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           console.error('Error loading profile picture:', error);
         }
       }
+
+      // Load actual data from database
+      if (currentUser) {
+        await loadDashboardData(currentUser.id);
+      }
     };
     loadUser();
 
@@ -150,6 +98,99 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
     return () => clearInterval(timer);
   }, []);
+
+  const loadDashboardData = async (userId: string) => {
+    try {
+      setIsLoading(true);
+
+      // Load receipts data
+      const { data: receipts, error: receiptsError } = await supabase
+        .from('receipts')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (receiptsError) {
+        console.error('Error loading receipts:', receiptsError);
+        return;
+      }
+
+      // Calculate summary statistics
+      const stats: SummaryStats = {
+        receiptsScanned: receipts?.length || 0,
+        totalAmount: receipts?.reduce((sum, receipt) => sum + (receipt.amount || 0), 0) || 0,
+        itemsCaptured: receipts?.length || 0, // Assuming 1 item per receipt for now
+        warrantiesClaimed: 0 // This would need a separate tracking mechanism
+      };
+      setSummaryStats(stats);
+
+      // Process recent receipts
+      const recentReceiptsData: RecentReceipt[] = (receipts || [])
+        .slice(0, 4)
+        .map(receipt => ({
+          id: receipt.id,
+          merchant: receipt.store_name || receipt.brand_name || 'Unknown Store',
+          date: receipt.purchase_date,
+          amount: receipt.amount || 0,
+          items: 1 // Assuming 1 item per receipt for now
+        }));
+      setRecentReceipts(recentReceiptsData);
+
+      // Calculate warranty alerts
+      const alerts: WarrantyAlert[] = (receipts || [])
+        .map(receipt => {
+          const warrantyExpiry = calculateWarrantyExpiry(receipt.purchase_date, receipt.warranty_period);
+          const daysLeft = Math.ceil((warrantyExpiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+          
+          // Only include items with warranties expiring in the next 6 months
+          if (daysLeft > 0 && daysLeft <= 180) {
+            return {
+              id: receipt.id,
+              itemName: receipt.product_description,
+              purchaseDate: receipt.purchase_date,
+              expiryDate: warrantyExpiry.toISOString().split('T')[0],
+              daysLeft,
+              urgency: daysLeft <= 30 ? 'high' : daysLeft <= 90 ? 'medium' : 'low'
+            };
+          }
+          return null;
+        })
+        .filter(alert => alert !== null)
+        .sort((a, b) => a!.daysLeft - b!.daysLeft)
+        .slice(0, 3) as WarrantyAlert[];
+
+      setWarrantyAlerts(alerts);
+      setAlertsCount(alerts.length);
+
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const calculateWarrantyExpiry = (purchaseDate: string, warrantyPeriod: string): Date => {
+    const purchase = new Date(purchaseDate);
+    const period = warrantyPeriod.toLowerCase();
+    
+    if (period.includes('lifetime')) {
+      return new Date('2099-12-31');
+    }
+    
+    const years = period.match(/(\d+)\s*year/);
+    const months = period.match(/(\d+)\s*month/);
+    
+    if (years) {
+      purchase.setFullYear(purchase.getFullYear() + parseInt(years[1]));
+    } else if (months) {
+      purchase.setMonth(purchase.getMonth() + parseInt(months[1]));
+    } else {
+      // Default to 1 year if no specific period found
+      purchase.setFullYear(purchase.getFullYear() + 1);
+    }
+    
+    return purchase;
+  };
 
   const handleSignOut = async () => {
     try {
@@ -200,6 +241,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     });
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-text-secondary">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
       {/* Header */}
@@ -241,19 +293,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                       <h3 className="font-medium text-text-primary">Notifications</h3>
                     </div>
                     <div className="max-h-64 overflow-y-auto">
-                      {warrantyAlerts.slice(0, 3).map((alert) => (
-                        <div key={alert.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
-                          <div className="flex items-start space-x-3">
-                            {getUrgencyIcon(alert.urgency)}
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-text-primary">{alert.itemName}</p>
-                              <p className="text-xs text-text-secondary">
-                                Warranty expires in {alert.daysLeft} days
-                              </p>
+                      {warrantyAlerts.length === 0 ? (
+                        <div className="px-4 py-8 text-center">
+                          <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                          <p className="text-sm text-text-secondary">No warranty alerts at this time</p>
+                        </div>
+                      ) : (
+                        warrantyAlerts.map((alert) => (
+                          <div key={alert.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
+                            <div className="flex items-start space-x-3">
+                              {getUrgencyIcon(alert.urgency)}
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-text-primary">{alert.itemName}</p>
+                                <p className="text-xs text-text-secondary">
+                                  Warranty expires in {alert.daysLeft} days
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                     <div className="px-4 py-2 border-t border-gray-200">
                       <button className="text-sm text-primary hover:text-primary/80 font-medium">
@@ -434,37 +493,45 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             </div>
 
             <div className="space-y-4">
-              {warrantyAlerts.map((alert) => (
-                <div
-                  key={alert.id}
-                  className={`p-4 rounded-lg border-2 ${getUrgencyColor(alert.urgency)} hover:shadow-md transition-shadow duration-200`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        {getUrgencyIcon(alert.urgency)}
-                        <h3 className="font-bold text-text-primary">{alert.itemName}</h3>
-                      </div>
-                      <div className="text-sm text-text-secondary space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <Calendar className="h-4 w-4" />
-                          <span>Purchased: {formatDate(alert.purchaseDate)}</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Clock className="h-4 w-4" />
-                          <span>Expires: {formatDate(alert.expiryDate)}</span>
-                        </div>
-                        <div className="font-medium text-text-primary">
-                          {alert.daysLeft} days remaining
-                        </div>
-                      </div>
-                    </div>
-                    <button className="text-primary hover:text-primary/80 transition-colors duration-200">
-                      <ChevronRight className="h-5 w-5" />
-                    </button>
-                  </div>
+              {warrantyAlerts.length === 0 ? (
+                <div className="text-center py-8">
+                  <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-text-primary mb-2">All warranties are current</h3>
+                  <p className="text-text-secondary">No warranties expiring in the next 6 months</p>
                 </div>
-              ))}
+              ) : (
+                warrantyAlerts.map((alert) => (
+                  <div
+                    key={alert.id}
+                    className={`p-4 rounded-lg border-2 ${getUrgencyColor(alert.urgency)} hover:shadow-md transition-shadow duration-200`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                          {getUrgencyIcon(alert.urgency)}
+                          <h3 className="font-bold text-text-primary">{alert.itemName}</h3>
+                        </div>
+                        <div className="text-sm text-text-secondary space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <Calendar className="h-4 w-4" />
+                            <span>Purchased: {formatDate(alert.purchaseDate)}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Clock className="h-4 w-4" />
+                            <span>Expires: {formatDate(alert.expiryDate)}</span>
+                          </div>
+                          <div className="font-medium text-text-primary">
+                            {alert.daysLeft} days remaining
+                          </div>
+                        </div>
+                      </div>
+                      <button className="text-primary hover:text-primary/80 transition-colors duration-200">
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             <button className="w-full mt-4 text-center text-primary hover:text-primary/80 font-medium py-2 transition-colors duration-200">
@@ -485,32 +552,46 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             </div>
 
             <div className="space-y-4">
-              {recentReceipts.map((receipt) => (
-                <div
-                  key={receipt.id}
-                  className="flex items-center justify-between p-4 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer group"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className="bg-gradient-feature rounded-lg p-3">
-                      <Receipt className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200">
-                        {receipt.merchant}
-                      </h3>
-                      <div className="text-sm text-text-secondary">
-                        {formatDate(receipt.date)} • {receipt.items} items
+              {recentReceipts.length === 0 ? (
+                <div className="text-center py-8">
+                  <Receipt className="h-12 w-12 text-text-secondary mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-text-primary mb-2">No receipts yet</h3>
+                  <p className="text-text-secondary mb-4">Start by scanning your first receipt</p>
+                  <button
+                    onClick={onShowReceiptScanning}
+                    className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
+                  >
+                    Scan Receipt
+                  </button>
+                </div>
+              ) : (
+                recentReceipts.map((receipt) => (
+                  <div
+                    key={receipt.id}
+                    className="flex items-center justify-between p-4 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer group"
+                  >
+                    <div className="flex items-center space-x-4">
+                      <div className="bg-gradient-feature rounded-lg p-3">
+                        <Receipt className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200">
+                          {receipt.merchant}
+                        </h3>
+                        <div className="text-sm text-text-secondary">
+                          {formatDate(receipt.date)} • {receipt.items} items
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-text-primary">
-                      {formatCurrency(receipt.amount)}
+                    <div className="text-right">
+                      <div className="font-bold text-text-primary">
+                        {formatCurrency(receipt.amount)}
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 ml-auto" />
                     </div>
-                    <ChevronRight className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 ml-auto" />
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

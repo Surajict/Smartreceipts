@@ -559,13 +559,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
             </div>
           </button>
 
-          <button className="group bg-gradient-to-br from-accent-yellow to-yellow-500 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white">
+          <button 
+            onClick={() => {
+              // Focus on search input when clicking the search tile
+              const searchInput = document.querySelector('input[placeholder*="Smart Search"]') as HTMLInputElement;
+              if (searchInput) {
+                searchInput.focus();
+                searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }}
+            className="group bg-gradient-to-br from-accent-yellow to-yellow-500 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+          >
             <div className="flex flex-col items-center text-center">
               <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
                 <Search className="h-8 w-8" />
               </div>
-              <h3 className="text-xl font-bold mb-2">Search</h3>
-              <p className="text-white/90">Find receipts and items quickly</p>
+              <h3 className="text-xl font-bold mb-2">Smart Search</h3>
+              <p className="text-white/90">Find receipts and items quickly with AI</p>
             </div>
           </button>
         </div>

@@ -45,7 +45,7 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
   return (
     <section className="bg-background pt-20 pb-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-12 items-start lg:items-center">
+        <div className="grid lg:grid-cols-2 gap-12 lg:items-start">
           {/* Left Column - Content */}
           <div className="text-center lg:text-left">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-text-primary leading-tight mb-6">
@@ -95,7 +95,7 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
           </div>
 
           {/* Right Column - Demo Video */}
-          <div className="relative lg:mt-0">
+          <div className="relative">
             <div className="bg-white rounded-2xl shadow-card p-8 relative overflow-hidden">
               {/* Background Pattern */}
               <div className="absolute inset-0 opacity-5">

@@ -37,7 +37,9 @@ interface WarrantyAlert {
 
 interface RecentReceipt {
   id: string;
-  merchant: string;
+  productName: string;
+  storeName: string;
+  brandName: string;
   date: string;
   amount: number;
   items: number;
@@ -124,12 +126,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       };
       setSummaryStats(stats);
 
-      // Process recent receipts
+      // Process recent receipts with product name and store name
       const recentReceiptsData: RecentReceipt[] = (receipts || [])
         .slice(0, 4)
         .map(receipt => ({
           id: receipt.id,
-          merchant: receipt.store_name || receipt.brand_name || 'Unknown Store',
+          productName: receipt.product_description || 'Unknown Product',
+          storeName: receipt.store_name || 'Unknown Store',
+          brandName: receipt.brand_name || 'Unknown Brand',
           date: receipt.purchase_date,
           amount: receipt.amount || 0,
           items: 1 // Assuming 1 item per receipt for now
@@ -574,16 +578,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                       <div className="bg-gradient-feature rounded-lg p-3">
                         <Receipt className="h-5 w-5 text-primary" />
                       </div>
-                      <div>
-                        <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200">
-                          {receipt.merchant}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate">
+                          {receipt.productName}
                         </h3>
-                        <div className="text-sm text-text-secondary">
-                          {formatDate(receipt.date)} • {receipt.items} items
+                        <div className="text-sm text-text-secondary space-y-1">
+                          <div className="flex items-center space-x-1">
+                            <span className="font-medium">Store:</span>
+                            <span className="truncate">{receipt.storeName}</span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <span className="font-medium">Brand:</span>
+                            <span className="truncate">{receipt.brandName}</span>
+                          </div>
+                          <div className="text-xs text-text-secondary">
+                            {formatDate(receipt.date)} • {receipt.items} items
+                          </div>
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex-shrink-0 ml-4">
                       <div className="font-bold text-text-primary">
                         {formatCurrency(receipt.amount)}
                       </div>

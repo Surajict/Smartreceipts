@@ -15,7 +15,9 @@ import {
   Calendar,
   AlertTriangle,
   CheckCircle,
-  Clock
+  Clock,
+  Loader2,
+  X
 } from 'lucide-react';
 import { signOut, getCurrentUser, supabase } from '../lib/supabase';
 
@@ -50,12 +52,29 @@ interface SummaryStats {
   warrantiesClaimed: number;
 }
 
+interface SearchResult {
+  id: string;
+  title: string;
+  brand: string;
+  model?: string;
+  purchaseDate: string;
+  amount: number;
+  warrantyPeriod: string;
+  relevanceScore: number;
+}
+
 const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning }) => {
   const [user, setUser] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [alertsCount, setAlertsCount] = useState(3);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Search states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
 
   // Dynamic data states
   const [summaryStats, setSummaryStats] = useState<SummaryStats>({
@@ -152,6 +171,47 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
+  };
+
+  const handleSmartSearch = async () => {
+    if (!searchQuery.trim() || !user) return;
+
+    setIsSearching(true);
+    setShowSearchResults(true);
+
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/smart-search`;
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: searchQuery,
+          userId: user.id
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Search failed');
+      }
+
+      const data = await response.json();
+      setSearchResults(data.results || []);
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowSearchResults(false);
   };
 
   const calculateSummaryStats = (receipts: any[]): SummaryStats => {
@@ -371,6 +431,107 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
           <p className="text-xl text-text-secondary">
             Ready to manage your receipts and warranties smartly?
           </p>
+        </div>
+
+        {/* Smart Search Section */}
+        <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 mb-8">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-text-secondary" />
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSmartSearch()}
+                placeholder="Smart Search - Find receipts by product, brand, or description..."
+                className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+              />
+              {searchQuery && (
+                <button
+                  onClick={clearSearch}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-secondary hover:text-text-primary transition-colors duration-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+            <button
+              onClick={handleSmartSearch}
+              disabled={!searchQuery.trim() || isSearching}
+              className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 whitespace-nowrap"
+            >
+              {isSearching ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span>Searching...</span>
+                </>
+              ) : (
+                <>
+                  <Search className="h-5 w-5" />
+                  <span>Search</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Search Results */}
+          {showSearchResults && (
+            <div className="mt-6 border-t border-gray-200 pt-6">
+              <h3 className="text-lg font-bold text-text-primary mb-4">
+                Search Results {searchResults.length > 0 && `(${searchResults.length})`}
+              </h3>
+              
+              {searchResults.length > 0 ? (
+                <div className="space-y-3">
+                  {searchResults.map((result) => (
+                    <div
+                      key={result.id}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 cursor-pointer group"
+                    >
+                      <div className="flex items-center space-x-4 flex-1">
+                        <div className="bg-primary/10 rounded-lg p-2">
+                          <Receipt className="h-5 w-5 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate">
+                            {result.title}
+                          </h4>
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 text-sm text-text-secondary">
+                            <span className="font-medium">{result.brand}</span>
+                            {result.model && <span>Model: {result.model}</span>}
+                            <span>{formatDate(result.purchaseDate)}</span>
+                            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                              {result.warrantyPeriod}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right flex items-center space-x-3">
+                        <div className="font-bold text-text-primary">
+                          {formatCurrency(result.amount)}
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Search className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-text-secondary">
+                    {isSearching ? 'Searching your receipts...' : 'No receipts found matching your search'}
+                  </p>
+                  {!isSearching && searchQuery && (
+                    <p className="text-sm text-text-secondary mt-2">
+                      Try searching for product names, brands, or descriptions
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Quick Access Tiles */}

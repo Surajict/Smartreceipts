@@ -136,15 +136,15 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
         .from('user_notification_settings')
         .select('*')
         .eq('user_id', currentUser.id)
-        .single();
+        .limit(1);
 
-      if (notifError && notifError.code !== 'PGRST116') {
+      if (notifError) {
         console.error('Error loading notification settings:', notifError);
-      } else if (notifData) {
+      } else if (notifData && notifData.length > 0) {
         setNotificationSettings({
-          warranty_alerts: notifData.warranty_alerts,
-          auto_system_update: notifData.auto_system_update,
-          marketing_notifications: notifData.marketing_notifications
+          warranty_alerts: notifData[0].warranty_alerts,
+          auto_system_update: notifData[0].auto_system_update,
+          marketing_notifications: notifData[0].marketing_notifications
         });
       }
 
@@ -153,16 +153,16 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
         .from('user_privacy_settings')
         .select('*')
         .eq('user_id', currentUser.id)
-        .single();
+        .limit(1);
 
-      if (privacyError && privacyError.code !== 'PGRST116') {
+      if (privacyError) {
         console.error('Error loading privacy settings:', privacyError);
-      } else if (privacyData) {
+      } else if (privacyData && privacyData.length > 0) {
         setPrivacySettings({
-          data_collection: privacyData.data_collection,
-          data_analysis: privacyData.data_analysis,
-          biometric_login: privacyData.biometric_login,
-          two_factor_auth: privacyData.two_factor_auth
+          data_collection: privacyData[0].data_collection,
+          data_analysis: privacyData[0].data_analysis,
+          biometric_login: privacyData[0].biometric_login,
+          two_factor_auth: privacyData[0].two_factor_auth
         });
       }
     } catch (error) {

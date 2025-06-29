@@ -12,9 +12,10 @@ import SignUp from './components/SignUp';
 import Dashboard from './components/Dashboard';
 import ReceiptScanning from './components/ReceiptScanning';
 import ProfilePage from './components/ProfilePage';
+import MyLibrary from './components/MyLibrary';
 import { getCurrentUser, onAuthStateChange } from './lib/supabase';
 
-type PageState = 'home' | 'login' | 'signup' | 'dashboard' | 'receipt-scanning' | 'profile';
+type PageState = 'home' | 'login' | 'signup' | 'dashboard' | 'receipt-scanning' | 'profile' | 'library';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<PageState>('home');
@@ -61,6 +62,7 @@ function App() {
   const handleShowDashboard = () => setCurrentPage('dashboard');
   const handleShowReceiptScanning = () => setCurrentPage('receipt-scanning');
   const handleShowProfile = () => setCurrentPage('profile');
+  const handleShowLibrary = () => setCurrentPage('library');
   const handleSignOut = () => {
     setUser(null);
     setCurrentPage('home');
@@ -83,6 +85,11 @@ function App() {
     return <ProfilePage onBackToDashboard={handleShowDashboard} />;
   }
 
+  // Show library page
+  if (user && currentPage === 'library') {
+    return <MyLibrary onBackToDashboard={handleShowDashboard} onShowReceiptScanning={handleShowReceiptScanning} />;
+  }
+
   // Show receipt scanning page
   if (user && currentPage === 'receipt-scanning') {
     return <ReceiptScanning onBackToDashboard={handleShowDashboard} />;
@@ -90,7 +97,7 @@ function App() {
 
   // Show dashboard if user is authenticated
   if (user && currentPage === 'dashboard') {
-    return <Dashboard onSignOut={handleSignOut} onShowReceiptScanning={handleShowReceiptScanning} onShowProfile={handleShowProfile} />;
+    return <Dashboard onSignOut={handleSignOut} onShowReceiptScanning={handleShowReceiptScanning} onShowProfile={handleShowProfile} onShowLibrary={handleShowLibrary} />;
   }
 
   if (currentPage === 'login') {

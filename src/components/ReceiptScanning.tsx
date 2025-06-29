@@ -16,7 +16,8 @@ import {
   Tag,
   Shield,
   Clock,
-  CheckCircle
+  CheckCircle,
+  Store
 } from 'lucide-react';
 import { supabase, getCurrentUser } from '../lib/supabase';
 
@@ -33,6 +34,8 @@ interface FormData {
   warrantyPeriod: string;
   extendedWarranty: string;
   amount: string;
+  storeName: string;
+  purchaseLocation: string;
 }
 
 const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) => {
@@ -56,7 +59,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     modelNumber: '',
     warrantyPeriod: '',
     extendedWarranty: '',
-    amount: ''
+    amount: '',
+    storeName: '',
+    purchaseLocation: ''
   });
 
   const [formErrors, setFormErrors] = useState<Partial<FormData>>({});
@@ -285,7 +290,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         warranty_period: formData.warrantyPeriod,
         extended_warranty: formData.extendedWarranty || null,
         amount: formData.amount ? parseFloat(formData.amount) : null,
-        image_path: imagePath || null
+        image_path: imagePath || null,
+        store_name: formData.storeName || null,
+        purchase_location: formData.purchaseLocation || null
       };
 
       const { data, error } = await supabase
@@ -358,7 +365,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       modelNumber: '',
       warrantyPeriod: '',
       extendedWarranty: '',
-      amount: ''
+      amount: '',
+      storeName: '',
+      purchaseLocation: ''
     });
     setFormErrors({});
     setError(null);
@@ -646,6 +655,38 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                   {formErrors.country && (
                     <p className="mt-1 text-sm text-accent-red">{formErrors.country}</p>
                   )}
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Store Name */}
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    <Store className="inline h-4 w-4 mr-1" />
+                    Store Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.storeName}
+                    onChange={(e) => setFormData(prev => ({ ...prev, storeName: e.target.value }))}
+                    placeholder="e.g., Apple Store, Best Buy"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                  />
+                </div>
+
+                {/* Purchase Location */}
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    <MapPin className="inline h-4 w-4 mr-1" />
+                    Purchase Location
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.purchaseLocation}
+                    onChange={(e) => setFormData(prev => ({ ...prev, purchaseLocation: e.target.value }))}
+                    placeholder="e.g., New York, NY or Online"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                  />
                 </div>
               </div>
 

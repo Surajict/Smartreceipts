@@ -74,7 +74,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   // Dynamic data states
   const [summaryStats, setSummaryStats] = useState<SummaryStats>({
@@ -177,7 +177,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
     if (!searchQuery.trim() || !user) return;
 
     setIsSearching(true);
-    setShowSearchResults(true);
 
     try {
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/smart-search`;
@@ -211,7 +210,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
   const clearSearch = () => {
     setSearchQuery('');
     setSearchResults([]);
-    setShowSearchResults(false);
+  };
+
+  const openSearchModal = () => {
+    setShowSearchModal(true);
+    setSearchResults([]);
+    setSearchQuery('');
+  };
+
+  const closeSearchModal = () => {
+    setShowSearchModal(false);
+    clearSearch();
   };
 
   const calculateSummaryStats = (receipts: any[]): SummaryStats => {
@@ -433,107 +442,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
           </p>
         </div>
 
-        {/* Smart Search Section */}
-        <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 mb-8">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-text-secondary" />
-              </div>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSmartSearch()}
-                placeholder="Smart Search - Find receipts by product, brand, or description..."
-                className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-              />
-              {searchQuery && (
-                <button
-                  onClick={clearSearch}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-secondary hover:text-text-primary transition-colors duration-200"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              )}
-            </div>
-            <button
-              onClick={handleSmartSearch}
-              disabled={!searchQuery.trim() || isSearching}
-              className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 whitespace-nowrap"
-            >
-              {isSearching ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span>Searching...</span>
-                </>
-              ) : (
-                <>
-                  <Search className="h-5 w-5" />
-                  <span>Search</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Search Results */}
-          {showSearchResults && (
-            <div className="mt-6 border-t border-gray-200 pt-6">
-              <h3 className="text-lg font-bold text-text-primary mb-4">
-                Search Results {searchResults.length > 0 && `(${searchResults.length})`}
-              </h3>
-              
-              {searchResults.length > 0 ? (
-                <div className="space-y-3">
-                  {searchResults.map((result) => (
-                    <div
-                      key={result.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 cursor-pointer group"
-                    >
-                      <div className="flex items-center space-x-4 flex-1">
-                        <div className="bg-primary/10 rounded-lg p-2">
-                          <Receipt className="h-5 w-5 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate">
-                            {result.title}
-                          </h4>
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 text-sm text-text-secondary">
-                            <span className="font-medium">{result.brand}</span>
-                            {result.model && <span>Model: {result.model}</span>}
-                            <span>{formatDate(result.purchaseDate)}</span>
-                            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
-                              {result.warrantyPeriod}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right flex items-center space-x-3">
-                        <div className="font-bold text-text-primary">
-                          {formatCurrency(result.amount)}
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Search className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-text-secondary">
-                    {isSearching ? 'Searching your receipts...' : 'No receipts found matching your search'}
-                  </p>
-                  {!isSearching && searchQuery && (
-                    <p className="text-sm text-text-secondary mt-2">
-                      Try searching for product names, brands, or descriptions
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
         {/* Quick Access Tiles */}
         <div className="grid md:grid-cols-3 gap-6 mb-12">
           <button 
@@ -560,14 +468,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
           </button>
 
           <button 
-            onClick={() => {
-              // Focus on search input when clicking the search tile
-              const searchInput = document.querySelector('input[placeholder*="Smart Search"]') as HTMLInputElement;
-              if (searchInput) {
-                searchInput.focus();
-                searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }
-            }}
+            onClick={openSearchModal}
             className="group bg-gradient-to-br from-accent-yellow to-yellow-500 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
           >
             <div className="flex flex-col items-center text-center">
@@ -747,6 +648,127 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning 
           </div>
         </div>
       </main>
+
+      {/* Search Modal */}
+      {showSearchModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-card max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-text-primary">Smart Search</h2>
+              <button
+                onClick={closeSearchModal}
+                className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1 relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-text-secondary" />
+                  </div>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSmartSearch()}
+                    placeholder="Find receipts by product, brand, or description..."
+                    className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    autoFocus
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={clearSearch}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-secondary hover:text-text-primary transition-colors duration-200"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={handleSmartSearch}
+                  disabled={!searchQuery.trim() || isSearching}
+                  className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 whitespace-nowrap"
+                >
+                  {isSearching ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <span>Searching...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Search className="h-5 w-5" />
+                      <span>Search</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Search Results */}
+            <div className="p-6 max-h-96 overflow-y-auto">
+              {searchResults.length > 0 ? (
+                <div className="space-y-3">
+                  <h3 className="text-lg font-bold text-text-primary mb-4">
+                    Search Results ({searchResults.length})
+                  </h3>
+                  {searchResults.map((result) => (
+                    <div
+                      key={result.id}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 cursor-pointer group"
+                    >
+                      <div className="flex items-center space-x-4 flex-1">
+                        <div className="bg-primary/10 rounded-lg p-2">
+                          <Receipt className="h-5 w-5 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate">
+                            {result.title}
+                          </h4>
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 text-sm text-text-secondary">
+                            <span className="font-medium">{result.brand}</span>
+                            {result.model && <span>Model: {result.model}</span>}
+                            <span>{formatDate(result.purchaseDate)}</span>
+                            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                              {result.warrantyPeriod}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right flex items-center space-x-3">
+                        <div className="font-bold text-text-primary">
+                          {formatCurrency(result.amount)}
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : searchQuery && !isSearching ? (
+                <div className="text-center py-8">
+                  <Search className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-text-secondary">No receipts found matching your search</p>
+                  <p className="text-sm text-text-secondary mt-2">
+                    Try searching for product names, brands, or descriptions
+                  </p>
+                </div>
+              ) : !searchQuery ? (
+                <div className="text-center py-8">
+                  <Search className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-text-secondary">Enter a search term to find your receipts</p>
+                  <p className="text-sm text-text-secondary mt-2">
+                    Search by product name, brand, model, or description
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Click outside to close user menu */}
       {showUserMenu && (

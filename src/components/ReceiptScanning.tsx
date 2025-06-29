@@ -17,7 +17,9 @@ import {
   Shield,
   Clock,
   CheckCircle,
-  Store
+  Store,
+  FileText,
+  Image
 } from 'lucide-react';
 import { supabase, getCurrentUser } from '../lib/supabase';
 
@@ -46,6 +48,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [error, setError] = useState<string | null>(null);
   const [alertsCount] = useState(3);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [filePreview, setFilePreview] = useState<{ type: 'image' | 'pdf'; url: string; name: string } | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -75,22 +79,55 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     '6 months', '1 year', '2 years', '3 years', '4 years', '5 years', 'Lifetime'
   ];
 
+  // Accepted file types
+  const ACCEPTED_FILE_TYPES = {
+    'image/jpeg': ['.jpg', '.jpeg'],
+    'image/png': ['.png'],
+    'application/pdf': ['.pdf']
+  };
+
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+  // File validation function
+  const validateFile = (file: File): { isValid: boolean; error?: string } => {
+    // Check file type
+    const acceptedTypes = Object.keys(ACCEPTED_FILE_TYPES);
+    if (!acceptedTypes.includes(file.type)) {
+      return {
+        isValid: false,
+        error: 'Only JPG, PNG, and PDF files are allowed'
+      };
+    }
+
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      return {
+        isValid: false,
+        error: 'File size must be less than 10MB'
+      };
+    }
+
+    return { isValid: true };
+  };
+
+  // Generate unique receipt ID for filename
+  const generateReceiptId = (): string => {
+    return `receipt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
+
   // Camera Functions
   const startCamera = useCallback(async () => {
     try {
       setError(null);
       setIsLoading(true);
 
-      // Check if getUserMedia is supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Camera access is not supported in this browser');
       }
 
-      // Request camera permission with fallback options
       let stream: MediaStream;
       
       try {
-        // Try with back camera first (mobile)
         stream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
             facingMode: { ideal: 'environment' },
@@ -101,7 +138,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       } catch (backCameraError) {
         console.warn('Back camera not available, trying front camera:', backCameraError);
         try {
-          // Fallback to front camera
           stream = await navigator.mediaDevices.getUserMedia({ 
             video: { 
               facingMode: 'user',
@@ -111,7 +147,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           });
         } catch (frontCameraError) {
           console.warn('Front camera not available, trying any camera:', frontCameraError);
-          // Final fallback - any available camera
           stream = await navigator.mediaDevices.getUserMedia({ 
             video: {
               width: { ideal: 1920, min: 640 },
@@ -125,7 +160,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         videoRef.current.srcObject = stream;
         setCameraStream(stream);
         
-        // Wait for video to be ready
         videoRef.current.onloadedmetadata = () => {
           setCurrentStep('camera');
           setIsLoading(false);
@@ -164,18 +198,22 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       const canvas = canvasRef.current;
       const video = videoRef.current;
       
-      // Set canvas dimensions to match video
       canvas.width = video.videoWidth || video.clientWidth;
       canvas.height = video.videoHeight || video.clientHeight;
       
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        // Draw the video frame to canvas
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        // Convert to base64 with high quality
         const imageData = canvas.toDataURL('image/jpeg', 0.9);
         setCapturedImage(imageData);
+        
+        // Create file preview
+        setFilePreview({
+          type: 'image',
+          url: imageData,
+          name: 'captured_receipt.jpg'
+        });
+        
         stopCamera();
         setCurrentStep('preview');
       }
@@ -186,30 +224,41 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Validate file size (10MB limit)
-      if (file.size > 10 * 1024 * 1024) {
-        setError('File size must be less than 10MB');
-        return;
-      }
+      const validation = validateFile(file);
       
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        setError('Please select a valid image file');
+      if (!validation.isValid) {
+        setError(validation.error || 'Invalid file');
         return;
       }
 
       setError(null);
       setUploadedFile(file);
       
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setCapturedImage(e.target?.result as string);
+      // Create file preview
+      if (file.type === 'application/pdf') {
+        setFilePreview({
+          type: 'pdf',
+          url: URL.createObjectURL(file),
+          name: file.name
+        });
         setCurrentStep('preview');
-      };
-      reader.onerror = () => {
-        setError('Failed to read the selected file');
-      };
-      reader.readAsDataURL(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const imageUrl = e.target?.result as string;
+          setCapturedImage(imageUrl);
+          setFilePreview({
+            type: 'image',
+            url: imageUrl,
+            name: file.name
+          });
+          setCurrentStep('preview');
+        };
+        reader.onerror = () => {
+          setError('Failed to read the selected file');
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -227,8 +276,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     return Object.keys(errors).length === 0;
   };
 
-  // Supabase Integration
-  const uploadImageToSupabase = async (imageData: string | File): Promise<string | null> => {
+  // Supabase Integration with progress tracking
+  const uploadFileToSupabase = async (file: File | string): Promise<string | null> => {
     try {
       const user = await getCurrentUser();
       if (!user) {
@@ -237,28 +286,35 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
 
       let fileToUpload: File;
       let fileName: string;
+      const receiptId = generateReceiptId();
 
-      if (typeof imageData === 'string') {
+      if (typeof file === 'string') {
         // Convert base64 to blob for captured images
-        const response = await fetch(imageData);
+        const response = await fetch(file);
         const blob = await response.blob();
-        fileName = `receipt_${Date.now()}.jpg`;
+        fileName = `${receiptId}.jpg`;
         fileToUpload = new File([blob], fileName, { type: 'image/jpeg' });
       } else {
         // Use uploaded file directly
-        fileToUpload = imageData;
-        const fileExtension = fileToUpload.name.split('.').pop() || 'jpg';
-        fileName = `receipt_${Date.now()}.${fileExtension}`;
+        const fileExtension = file.name.split('.').pop() || 'jpg';
+        fileName = `${receiptId}.${fileExtension}`;
+        fileToUpload = file;
       }
 
-      // Upload to Supabase Storage with user-specific path
+      // Upload to receipt-images bucket with user-specific path
       const filePath = `${user.id}/${fileName}`;
       
+      setUploadProgress(0);
+      
       const { data, error } = await supabase.storage
-        .from('receipts')
+        .from('receipt-images')
         .upload(filePath, fileToUpload, {
           cacheControl: '3600',
-          upsert: false
+          upsert: false,
+          onUploadProgress: (progress) => {
+            const percentage = (progress.loaded / progress.total) * 100;
+            setUploadProgress(Math.round(percentage));
+          }
         });
 
       if (error) {
@@ -290,7 +346,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         warranty_period: formData.warrantyPeriod,
         extended_warranty: formData.extendedWarranty || null,
         amount: formData.amount ? parseFloat(formData.amount) : null,
-        image_path: imagePath || null,
+        image_url: imagePath || null, // Store in image_url column as specified
         store_name: formData.storeName || null,
         purchase_location: formData.purchaseLocation || null
       };
@@ -315,17 +371,17 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
 
   // Handle Submissions
   const handleImageSubmit = async () => {
-    if (!capturedImage) return;
+    if (!capturedImage && !uploadedFile) return;
     
     setIsLoading(true);
     setError(null);
     
     try {
-      // Upload image to Supabase Storage
-      const imagePath = await uploadImageToSupabase(uploadedFile || capturedImage);
+      // Upload file to Supabase Storage
+      const imagePath = await uploadFileToSupabase(uploadedFile || capturedImage!);
       
       if (imagePath) {
-        // Save basic receipt record with image path
+        // Save receipt record with file path
         await saveReceiptToDatabase(imagePath);
         setCurrentStep('success');
       }
@@ -334,6 +390,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       setError(err.message || 'Failed to save receipt. Please try again.');
     } finally {
       setIsLoading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -357,6 +414,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const resetForm = () => {
     setCapturedImage(null);
     setUploadedFile(null);
+    setFilePreview(null);
+    setUploadProgress(0);
     setFormData({
       purchaseDate: '',
       country: '',
@@ -379,8 +438,11 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   React.useEffect(() => {
     return () => {
       stopCamera();
+      if (filePreview?.url && filePreview.type === 'pdf') {
+        URL.revokeObjectURL(filePreview.url);
+      }
     };
-  }, [stopCamera]);
+  }, [stopCamera, filePreview]);
 
   return (
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
@@ -486,11 +548,15 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                 <div className="bg-white/20 rounded-full p-6 mb-6 group-hover:bg-white/30 transition-colors duration-300">
                   <Upload className="h-12 w-12" />
                 </div>
-                <h3 className="text-2xl font-bold mb-4">Upload Image</h3>
+                <h3 className="text-2xl font-bold mb-4">Upload File</h3>
                 <p className="text-white/90 leading-relaxed">
-                  Select an existing image from your device. 
-                  Supports JPG, PNG, and other common formats.
+                  Select an existing file from your device. 
+                  Supports JPG, PNG, and PDF formats.
                 </p>
+                <div className="mt-4 text-sm text-white/80">
+                  <p>Accepted formats: JPG, PNG, PDF</p>
+                  <p>Max size: 10MB</p>
+                </div>
               </div>
             </button>
 
@@ -530,7 +596,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
               />
               <div className="absolute inset-4 border-2 border-primary border-dashed rounded-lg pointer-events-none"></div>
               
-              {/* Camera controls overlay */}
               <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
                 <button
                   onClick={captureImage}
@@ -556,33 +621,64 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           </div>
         )}
 
-        {/* Image Preview */}
-        {currentStep === 'preview' && capturedImage && (
+        {/* File Preview */}
+        {currentStep === 'preview' && filePreview && (
           <div className="bg-white rounded-2xl shadow-card p-6">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-bold text-text-primary mb-2">Review Your Receipt</h2>
-              <p className="text-text-secondary">Make sure the image is clear and readable</p>
+              <p className="text-text-secondary">Make sure the file is clear and readable</p>
             </div>
 
             <div className="bg-gray-100 rounded-lg p-4 mb-6">
-              <img
-                src={capturedImage}
-                alt="Captured receipt"
-                className="w-full max-h-96 object-contain rounded-lg"
-              />
+              {filePreview.type === 'image' ? (
+                <img
+                  src={filePreview.url}
+                  alt="Receipt preview"
+                  className="w-full max-h-96 object-contain rounded-lg"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <FileText className="h-16 w-16 text-text-secondary mb-4" />
+                  <h3 className="text-lg font-medium text-text-primary mb-2">PDF Receipt</h3>
+                  <p className="text-text-secondary text-sm">{filePreview.name}</p>
+                  <button
+                    onClick={() => window.open(filePreview.url, '_blank')}
+                    className="mt-4 text-primary hover:text-primary/80 font-medium"
+                  >
+                    Open PDF to Preview
+                  </button>
+                </div>
+              )}
             </div>
+
+            {/* Upload Progress */}
+            {isLoading && uploadProgress > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-text-primary">Uploading...</span>
+                  <span className="text-sm text-text-secondary">{uploadProgress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-primary h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-center space-x-4">
               <button
                 onClick={() => {
                   setCapturedImage(null);
                   setUploadedFile(null);
+                  setFilePreview(null);
                   setCurrentStep('options');
                 }}
                 className="flex items-center space-x-2 px-6 py-3 border-2 border-gray-300 text-text-secondary rounded-lg hover:border-gray-400 hover:text-text-primary transition-colors duration-200"
               >
                 <RotateCcw className="h-5 w-5" />
-                <span>Retake</span>
+                <span>Choose Different File</span>
               </button>
               <button
                 onClick={handleImageSubmit}
@@ -847,7 +943,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
               Receipt Saved Successfully!
             </h2>
             <p className="text-xl text-text-secondary mb-8">
-              Your receipt has been processed and securely stored. 
+              Your receipt has been securely uploaded and processed. 
               Warranty tracking has been automatically set up.
             </p>
             <div className="flex justify-center space-x-4">
@@ -873,7 +969,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept=".jpg,.jpeg,.png,.pdf"
           onChange={handleFileUpload}
           className="hidden"
         />

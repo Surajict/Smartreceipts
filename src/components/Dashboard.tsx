@@ -552,52 +552,52 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
         {/* Summary Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          <div className="bg-white p-6 rounded-2xl shadow-card border border-gray-100">
+          <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-card border border-gray-100">
             <div className="flex items-center justify-between mb-4">
-              <div className="bg-gradient-to-br from-primary/10 to-primary/20 rounded-lg p-3">
-                <Receipt className="h-6 w-6 text-primary" />
+              <div className="bg-gradient-to-br from-primary/10 to-primary/20 rounded-lg p-2 sm:p-3 flex-shrink-0">
+                <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
               </div>
             </div>
-            <div className="text-3xl font-bold text-text-primary mb-1">
+            <div className="text-2xl sm:text-3xl font-bold text-text-primary mb-1">
               {summaryStats.receiptsScanned}
             </div>
-            <div className="text-sm text-text-secondary">Receipts Scanned</div>
+            <div className="text-xs sm:text-sm text-text-secondary">Receipts Scanned</div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-card border border-gray-100">
+          <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-card border border-gray-100">
             <div className="flex items-center justify-between mb-4">
-              <div className="bg-gradient-to-br from-secondary/10 to-secondary/20 rounded-lg p-3">
-                <DollarSign className="h-6 w-6 text-secondary" />
+              <div className="bg-gradient-to-br from-secondary/10 to-secondary/20 rounded-lg p-2 sm:p-3 flex-shrink-0">
+                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-secondary" />
               </div>
             </div>
-            <div className="text-3xl font-bold text-text-primary mb-1">
+            <div className="text-xl sm:text-3xl font-bold text-text-primary mb-1 break-words">
               {formatCurrency(summaryStats.totalAmount)}
             </div>
-            <div className="text-sm text-text-secondary">Total Amount Captured</div>
+            <div className="text-xs sm:text-sm text-text-secondary">Total Amount Captured</div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-card border border-gray-100">
+          <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-card border border-gray-100">
             <div className="flex items-center justify-between mb-4">
-              <div className="bg-gradient-to-br from-accent-yellow/10 to-accent-yellow/20 rounded-lg p-3">
-                <Tag className="h-6 w-6 text-accent-yellow" />
+              <div className="bg-gradient-to-br from-accent-yellow/10 to-accent-yellow/20 rounded-lg p-2 sm:p-3 flex-shrink-0">
+                <Tag className="h-5 w-5 sm:h-6 sm:w-6 text-accent-yellow" />
               </div>
             </div>
-            <div className="text-3xl font-bold text-text-primary mb-1">
+            <div className="text-2xl sm:text-3xl font-bold text-text-primary mb-1">
               {summaryStats.itemsCaptured}
             </div>
-            <div className="text-sm text-text-secondary">Items Captured</div>
+            <div className="text-xs sm:text-sm text-text-secondary">Items Captured</div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-card border border-gray-100">
+          <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-card border border-gray-100">
             <div className="flex items-center justify-between mb-4">
-              <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-lg p-3">
-                <Shield className="h-6 w-6 text-green-600" />
+              <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-lg p-2 sm:p-3 flex-shrink-0">
+                <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
               </div>
             </div>
-            <div className="text-3xl font-bold text-text-primary mb-1">
+            <div className="text-2xl sm:text-3xl font-bold text-text-primary mb-1">
               {summaryStats.warrantiesClaimed}
             </div>
-            <div className="text-sm text-text-secondary">Warranties Claimed</div>
+            <div className="text-xs sm:text-sm text-text-secondary">Warranties Claimed</div>
           </div>
         </div>
 

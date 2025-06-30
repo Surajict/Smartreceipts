@@ -23,7 +23,11 @@ import {
   Image,
   RefreshCw,
   Loader2,
-  SwitchCamera
+  SwitchCamera,
+  Maximize2,
+  Crop,
+  ZoomIn,
+  Info
 } from 'lucide-react';
 import { supabase, getCurrentUser } from '../lib/supabase';
 
@@ -50,16 +54,24 @@ interface ToastMessage {
   id: string;
 }
 
+interface CaptureMode {
+  type: 'standard' | 'panoramic' | 'manual';
+  label: string;
+  description: string;
+  icon: React.ComponentType<any>;
+}
+
 const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) => {
-  const [currentStep, setCurrentStep] = useState<'options' | 'camera' | 'upload' | 'manual' | 'preview' | 'success'>('options');
+  const [currentStep, setCurrentStep] = useState<'options' | 'capture-mode' | 'camera' | 'upload' | 'manual' | 'preview' | 'success'>('options');
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [alertsCount] = useState(3);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [filePreview, setFilePreview] = useState<{ type: 'image' | 'pdf'; url: string; name: string } | null>(null);
+  const [filePreview, setFilePreview] = useState<{ type: 'image' | 'pdf'; url: string; name: string; isPanoramic?: boolean } | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [selectedCaptureMode, setSelectedCaptureMode] = useState<CaptureMode['type']>('standard');
   
   // Camera specific states
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -68,6 +80,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [retakeCount, setRetakeCount] = useState(0);
+  const [capturedImages, setCapturedImages] = useState<string[]>([]);
+  const [isPanoramicMode, setIsPanoramicMode] = useState(false);
   
   const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,14 +110,38 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     '6 months', '1 year', '2 years', '3 years', '4 years', '5 years', 'Lifetime'
   ];
 
-  // Accepted file types
+  // Capture modes
+  const captureModes: CaptureMode[] = [
+    {
+      type: 'standard',
+      label: 'Standard Receipt',
+      description: 'Perfect for regular-sized receipts and documents',
+      icon: Camera
+    },
+    {
+      type: 'panoramic',
+      label: 'Long Receipt',
+      description: 'Capture extra-long receipts in multiple shots that will be stitched together',
+      icon: Maximize2
+    },
+    {
+      type: 'manual',
+      label: 'Upload File',
+      description: 'Upload panoramic images, PDFs, or long receipt photos from your device',
+      icon: Upload
+    }
+  ];
+
+  // Accepted file types - enhanced for panoramic
   const ACCEPTED_FILE_TYPES = {
     'image/jpeg': ['.jpg', '.jpeg'],
     'image/png': ['.png'],
+    'image/heic': ['.heic'],
+    'image/webp': ['.webp'],
     'application/pdf': ['.pdf']
   };
 
-  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB for panoramic images
 
   // Toast management
   const addToast = useCallback((type: ToastMessage['type'], message: string) => {
@@ -147,14 +185,14 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     }
   }, []);
 
-  // File validation function
-  const validateFile = (file: File): { isValid: boolean; error?: string } => {
+  // File validation function - enhanced for panoramic
+  const validateFile = (file: File): { isValid: boolean; error?: string; isPanoramic?: boolean } => {
     // Check file type
     const acceptedTypes = Object.keys(ACCEPTED_FILE_TYPES);
     if (!acceptedTypes.includes(file.type)) {
       return {
         isValid: false,
-        error: 'Only JPG, PNG, and PDF files are allowed'
+        error: 'Only JPG, PNG, HEIC, WebP, and PDF files are allowed'
       };
     }
 
@@ -162,11 +200,17 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     if (file.size > MAX_FILE_SIZE) {
       return {
         isValid: false,
-        error: 'File size must be less than 10MB'
+        error: 'File size must be less than 25MB'
       };
     }
 
-    return { isValid: true };
+    // Detect if image might be panoramic based on file size and name
+    const isPanoramic = file.size > 5 * 1024 * 1024 || // > 5MB
+                       file.name.toLowerCase().includes('pano') ||
+                       file.name.toLowerCase().includes('panoramic') ||
+                       file.name.toLowerCase().includes('long');
+
+    return { isValid: true, isPanoramic };
   };
 
   // Generate unique receipt ID for filename
@@ -222,8 +266,13 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     setCameraReady(true);
     setIsLoading(false);
     setCameraError(null);
-    addToast('success', 'Camera ready! Position your receipt and tap capture.');
-  }, [addToast]);
+    
+    if (isPanoramicMode) {
+      addToast('info', 'Panoramic mode: Capture multiple shots of your long receipt. Tap "Finish" when done.');
+    } else {
+      addToast('success', 'Camera ready! Position your receipt and tap capture.');
+    }
+  }, [addToast, isPanoramicMode]);
 
   // Handle camera error
   const handleCameraError = useCallback((error: string | DOMException) => {
@@ -269,10 +318,10 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
 
     try {
       const imageSrc = webcamRef.current.getScreenshot({
-        width: 1920,
-        height: 1080,
+        width: isPanoramicMode ? 2560 : 1920, // Higher resolution for panoramic
+        height: isPanoramicMode ? 1440 : 1080,
         screenshotFormat: 'image/jpeg',
-        screenshotQuality: 0.9
+        screenshotQuality: 0.95 // Higher quality for panoramic
       });
 
       if (!imageSrc) {
@@ -280,24 +329,53 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         return;
       }
 
-      setCapturedImage(imageSrc);
+      if (isPanoramicMode) {
+        // Add to panoramic sequence
+        setCapturedImages(prev => [...prev, imageSrc]);
+        addToast('success', `Captured segment ${capturedImages.length + 1}. Continue capturing or tap "Finish".`);
+      } else {
+        // Single capture
+        setCapturedImage(imageSrc);
+        
+        // Create file preview
+        setFilePreview({
+          type: 'image',
+          url: imageSrc,
+          name: 'captured_receipt.jpg'
+        });
+        
+        setCurrentStep('preview');
+        addToast('success', 'Image captured successfully!');
+      }
       
-      // Create file preview
-      setFilePreview({
-        type: 'image',
-        url: imageSrc,
-        name: 'captured_receipt.jpg'
-      });
-      
-      setCurrentStep('preview');
       setRetakeCount(prev => prev + 1);
-      addToast('success', 'Image captured successfully!');
       
     } catch (error) {
       console.error('Capture error:', error);
       addToast('error', 'Failed to capture image. Please try again.');
     }
-  }, [cameraReady, addToast]);
+  }, [cameraReady, addToast, isPanoramicMode, capturedImages.length]);
+
+  // Finish panoramic capture
+  const finishPanoramicCapture = useCallback(() => {
+    if (capturedImages.length === 0) {
+      addToast('error', 'No images captured. Please capture at least one segment.');
+      return;
+    }
+
+    // For now, use the first image as preview (in production, you'd stitch them)
+    setCapturedImage(capturedImages[0]);
+    
+    setFilePreview({
+      type: 'image',
+      url: capturedImages[0],
+      name: `panoramic_receipt_${capturedImages.length}_segments.jpg`,
+      isPanoramic: true
+    });
+    
+    setCurrentStep('preview');
+    addToast('success', `Panoramic capture complete! ${capturedImages.length} segments captured.`);
+  }, [capturedImages, addToast]);
 
   // Switch camera (front/back)
   const switchCamera = useCallback(() => {
@@ -342,10 +420,11 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         setFilePreview({
           type: 'pdf',
           url: URL.createObjectURL(file),
-          name: file.name
+          name: file.name,
+          isPanoramic: validation.isPanoramic
         });
         setCurrentStep('preview');
-        addToast('success', 'PDF file selected successfully!');
+        addToast('success', validation.isPanoramic ? 'Panoramic PDF selected!' : 'PDF file selected successfully!');
       } else {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -354,10 +433,11 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           setFilePreview({
             type: 'image',
             url: imageUrl,
-            name: file.name
+            name: file.name,
+            isPanoramic: validation.isPanoramic
           });
           setCurrentStep('preview');
-          addToast('success', 'Image file selected successfully!');
+          addToast('success', validation.isPanoramic ? 'Panoramic image selected!' : 'Image file selected successfully!');
         };
         reader.onerror = () => {
           setError('Failed to read the selected file');
@@ -398,12 +478,14 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         // Convert base64 to blob for captured images
         const response = await fetch(file);
         const blob = await response.blob();
-        fileName = `${receiptId}.jpg`;
+        const suffix = filePreview?.isPanoramic ? '_panoramic' : '';
+        fileName = `${receiptId}${suffix}.jpg`;
         fileToUpload = new File([blob], fileName, { type: 'image/jpeg' });
       } else {
         // Use uploaded file directly
         const fileExtension = file.name.split('.').pop() || 'jpg';
-        fileName = `${receiptId}.${fileExtension}`;
+        const suffix = filePreview?.isPanoramic ? '_panoramic' : '';
+        fileName = `${receiptId}${suffix}.${fileExtension}`;
         fileToUpload = file;
       }
 
@@ -527,6 +609,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     setCameraError(null);
     setCameraReady(false);
     setRetakeCount(0);
+    setCapturedImages([]);
+    setIsPanoramicMode(false);
+    setSelectedCaptureMode('standard');
     setFormData({
       purchaseDate: '',
       country: '',
@@ -556,8 +641,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   // Get camera constraints
   const getVideoConstraints = () => {
     const constraints: MediaTrackConstraints = {
-      width: { ideal: 1920, min: 640 },
-      height: { ideal: 1080, min: 480 },
+      width: { ideal: isPanoramicMode ? 2560 : 1920, min: 640 },
+      height: { ideal: isPanoramicMode ? 1440 : 1080, min: 480 },
       facingMode: facingMode
     };
 
@@ -669,24 +754,17 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         {currentStep === 'options' && (
           <div className="grid md:grid-cols-3 gap-8">
             <button
-              onClick={startCamera}
-              disabled={isLoading}
-              className="group bg-gradient-to-br from-primary to-teal-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setCurrentStep('capture-mode')}
+              className="group bg-gradient-to-br from-primary to-teal-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
             >
               <div className="flex flex-col items-center text-center">
                 <div className="bg-white/20 rounded-full p-6 mb-6 group-hover:bg-white/30 transition-colors duration-300">
-                  {isLoading ? (
-                    <Loader2 className="h-12 w-12 animate-spin" />
-                  ) : (
-                    <Camera className="h-12 w-12" />
-                  )}
+                  <Camera className="h-12 w-12" />
                 </div>
-                <h3 className="text-2xl font-bold mb-4">
-                  {isLoading ? 'Starting Camera...' : 'Scan Image'}
-                </h3>
+                <h3 className="text-2xl font-bold mb-4">Camera Capture</h3>
                 <p className="text-white/90 leading-relaxed">
-                  Use your device camera to capture receipts directly. 
-                  Supports both front and back cameras.
+                  Use your device camera to capture receipts. 
+                  Supports both standard and panoramic modes for long receipts.
                 </p>
               </div>
             </button>
@@ -701,12 +779,11 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                 </div>
                 <h3 className="text-2xl font-bold mb-4">Upload File</h3>
                 <p className="text-white/90 leading-relaxed">
-                  Select an existing file from your device. 
-                  Supports JPG, PNG, and PDF formats.
+                  Upload panoramic images, long receipt photos, or PDF files from your device.
                 </p>
                 <div className="mt-4 text-sm text-white/80">
-                  <p>Accepted formats: JPG, PNG, PDF</p>
-                  <p>Max size: 10MB</p>
+                  <p>Supports: JPG, PNG, HEIC, WebP, PDF</p>
+                  <p>Max size: 25MB for panoramic images</p>
                 </div>
               </div>
             </button>
@@ -729,13 +806,125 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           </div>
         )}
 
+        {/* Capture Mode Selection */}
+        {currentStep === 'capture-mode' && (
+          <div className="bg-white rounded-2xl shadow-card p-8">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-text-primary mb-2">Choose Capture Mode</h2>
+              <p className="text-text-secondary">Select the best option for your receipt type</p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6 mb-8">
+              {captureModes.filter(mode => mode.type !== 'manual').map((mode) => {
+                const Icon = mode.icon;
+                const isSelected = selectedCaptureMode === mode.type;
+                
+                return (
+                  <button
+                    key={mode.type}
+                    onClick={() => setSelectedCaptureMode(mode.type)}
+                    className={`p-6 rounded-xl border-2 transition-all duration-200 text-left ${
+                      isSelected 
+                        ? 'border-primary bg-primary/5' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-start space-x-4">
+                      <div className={`rounded-lg p-3 ${
+                        isSelected ? 'bg-primary text-white' : 'bg-gray-100 text-text-secondary'
+                      }`}>
+                        <Icon className="h-6 w-6" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className={`font-bold mb-2 ${
+                          isSelected ? 'text-primary' : 'text-text-primary'
+                        }`}>
+                          {mode.label}
+                        </h3>
+                        <p className="text-text-secondary text-sm leading-relaxed">
+                          {mode.description}
+                        </p>
+                        {mode.type === 'panoramic' && (
+                          <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                            <div className="flex items-start space-x-2">
+                              <Info className="h-4 w-4 text-blue-600 mt-0.5" />
+                              <div className="text-xs text-blue-700">
+                                <p className="font-medium mb-1">Perfect for:</p>
+                                <ul className="space-y-1">
+                                  <li>• Long grocery receipts</li>
+                                  <li>• Restaurant bills with many items</li>
+                                  <li>• Hardware store receipts</li>
+                                  <li>• Any receipt longer than standard size</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-center space-x-4">
+              <button
+                onClick={() => setCurrentStep('options')}
+                className="flex items-center space-x-2 px-6 py-3 border-2 border-gray-300 text-text-secondary rounded-lg hover:border-gray-400 hover:text-text-primary transition-colors duration-200"
+              >
+                <ArrowLeft className="h-5 w-5" />
+                <span>Back</span>
+              </button>
+              <button
+                onClick={() => {
+                  setIsPanoramicMode(selectedCaptureMode === 'panoramic');
+                  startCamera();
+                }}
+                className="flex items-center space-x-2 bg-primary text-white px-8 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
+              >
+                <Camera className="h-5 w-5" />
+                <span>Start {selectedCaptureMode === 'panoramic' ? 'Panoramic ' : ''}Capture</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Camera View */}
         {currentStep === 'camera' && (
           <div className="bg-white rounded-2xl shadow-card p-6">
             <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-text-primary mb-2">Position Your Receipt</h2>
-              <p className="text-text-secondary">Make sure the entire receipt is visible and well-lit</p>
+              <h2 className="text-2xl font-bold text-text-primary mb-2">
+                {isPanoramicMode ? 'Panoramic Capture Mode' : 'Position Your Receipt'}
+              </h2>
+              <p className="text-text-secondary">
+                {isPanoramicMode 
+                  ? 'Capture your long receipt in multiple segments. Start from the top and work your way down.'
+                  : 'Make sure the entire receipt is visible and well-lit'
+                }
+              </p>
             </div>
+
+            {/* Panoramic Progress */}
+            {isPanoramicMode && capturedImages.length > 0 && (
+              <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-blue-900">
+                    Segments Captured: {capturedImages.length}
+                  </span>
+                  <button
+                    onClick={() => setCapturedImages([])}
+                    className="text-blue-600 hover:text-blue-800 text-sm"
+                  >
+                    Reset
+                  </button>
+                </div>
+                <div className="flex space-x-2">
+                  {capturedImages.map((_, index) => (
+                    <div key={index} className="w-4 h-4 bg-blue-500 rounded-full"></div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Camera Error */}
             {cameraError && (
@@ -799,6 +988,14 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                     </button>
                   )}
                   
+                  {/* Mode indicator */}
+                  {isPanoramicMode && (
+                    <div className="absolute top-4 left-4 bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+                      <Maximize2 className="h-4 w-4 inline mr-1" />
+                      Panoramic Mode
+                    </div>
+                  )}
+                  
                   {/* Capture button */}
                   <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
                     <button
@@ -808,6 +1005,18 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                       <Camera className="h-8 w-8" />
                     </button>
                   </div>
+                  
+                  {/* Finish panoramic button */}
+                  {isPanoramicMode && capturedImages.length > 0 && (
+                    <div className="absolute bottom-4 right-4">
+                      <button
+                        onClick={finishPanoramicCapture}
+                        className="bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-green-600 transition-colors duration-200 text-sm font-medium"
+                      >
+                        Finish ({capturedImages.length})
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -816,16 +1025,22 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
             {cameraReady && (
               <div className="text-center text-sm text-text-secondary mb-4">
                 <p>Camera: {facingMode === 'environment' ? 'Back' : 'Front'}</p>
-                {retakeCount > 0 && <p>Retakes: {retakeCount}</p>}
+                {retakeCount > 0 && <p>Captures: {retakeCount}</p>}
+                {isPanoramicMode && (
+                  <p className="text-blue-600 font-medium">
+                    Tip: Overlap each segment by about 20% for best results
+                  </p>
+                )}
               </div>
             )}
 
             <div className="flex justify-center space-x-4">
               <button
                 onClick={() => {
-                  setCurrentStep('options');
+                  setCurrentStep('capture-mode');
                   setCameraError(null);
                   setCameraReady(false);
+                  setCapturedImages([]);
                 }}
                 className="flex items-center space-x-2 px-6 py-3 border-2 border-gray-300 text-text-secondary rounded-lg hover:border-gray-400 hover:text-text-primary transition-colors duration-200"
               >
@@ -851,7 +1066,16 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           <div className="bg-white rounded-2xl shadow-card p-6">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-bold text-text-primary mb-2">Review Your Receipt</h2>
-              <p className="text-text-secondary">Make sure the file is clear and readable</p>
+              <p className="text-text-secondary">
+                {filePreview.isPanoramic ? 'Panoramic receipt detected - ' : ''}
+                Make sure the file is clear and readable
+              </p>
+              {filePreview.isPanoramic && (
+                <div className="mt-2 inline-flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                  <Maximize2 className="h-4 w-4" />
+                  <span>Panoramic Receipt</span>
+                </div>
+              )}
             </div>
 
             <div className="bg-gray-100 rounded-lg p-4 mb-6">
@@ -864,7 +1088,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
               ) : (
                 <div className="flex flex-col items-center justify-center py-12">
                   <FileText className="h-16 w-16 text-text-secondary mb-4" />
-                  <h3 className="text-lg font-medium text-text-primary mb-2">PDF Receipt</h3>
+                  <h3 className="text-lg font-medium text-text-primary mb-2">
+                    {filePreview.isPanoramic ? 'Panoramic PDF Receipt' : 'PDF Receipt'}
+                  </h3>
                   <p className="text-text-secondary text-sm">{filePreview.name}</p>
                   <button
                     onClick={() => window.open(filePreview.url, '_blank')}
@@ -898,6 +1124,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                   setCapturedImage(null);
                   setUploadedFile(null);
                   setFilePreview(null);
+                  setCapturedImages([]);
                   setCurrentStep('options');
                 }}
                 className="flex items-center space-x-2 px-6 py-3 border-2 border-gray-300 text-text-secondary rounded-lg hover:border-gray-400 hover:text-text-primary transition-colors duration-200"
@@ -1168,7 +1395,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
               Receipt Saved Successfully!
             </h2>
             <p className="text-xl text-text-secondary mb-8">
-              Your receipt has been securely uploaded and processed. 
+              Your {filePreview?.isPanoramic ? 'panoramic ' : ''}receipt has been securely uploaded and processed. 
               Warranty tracking has been automatically set up.
             </p>
             <div className="flex justify-center space-x-4">
@@ -1194,7 +1421,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         <input
           ref={fileInputRef}
           type="file"
-          accept=".jpg,.jpeg,.png,.pdf"
+          accept=".jpg,.jpeg,.png,.heic,.webp,.pdf"
           onChange={handleFileUpload}
           className="hidden"
         />

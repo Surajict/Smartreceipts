@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
+import Webcam from 'react-webcam';
 import { 
   Camera, 
   Upload, 
@@ -19,7 +20,10 @@ import {
   CheckCircle,
   Store,
   FileText,
-  Image
+  Image,
+  RefreshCw,
+  Loader2,
+  SwitchCamera
 } from 'lucide-react';
 import { supabase, getCurrentUser } from '../lib/supabase';
 
@@ -40,6 +44,12 @@ interface FormData {
   purchaseLocation: string;
 }
 
+interface ToastMessage {
+  type: 'success' | 'error' | 'info';
+  message: string;
+  id: string;
+}
+
 const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) => {
   const [currentStep, setCurrentStep] = useState<'options' | 'camera' | 'upload' | 'manual' | 'preview' | 'success'>('options');
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -47,12 +57,19 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [alertsCount] = useState(3);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [filePreview, setFilePreview] = useState<{ type: 'image' | 'pdf'; url: string; name: string } | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Camera specific states
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  const [retakeCount, setRetakeCount] = useState(0);
+  
+  const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<FormData>({
@@ -88,6 +105,48 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+  // Toast management
+  const addToast = useCallback((type: ToastMessage['type'], message: string) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    const toast: ToastMessage = { type, message, id };
+    setToasts(prev => [...prev, toast]);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 5000);
+  }, []);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // Get available camera devices
+  const getDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      setDevices(videoDevices);
+      
+      // Prefer back camera if available
+      const backCamera = videoDevices.find(device => 
+        device.label.toLowerCase().includes('back') || 
+        device.label.toLowerCase().includes('rear') ||
+        device.label.toLowerCase().includes('environment')
+      );
+      
+      if (backCamera) {
+        setSelectedDeviceId(backCamera.deviceId);
+        setFacingMode('environment');
+      } else if (videoDevices.length > 0) {
+        setSelectedDeviceId(videoDevices[0].deviceId);
+        setFacingMode('user');
+      }
+    } catch (error) {
+      console.error('Error getting devices:', error);
+    }
+  }, []);
+
   // File validation function
   const validateFile = (file: File): { isValid: boolean; error?: string } => {
     // Check file type
@@ -119,106 +178,149 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const startCamera = useCallback(async () => {
     try {
       setError(null);
+      setCameraError(null);
       setIsLoading(true);
+      setCameraReady(false);
 
+      // Check if camera is supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Camera access is not supported in this browser');
+        throw new Error('Camera access is not supported in this browser. Please try uploading an image instead.');
       }
 
-      let stream: MediaStream;
+      // Get available devices first
+      await getDevices();
       
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1920, min: 640 },
-            height: { ideal: 1080, min: 480 }
-          } 
-        });
-      } catch (backCameraError) {
-        console.warn('Back camera not available, trying front camera:', backCameraError);
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { 
-              facingMode: 'user',
-              width: { ideal: 1920, min: 640 },
-              height: { ideal: 1080, min: 480 }
-            } 
-          });
-        } catch (frontCameraError) {
-          console.warn('Front camera not available, trying any camera:', frontCameraError);
-          stream = await navigator.mediaDevices.getUserMedia({ 
-            video: {
-              width: { ideal: 1920, min: 640 },
-              height: { ideal: 1080, min: 480 }
-            }
-          });
-        }
-      }
+      setCurrentStep('camera');
+      addToast('info', 'Initializing camera...');
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        setCameraStream(stream);
-        
-        videoRef.current.onloadedmetadata = () => {
-          setCurrentStep('camera');
-          setIsLoading(false);
-        };
-      }
     } catch (err: any) {
-      console.error('Camera error:', err);
+      console.error('Camera initialization error:', err);
       setIsLoading(false);
       
       if (err.name === 'NotAllowedError') {
-        setError('Camera access denied. Please allow camera permissions and try again.');
+        const errorMsg = 'Camera access denied. Please allow camera permissions in your browser settings and try again.';
+        setCameraError(errorMsg);
+        addToast('error', errorMsg);
       } else if (err.name === 'NotFoundError') {
-        setError('No camera found on this device. Please try uploading an image instead.');
+        const errorMsg = 'No camera found on this device. Please try uploading an image instead.';
+        setCameraError(errorMsg);
+        addToast('error', errorMsg);
       } else if (err.name === 'NotSupportedError') {
-        setError('Camera is not supported in this browser. Please try uploading an image instead.');
+        const errorMsg = 'Camera is not supported in this browser. Please try uploading an image instead.';
+        setCameraError(errorMsg);
+        addToast('error', errorMsg);
       } else {
-        setError('Unable to access camera. Please check permissions or try uploading an image instead.');
+        const errorMsg = err.message || 'Unable to access camera. Please check permissions or try uploading an image instead.';
+        setCameraError(errorMsg);
+        addToast('error', errorMsg);
       }
     }
-  }, []);
+  }, [getDevices, addToast]);
 
-  const stopCamera = useCallback(() => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(track => {
-        track.stop();
-      });
-      setCameraStream(null);
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-  }, [cameraStream]);
+  // Handle camera ready
+  const handleCameraReady = useCallback(() => {
+    setCameraReady(true);
+    setIsLoading(false);
+    setCameraError(null);
+    addToast('success', 'Camera ready! Position your receipt and tap capture.');
+  }, [addToast]);
 
+  // Handle camera error
+  const handleCameraError = useCallback((error: string | DOMException) => {
+    console.error('Camera error:', error);
+    setCameraReady(false);
+    setIsLoading(false);
+    
+    let errorMessage = 'Camera error occurred';
+    
+    if (typeof error === 'string') {
+      errorMessage = error;
+    } else if (error instanceof DOMException) {
+      switch (error.name) {
+        case 'NotAllowedError':
+          errorMessage = 'Camera permission denied. Please allow camera access and try again.';
+          break;
+        case 'NotFoundError':
+          errorMessage = 'No camera found. Please try uploading an image instead.';
+          break;
+        case 'NotSupportedError':
+          errorMessage = 'Camera not supported in this browser. Please try uploading an image instead.';
+          break;
+        case 'OverconstrainedError':
+          errorMessage = 'Camera constraints not supported. Trying alternative settings...';
+          // Try switching to front camera
+          setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
+          return;
+        default:
+          errorMessage = `Camera error: ${error.message}`;
+      }
+    }
+    
+    setCameraError(errorMessage);
+    addToast('error', errorMessage);
+  }, [addToast]);
+
+  // Capture image from webcam
   const captureImage = useCallback(() => {
-    if (videoRef.current && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
-      
-      canvas.width = video.videoWidth || video.clientWidth;
-      canvas.height = video.videoHeight || video.clientHeight;
-      
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageData = canvas.toDataURL('image/jpeg', 0.9);
-        setCapturedImage(imageData);
-        
-        // Create file preview
-        setFilePreview({
-          type: 'image',
-          url: imageData,
-          name: 'captured_receipt.jpg'
-        });
-        
-        stopCamera();
-        setCurrentStep('preview');
-      }
+    if (!webcamRef.current || !cameraReady) {
+      addToast('error', 'Camera not ready. Please wait for camera to initialize.');
+      return;
     }
-  }, [stopCamera]);
+
+    try {
+      const imageSrc = webcamRef.current.getScreenshot({
+        width: 1920,
+        height: 1080,
+        screenshotFormat: 'image/jpeg',
+        screenshotQuality: 0.9
+      });
+
+      if (!imageSrc) {
+        addToast('error', 'Failed to capture image. Please try again.');
+        return;
+      }
+
+      setCapturedImage(imageSrc);
+      
+      // Create file preview
+      setFilePreview({
+        type: 'image',
+        url: imageSrc,
+        name: 'captured_receipt.jpg'
+      });
+      
+      setCurrentStep('preview');
+      setRetakeCount(prev => prev + 1);
+      addToast('success', 'Image captured successfully!');
+      
+    } catch (error) {
+      console.error('Capture error:', error);
+      addToast('error', 'Failed to capture image. Please try again.');
+    }
+  }, [cameraReady, addToast]);
+
+  // Switch camera (front/back)
+  const switchCamera = useCallback(() => {
+    if (devices.length > 1) {
+      const currentIndex = devices.findIndex(device => device.deviceId === selectedDeviceId);
+      const nextIndex = (currentIndex + 1) % devices.length;
+      setSelectedDeviceId(devices[nextIndex].deviceId);
+      
+      // Update facing mode based on device label
+      const nextDevice = devices[nextIndex];
+      if (nextDevice.label.toLowerCase().includes('front') || nextDevice.label.toLowerCase().includes('user')) {
+        setFacingMode('user');
+      } else {
+        setFacingMode('environment');
+      }
+      
+      addToast('info', 'Switching camera...');
+    } else {
+      // Fallback: toggle facing mode
+      setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
+      addToast('info', 'Switching camera...');
+    }
+  }, [devices, selectedDeviceId, addToast]);
 
   // File Upload Functions
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -228,6 +330,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       
       if (!validation.isValid) {
         setError(validation.error || 'Invalid file');
+        addToast('error', validation.error || 'Invalid file');
         return;
       }
 
@@ -242,6 +345,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           name: file.name
         });
         setCurrentStep('preview');
+        addToast('success', 'PDF file selected successfully!');
       } else {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -253,9 +357,11 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
             name: file.name
           });
           setCurrentStep('preview');
+          addToast('success', 'Image file selected successfully!');
         };
         reader.onerror = () => {
           setError('Failed to read the selected file');
+          addToast('error', 'Failed to read the selected file');
         };
         reader.readAsDataURL(file);
       }
@@ -305,16 +411,13 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       const filePath = `${user.id}/${fileName}`;
       
       setUploadProgress(0);
+      addToast('info', 'Uploading receipt...');
       
       const { data, error } = await supabase.storage
         .from('receipt-images')
         .upload(filePath, fileToUpload, {
           cacheControl: '3600',
-          upsert: false,
-          onUploadProgress: (progress) => {
-            const percentage = (progress.loaded / progress.total) * 100;
-            setUploadProgress(Math.round(percentage));
-          }
+          upsert: false
         });
 
       if (error) {
@@ -322,9 +425,12 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         throw error;
       }
       
+      setUploadProgress(100);
+      addToast('success', 'Receipt uploaded successfully!');
       return data.path;
     } catch (error) {
       console.error('Upload error:', error);
+      addToast('error', 'Failed to upload receipt. Please try again.');
       throw error;
     }
   };
@@ -346,7 +452,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         warranty_period: formData.warrantyPeriod,
         extended_warranty: formData.extendedWarranty || null,
         amount: formData.amount ? parseFloat(formData.amount) : null,
-        image_url: imagePath || null, // Store in image_url column as specified
+        image_url: imagePath || null,
         store_name: formData.storeName || null,
         purchase_location: formData.purchaseLocation || null
       };
@@ -362,9 +468,11 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         throw error;
       }
 
+      addToast('success', 'Receipt saved to your library!');
       return data;
     } catch (error) {
       console.error('Save error:', error);
+      addToast('error', 'Failed to save receipt data. Please try again.');
       throw error;
     }
   };
@@ -416,6 +524,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     setUploadedFile(null);
     setFilePreview(null);
     setUploadProgress(0);
+    setCameraError(null);
+    setCameraReady(false);
+    setRetakeCount(0);
     setFormData({
       purchaseDate: '',
       country: '',
@@ -431,21 +542,61 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     setFormErrors({});
     setError(null);
     setCurrentStep('options');
-    stopCamera();
   };
 
   // Cleanup on unmount
   React.useEffect(() => {
     return () => {
-      stopCamera();
       if (filePreview?.url && filePreview.type === 'pdf') {
         URL.revokeObjectURL(filePreview.url);
       }
     };
-  }, [stopCamera, filePreview]);
+  }, [filePreview]);
+
+  // Get camera constraints
+  const getVideoConstraints = () => {
+    const constraints: MediaTrackConstraints = {
+      width: { ideal: 1920, min: 640 },
+      height: { ideal: 1080, min: 480 },
+      facingMode: facingMode
+    };
+
+    if (selectedDeviceId) {
+      constraints.deviceId = { exact: selectedDeviceId };
+      // Remove facingMode when using specific device
+      delete constraints.facingMode;
+    }
+
+    return constraints;
+  };
 
   return (
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
+      {/* Toast Container */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`flex items-center space-x-2 px-4 py-3 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 ${
+              toast.type === 'success' ? 'bg-green-500 text-white' :
+              toast.type === 'error' ? 'bg-red-500 text-white' :
+              'bg-blue-500 text-white'
+            }`}
+          >
+            {toast.type === 'success' && <CheckCircle className="h-5 w-5" />}
+            {toast.type === 'error' && <AlertCircle className="h-5 w-5" />}
+            {toast.type === 'info' && <Clock className="h-5 w-5" />}
+            <span className="text-sm font-medium flex-1">{toast.message}</span>
+            <button
+              onClick={() => removeToast(toast.id)}
+              className="text-white hover:text-gray-200 transition-colors duration-200"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+
       {/* Header */}
       <header className="bg-white shadow-card border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -525,7 +676,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
               <div className="flex flex-col items-center text-center">
                 <div className="bg-white/20 rounded-full p-6 mb-6 group-hover:bg-white/30 transition-colors duration-300">
                   {isLoading ? (
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+                    <Loader2 className="h-12 w-12 animate-spin" />
                   ) : (
                     <Camera className="h-12 w-12" />
                   )}
@@ -535,7 +686,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                 </h3>
                 <p className="text-white/90 leading-relaxed">
                   Use your device camera to capture receipts directly. 
-                  Supports long receipts with panorama mode.
+                  Supports both front and back cameras.
                 </p>
               </div>
             </button>
@@ -586,37 +737,111 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
               <p className="text-text-secondary">Make sure the entire receipt is visible and well-lit</p>
             </div>
 
+            {/* Camera Error */}
+            {cameraError && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
+                    <p className="text-sm text-red-700">{cameraError}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCameraError(null);
+                      startCamera();
+                    }}
+                    className="text-red-600 hover:text-red-800 transition-colors duration-200"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Camera Container */}
             <div className="relative bg-gray-100 rounded-lg overflow-hidden mb-6" style={{ aspectRatio: '4/3' }}>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
+              {!cameraError && (
+                <Webcam
+                  ref={webcamRef}
+                  audio={false}
+                  screenshotFormat="image/jpeg"
+                  videoConstraints={getVideoConstraints()}
+                  onUserMedia={handleCameraReady}
+                  onUserMediaError={handleCameraError}
+                  className="w-full h-full object-cover"
+                  mirrored={facingMode === 'user'}
+                />
+              )}
+              
+              {/* Camera overlay */}
               <div className="absolute inset-4 border-2 border-primary border-dashed rounded-lg pointer-events-none"></div>
               
-              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-                <button
-                  onClick={captureImage}
-                  className="bg-primary text-white rounded-full p-4 shadow-lg hover:bg-primary/90 transition-colors duration-200"
-                >
-                  <Camera className="h-8 w-8" />
-                </button>
-              </div>
+              {/* Camera status */}
+              {isLoading && (
+                <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                  <div className="text-center text-white">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                    <p>Initializing camera...</p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Camera controls */}
+              {cameraReady && !cameraError && (
+                <>
+                  {/* Switch camera button */}
+                  {devices.length > 1 && (
+                    <button
+                      onClick={switchCamera}
+                      className="absolute top-4 right-4 bg-black bg-opacity-50 text-white rounded-full p-2 hover:bg-opacity-70 transition-colors duration-200"
+                    >
+                      <SwitchCamera className="h-5 w-5" />
+                    </button>
+                  )}
+                  
+                  {/* Capture button */}
+                  <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
+                    <button
+                      onClick={captureImage}
+                      className="bg-primary text-white rounded-full p-4 shadow-lg hover:bg-primary/90 transition-colors duration-200 transform hover:scale-105"
+                    >
+                      <Camera className="h-8 w-8" />
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
+
+            {/* Camera info */}
+            {cameraReady && (
+              <div className="text-center text-sm text-text-secondary mb-4">
+                <p>Camera: {facingMode === 'environment' ? 'Back' : 'Front'}</p>
+                {retakeCount > 0 && <p>Retakes: {retakeCount}</p>}
+              </div>
+            )}
 
             <div className="flex justify-center space-x-4">
               <button
                 onClick={() => {
-                  stopCamera();
                   setCurrentStep('options');
+                  setCameraError(null);
+                  setCameraReady(false);
                 }}
                 className="flex items-center space-x-2 px-6 py-3 border-2 border-gray-300 text-text-secondary rounded-lg hover:border-gray-400 hover:text-text-primary transition-colors duration-200"
               >
                 <X className="h-5 w-5" />
                 <span>Cancel</span>
               </button>
+              
+              {cameraError && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center space-x-2 bg-secondary text-white px-6 py-3 rounded-lg hover:bg-secondary/90 transition-colors duration-200"
+                >
+                  <Upload className="h-5 w-5" />
+                  <span>Upload Instead</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -687,7 +912,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
               >
                 {isLoading ? (
                   <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <Loader2 className="h-5 w-5 animate-spin" />
                     <span>Saving...</span>
                   </>
                 ) : (
@@ -918,7 +1143,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                 >
                   {isLoading ? (
                     <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Saving...</span>
                     </>
                   ) : (
@@ -973,9 +1198,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           onChange={handleFileUpload}
           className="hidden"
         />
-
-        {/* Hidden canvas for image capture */}
-        <canvas ref={canvasRef} className="hidden" />
       </main>
     </div>
   );

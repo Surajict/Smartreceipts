@@ -20,69 +20,86 @@ export const signUp = async (email: string, password: string, fullName: string) 
   try {
     console.log('Starting signup process for:', email)
     
+    // First, check if user already exists
+    const { data: existingUser } = await supabase.auth.getUser()
+    if (existingUser?.user?.email === email) {
+      return { 
+        data: null, 
+        error: { message: 'This email is already registered. Try signing in instead.' } 
+      }
+    }
+    
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: fullName,
-        },
-        emailRedirectTo: undefined // Disable email confirmation for now
+        }
       }
     })
     
     if (error) {
       console.error('SignUp error:', error)
+      
+      // Handle specific Supabase errors
+      if (error.message.includes('User already registered')) {
+        return { 
+          data: null, 
+          error: { message: 'This email is already registered. Try signing in instead.' } 
+        }
+      }
+      
+      if (error.message.includes('Password should be at least')) {
+        return { 
+          data: null, 
+          error: { message: 'Password must be at least 6 characters long.' } 
+        }
+      }
+      
+      if (error.message.includes('Invalid email')) {
+        return { 
+          data: null, 
+          error: { message: 'Please enter a valid email address.' } 
+        }
+      }
+      
+      if (error.message.includes('signup_disabled')) {
+        return { 
+          data: null, 
+          error: { message: 'Account creation is temporarily disabled. Please try again later.' } 
+        }
+      }
+      
       return { data: null, error }
     }
 
-    console.log('Signup successful, user created:', data.user?.id)
-
-    // Initialize user settings after successful signup
-    if (data.user && data.user.id) {
+    if (data.user) {
+      console.log('Signup successful, user created:', data.user.id)
+      
+      // Wait a moment for triggers to complete
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      // Verify user profile was created
       try {
-        console.log('Initializing user settings for:', data.user.id)
+        const { data: profile, error: profileError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', data.user.id)
+          .single()
         
-        // Wait a moment for the user to be fully created
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        
-        // Initialize notification settings
-        const { error: notifError } = await supabase
-          .from('user_notification_settings')
-          .upsert({
-            user_id: data.user.id,
-            warranty_alerts: true,
-            auto_system_update: true,
-            marketing_notifications: false
-          }, {
-            onConflict: 'user_id'
-          })
-
-        if (notifError) {
-          console.warn('Failed to initialize notification settings:', notifError)
-        } else {
-          console.log('Notification settings initialized successfully')
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.warn('Profile verification failed:', profileError)
+        } else if (profile) {
+          console.log('User profile created successfully')
         }
-
-        // Initialize privacy settings
-        const { error: privacyError } = await supabase
-          .from('user_privacy_settings')
-          .upsert({
-            user_id: data.user.id,
-            data_collection: true,
-            data_analysis: 'allowed',
-            biometric_login: false,
-            two_factor_auth: false
-          }, {
-            onConflict: 'user_id'
-          })
-
-        if (privacyError) {
-          console.warn('Failed to initialize privacy settings:', privacyError)
-        } else {
-          console.log('Privacy settings initialized successfully')
-        }
-        
+      } catch (profileErr) {
+        console.warn('Profile verification error:', profileErr)
+      }
+      
+      // Initialize user settings
+      try {
+        await initializeUserSettings(data.user.id)
       } catch (settingsError) {
         console.warn('Failed to initialize user settings:', settingsError)
         // Don't fail the signup if settings initialization fails
@@ -150,13 +167,11 @@ export const getCurrentUser = async () => {
   try {
     const { data: { user }, error } = await supabase.auth.getUser()
     
-    // Only log actual errors, not when user is simply not authenticated
-    if (error && error.message !== 'Auth session missing!') {
-      console.error('Get user error:', error)
-    }
-    
-    // Return null for both error cases and when user is not authenticated
     if (error) {
+      // Only log actual errors, not when user is simply not authenticated
+      if (error.message !== 'Auth session missing!') {
+        console.error('Get user error:', error)
+      }
       return null
     }
     
@@ -174,12 +189,11 @@ export const getSession = async () => {
   try {
     const { data: { session }, error } = await supabase.auth.getSession()
     
-    // Only log actual errors, not when session is missing
-    if (error && error.message !== 'Auth session missing!') {
-      console.error('Get session error:', error)
-    }
-    
     if (error) {
+      // Only log actual errors, not when session is missing
+      if (error.message !== 'Auth session missing!') {
+        console.error('Get session error:', error)
+      }
       return null
     }
     
@@ -227,58 +241,43 @@ export const initializeUserSettings = async (userId: string) => {
   try {
     console.log('Initializing settings for user:', userId)
     
-    // Check if settings already exist
-    const { data: existingNotif } = await supabase
+    // Initialize notification settings
+    const { error: notifError } = await supabase
       .from('user_notification_settings')
-      .select('user_id')
-      .eq('user_id', userId)
-      .limit(1)
+      .upsert({
+        user_id: userId,
+        warranty_alerts: true,
+        auto_system_update: true,
+        marketing_notifications: false
+      }, {
+        onConflict: 'user_id',
+        ignoreDuplicates: true
+      })
 
-    const { data: existingPrivacy } = await supabase
-      .from('user_privacy_settings')
-      .select('user_id')
-      .eq('user_id', userId)
-      .limit(1)
-
-    // Initialize notification settings if they don't exist
-    if (!existingNotif || existingNotif.length === 0) {
-      const { error: notifError } = await supabase
-        .from('user_notification_settings')
-        .upsert({
-          user_id: userId,
-          warranty_alerts: true,
-          auto_system_update: true,
-          marketing_notifications: false
-        }, {
-          onConflict: 'user_id'
-        })
-
-      if (notifError) {
-        console.error('Failed to initialize notification settings:', notifError)
-      } else {
-        console.log('Notification settings initialized')
-      }
+    if (notifError) {
+      console.warn('Failed to initialize notification settings:', notifError)
+    } else {
+      console.log('Notification settings initialized successfully')
     }
 
-    // Initialize privacy settings if they don't exist
-    if (!existingPrivacy || existingPrivacy.length === 0) {
-      const { error: privacyError } = await supabase
-        .from('user_privacy_settings')
-        .upsert({
-          user_id: userId,
-          data_collection: true,
-          data_analysis: 'allowed',
-          biometric_login: false,
-          two_factor_auth: false
-        }, {
-          onConflict: 'user_id'
-        })
+    // Initialize privacy settings
+    const { error: privacyError } = await supabase
+      .from('user_privacy_settings')
+      .upsert({
+        user_id: userId,
+        data_collection: true,
+        data_analysis: 'allowed',
+        biometric_login: false,
+        two_factor_auth: false
+      }, {
+        onConflict: 'user_id',
+        ignoreDuplicates: true
+      })
 
-      if (privacyError) {
-        console.error('Failed to initialize privacy settings:', privacyError)
-      } else {
-        console.log('Privacy settings initialized')
-      }
+    if (privacyError) {
+      console.warn('Failed to initialize privacy settings:', privacyError)
+    } else {
+      console.log('Privacy settings initialized successfully')
     }
 
     return true

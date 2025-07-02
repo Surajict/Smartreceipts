@@ -51,8 +51,8 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
     
     if (!formData.password) {
       newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
     } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
       newErrors.password = 'Password must contain uppercase, lowercase, and number';
     }
@@ -83,7 +83,6 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
       if (error) {
         console.error('SignUp error details:', error);
         
-        // Handle specific error cases
         const errorMessage = error.message || '';
         
         if (errorMessage.includes('User already registered') || 
@@ -91,16 +90,14 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
             errorMessage.includes('user_already_exists') ||
             errorMessage.includes('already been registered')) {
           setErrors({ email: 'This email is already registered. Try signing in instead.' });
-        } else if (errorMessage.toLowerCase().includes('password')) {
-          setErrors({ password: errorMessage });
-        } else if (errorMessage.toLowerCase().includes('email')) {
-          setErrors({ email: errorMessage });
-        } else if (errorMessage.toLowerCase().includes('invalid')) {
-          setErrors({ general: 'Please check your information and try again.' });
-        } else if (errorMessage.includes('Email rate limit exceeded')) {
-          setErrors({ general: 'Too many signup attempts. Please wait a few minutes before trying again.' });
+        } else if (errorMessage.includes('Password should be at least')) {
+          setErrors({ password: 'Password must be at least 6 characters long.' });
+        } else if (errorMessage.includes('Invalid email')) {
+          setErrors({ email: 'Please enter a valid email address.' });
         } else if (errorMessage.includes('signup_disabled')) {
           setErrors({ general: 'Account creation is temporarily disabled. Please try again later.' });
+        } else if (errorMessage.includes('Email rate limit exceeded')) {
+          setErrors({ general: 'Too many signup attempts. Please wait a few minutes before trying again.' });
         } else if (errorMessage.includes('Database error') || errorMessage.includes('database')) {
           setErrors({ general: 'Database error occurred. Please try again in a few moments.' });
         } else {
@@ -135,7 +132,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
     if (password.length === 0) return { strength: 0, label: '', color: '' };
     
     let strength = 0;
-    if (password.length >= 8) strength++;
+    if (password.length >= 6) strength++;
     if (/[a-z]/.test(password)) strength++;
     if (/[A-Z]/.test(password)) strength++;
     if (/\d/.test(password)) strength++;

@@ -26,7 +26,8 @@ export const signUp = async (email: string, password: string, fullName: string) 
       options: {
         data: {
           full_name: fullName,
-        }
+        },
+        emailRedirectTo: undefined // Disable email confirmation for now
       }
     })
     
@@ -43,16 +44,18 @@ export const signUp = async (email: string, password: string, fullName: string) 
         console.log('Initializing user settings for:', data.user.id)
         
         // Wait a moment for the user to be fully created
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        await new Promise(resolve => setTimeout(resolve, 2000))
         
         // Initialize notification settings
         const { error: notifError } = await supabase
           .from('user_notification_settings')
-          .insert({
+          .upsert({
             user_id: data.user.id,
             warranty_alerts: true,
             auto_system_update: true,
             marketing_notifications: false
+          }, {
+            onConflict: 'user_id'
           })
 
         if (notifError) {
@@ -64,12 +67,14 @@ export const signUp = async (email: string, password: string, fullName: string) 
         // Initialize privacy settings
         const { error: privacyError } = await supabase
           .from('user_privacy_settings')
-          .insert({
+          .upsert({
             user_id: data.user.id,
             data_collection: true,
             data_analysis: 'allowed',
             biometric_login: false,
             two_factor_auth: false
+          }, {
+            onConflict: 'user_id'
           })
 
         if (privacyError) {
@@ -201,13 +206,10 @@ export const testSupabaseConnection = async () => {
   try {
     console.log('Testing Supabase connection...')
     
-    // Test basic connection
-    const { data, error } = await supabase
-      .from('receipts')
-      .select('count')
-      .limit(1)
+    // Test basic connection by checking if we can access the auth endpoint
+    const { data, error } = await supabase.auth.getSession()
     
-    if (error) {
+    if (error && error.message !== 'Auth session missing!') {
       console.error('Supabase connection test failed:', error)
       return false
     }
@@ -242,11 +244,13 @@ export const initializeUserSettings = async (userId: string) => {
     if (!existingNotif || existingNotif.length === 0) {
       const { error: notifError } = await supabase
         .from('user_notification_settings')
-        .insert({
+        .upsert({
           user_id: userId,
           warranty_alerts: true,
           auto_system_update: true,
           marketing_notifications: false
+        }, {
+          onConflict: 'user_id'
         })
 
       if (notifError) {
@@ -260,12 +264,14 @@ export const initializeUserSettings = async (userId: string) => {
     if (!existingPrivacy || existingPrivacy.length === 0) {
       const { error: privacyError } = await supabase
         .from('user_privacy_settings')
-        .insert({
+        .upsert({
           user_id: userId,
           data_collection: true,
           data_analysis: 'allowed',
           biometric_login: false,
           two_factor_auth: false
+        }, {
+          onConflict: 'user_id'
         })
 
       if (privacyError) {

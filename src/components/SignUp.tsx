@@ -101,6 +101,8 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
           setErrors({ general: 'Too many signup attempts. Please wait a few minutes before trying again.' });
         } else if (errorMessage.includes('signup_disabled')) {
           setErrors({ general: 'Account creation is temporarily disabled. Please try again later.' });
+        } else if (errorMessage.includes('Database error') || errorMessage.includes('database')) {
+          setErrors({ general: 'Database error occurred. Please try again in a few moments.' });
         } else {
           setErrors({ general: errorMessage || 'Unable to create account. Please try again.' });
         }

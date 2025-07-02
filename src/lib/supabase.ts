@@ -156,8 +156,11 @@ export const getCurrentUser = async () => {
     }
     
     return user
-  } catch (err) {
-    console.error('Unexpected get user error:', err)
+  } catch (err: any) {
+    // Only log if it's not a session missing error
+    if (err.message !== 'Auth session missing!') {
+      console.error('Unexpected get user error:', err)
+    }
     return null
   }
 }
@@ -176,8 +179,11 @@ export const getSession = async () => {
     }
     
     return session
-  } catch (err) {
-    console.error('Unexpected get session error:', err)
+  } catch (err: any) {
+    // Only log if it's not a session missing error
+    if (err.message !== 'Auth session missing!') {
+      console.error('Unexpected get session error:', err)
+    }
     return null
   }
 }

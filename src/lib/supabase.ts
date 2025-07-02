@@ -11,7 +11,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    flowType: 'pkce'
   }
 })
 
@@ -19,15 +20,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export const signUp = async (email: string, password: string, fullName: string) => {
   try {
     console.log('Starting signup process for:', email)
-    
-    // First, check if user already exists
-    const { data: existingUser } = await supabase.auth.getUser()
-    if (existingUser?.user?.email === email) {
-      return { 
-        data: null, 
-        error: { message: 'This email is already registered. Try signing in instead.' } 
-      }
-    }
     
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -43,7 +35,9 @@ export const signUp = async (email: string, password: string, fullName: string) 
       console.error('SignUp error:', error)
       
       // Handle specific Supabase errors
-      if (error.message.includes('User already registered')) {
+      if (error.message.includes('User already registered') || 
+          error.message.includes('already registered') || 
+          error.message.includes('user_already_exists')) {
         return { 
           data: null, 
           error: { message: 'This email is already registered. Try signing in instead.' } 
@@ -71,14 +65,22 @@ export const signUp = async (email: string, password: string, fullName: string) 
         }
       }
       
+      if (error.message.includes('Database error') || 
+          error.message.includes('unexpected_failure')) {
+        return { 
+          data: null, 
+          error: { message: 'Account creation failed due to a server error. Please try again in a few moments.' } 
+        }
+      }
+      
       return { data: null, error }
     }
 
     if (data.user) {
       console.log('Signup successful, user created:', data.user.id)
       
-      // Wait a moment for triggers to complete
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Wait for database triggers to complete
+      await new Promise(resolve => setTimeout(resolve, 2000))
       
       // Verify user profile was created
       try {
@@ -90,19 +92,22 @@ export const signUp = async (email: string, password: string, fullName: string) 
         
         if (profileError && profileError.code !== 'PGRST116') {
           console.warn('Profile verification failed:', profileError)
+          // Try to create profile manually if trigger failed
+          await createUserProfile(data.user.id, email, fullName)
         } else if (profile) {
           console.log('User profile created successfully')
         }
       } catch (profileErr) {
         console.warn('Profile verification error:', profileErr)
+        // Try to create profile manually
+        await createUserProfile(data.user.id, email, fullName)
       }
       
-      // Initialize user settings
+      // Ensure user settings are initialized
       try {
         await initializeUserSettings(data.user.id)
       } catch (settingsError) {
         console.warn('Failed to initialize user settings:', settingsError)
-        // Don't fail the signup if settings initialization fails
       }
     }
     
@@ -119,6 +124,29 @@ export const signUp = async (email: string, password: string, fullName: string) 
   }
 }
 
+// Helper function to create user profile manually if trigger fails
+const createUserProfile = async (userId: string, email: string, fullName: string) => {
+  try {
+    const { error } = await supabase
+      .from('users')
+      .upsert({
+        id: userId,
+        email: email,
+        full_name: fullName
+      }, {
+        onConflict: 'id'
+      })
+    
+    if (error) {
+      console.error('Failed to create user profile manually:', error)
+    } else {
+      console.log('User profile created manually')
+    }
+  } catch (err) {
+    console.error('Error creating user profile manually:', err)
+  }
+}
+
 export const signIn = async (email: string, password: string) => {
   try {
     console.log('Attempting to sign in user:', email)
@@ -130,11 +158,47 @@ export const signIn = async (email: string, password: string) => {
     
     if (error) {
       console.error('SignIn error:', error)
+      
+      // Handle specific sign-in errors
+      if (error.message.includes('Invalid login credentials') || 
+          error.message.includes('invalid_credentials') ||
+          error.message.includes('Invalid email or password')) {
+        return { 
+          data: null, 
+          error: { message: 'Invalid email or password. Please try again.' } 
+        }
+      }
+      
+      if (error.message.includes('Email not confirmed') || 
+          error.message.includes('email_not_confirmed')) {
+        return { 
+          data: null, 
+          error: { message: 'Please check your email and confirm your account before signing in.' } 
+        }
+      }
+      
+      if (error.message.includes('Too many requests')) {
+        return { 
+          data: null, 
+          error: { message: 'Too many login attempts. Please wait a few minutes before trying again.' } 
+        }
+      }
+      
+      return { data: null, error }
     } else {
       console.log('SignIn successful for:', email)
+      
+      // Ensure user settings exist for existing users
+      if (data.user) {
+        try {
+          await initializeUserSettings(data.user.id)
+        } catch (settingsError) {
+          console.warn('Failed to initialize user settings on signin:', settingsError)
+        }
+      }
     }
     
-    return { data, error }
+    return { data, error: null }
   } catch (err: any) {
     console.error('Unexpected signin error:', err)
     return { 
@@ -241,43 +305,60 @@ export const initializeUserSettings = async (userId: string) => {
   try {
     console.log('Initializing settings for user:', userId)
     
-    // Initialize notification settings
-    const { error: notifError } = await supabase
+    // Check if settings already exist
+    const { data: existingNotif } = await supabase
       .from('user_notification_settings')
-      .upsert({
-        user_id: userId,
-        warranty_alerts: true,
-        auto_system_update: true,
-        marketing_notifications: false
-      }, {
-        onConflict: 'user_id',
-        ignoreDuplicates: true
-      })
+      .select('user_id')
+      .eq('user_id', userId)
+      .limit(1)
 
-    if (notifError) {
-      console.warn('Failed to initialize notification settings:', notifError)
-    } else {
-      console.log('Notification settings initialized successfully')
+    const { data: existingPrivacy } = await supabase
+      .from('user_privacy_settings')
+      .select('user_id')
+      .eq('user_id', userId)
+      .limit(1)
+
+    // Initialize notification settings if they don't exist
+    if (!existingNotif || existingNotif.length === 0) {
+      const { error: notifError } = await supabase
+        .from('user_notification_settings')
+        .upsert({
+          user_id: userId,
+          warranty_alerts: true,
+          auto_system_update: true,
+          marketing_notifications: false
+        }, {
+          onConflict: 'user_id',
+          ignoreDuplicates: true
+        })
+
+      if (notifError) {
+        console.warn('Failed to initialize notification settings:', notifError)
+      } else {
+        console.log('Notification settings initialized successfully')
+      }
     }
 
-    // Initialize privacy settings
-    const { error: privacyError } = await supabase
-      .from('user_privacy_settings')
-      .upsert({
-        user_id: userId,
-        data_collection: true,
-        data_analysis: 'allowed',
-        biometric_login: false,
-        two_factor_auth: false
-      }, {
-        onConflict: 'user_id',
-        ignoreDuplicates: true
-      })
+    // Initialize privacy settings if they don't exist
+    if (!existingPrivacy || existingPrivacy.length === 0) {
+      const { error: privacyError } = await supabase
+        .from('user_privacy_settings')
+        .upsert({
+          user_id: userId,
+          data_collection: true,
+          data_analysis: 'allowed',
+          biometric_login: false,
+          two_factor_auth: false
+        }, {
+          onConflict: 'user_id',
+          ignoreDuplicates: true
+        })
 
-    if (privacyError) {
-      console.warn('Failed to initialize privacy settings:', privacyError)
-    } else {
-      console.log('Privacy settings initialized successfully')
+      if (privacyError) {
+        console.warn('Failed to initialize privacy settings:', privacyError)
+      } else {
+        console.log('Privacy settings initialized successfully')
+      }
     }
 
     return true

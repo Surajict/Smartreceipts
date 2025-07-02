@@ -144,10 +144,17 @@ export const signOut = async () => {
 export const getCurrentUser = async () => {
   try {
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error) {
+    
+    // Only log actual errors, not when user is simply not authenticated
+    if (error && error.message !== 'Auth session missing!') {
       console.error('Get user error:', error)
+    }
+    
+    // Return null for both error cases and when user is not authenticated
+    if (error) {
       return null
     }
+    
     return user
   } catch (err) {
     console.error('Unexpected get user error:', err)
@@ -158,10 +165,16 @@ export const getCurrentUser = async () => {
 export const getSession = async () => {
   try {
     const { data: { session }, error } = await supabase.auth.getSession()
-    if (error) {
+    
+    // Only log actual errors, not when session is missing
+    if (error && error.message !== 'Auth session missing!') {
       console.error('Get session error:', error)
+    }
+    
+    if (error) {
       return null
     }
+    
     return session
   } catch (err) {
     console.error('Unexpected get session error:', err)

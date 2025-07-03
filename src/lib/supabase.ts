@@ -54,7 +54,7 @@ export const saveReceiptToDatabase = async (receiptData: any, userId: string) =>
       country: receiptData.country.trim(),
       image_url: receiptData.image_url || null,
       image_path: receiptData.image_url || null, // For backward compatibility
-      processing_method: receiptData.processing_method || 'scan',
+      processing_method: receiptData.processing_method || 'manual',
       ocr_confidence: receiptData.ocr_confidence || null,
       extracted_text: receiptData.extracted_text || null
     };
@@ -89,7 +89,10 @@ export const uploadReceiptImage = async (file: File | Blob, userId: string, file
     console.log('Uploading receipt image for user:', userId);
     
     // Generate unique filename if not provided
-    const fileName = filename || `${userId}/${Date.now()}-receipt.jpg`;
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(2, 15);
+    const fileExtension = file instanceof File ? file.name.split('.').pop() || 'jpg' : 'jpg';
+    const fileName = filename || `${userId}/${timestamp}-${randomId}.${fileExtension}`;
     
     console.log('Uploading to path:', fileName);
 
@@ -221,24 +224,56 @@ export const getUserReceipts = async (userId: string, limit?: number, offset?: n
   }
 };
 
-export const getReceiptWithWarrantyStatus = async (userId: string, receiptId: string) => {
+export const getReceiptById = async (userId: string, receiptId: string) => {
   try {
-    console.log('Getting receipt with warranty status:', receiptId);
+    console.log('Getting receipt by ID:', receiptId, 'for user:', userId);
 
     const { data, error } = await supabase
-      .from('receipts_with_warranty_status')
+      .from('receipts')
       .select('*')
       .eq('user_id', userId)
       .eq('id', receiptId)
       .single();
 
     if (error) {
-      console.error('Error getting receipt with warranty status:', error);
+      console.error('Error getting receipt by ID:', error);
       throw error;
     }
 
-    console.log('Receipt with warranty status:', data);
+    console.log('Retrieved receipt:', data);
     return { data, error: null };
+
+  } catch (err: any) {
+    console.error('Get receipt by ID error:', err);
+    return { 
+      data: null, 
+      error: { message: err.message || 'Failed to get receipt' } 
+    };
+  }
+};
+
+export const getReceiptWithWarrantyStatus = async (userId: string, receiptId: string) => {
+  try {
+    console.log('Getting receipt with warranty status:', receiptId);
+
+    // Use the function instead of a view
+    const { data, error } = await supabase
+      .rpc('get_receipts_with_warranty_status', { user_uuid: userId });
+
+    if (error) {
+      console.error('Error getting receipts with warranty status:', error);
+      throw error;
+    }
+
+    // Filter for the specific receipt
+    const receipt = data?.find((r: any) => r.id === receiptId);
+    
+    if (!receipt) {
+      throw new Error('Receipt not found');
+    }
+
+    console.log('Receipt with warranty status:', receipt);
+    return { data: receipt, error: null };
 
   } catch (err: any) {
     console.error('Get receipt with warranty status error:', err);

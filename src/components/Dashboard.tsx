@@ -19,7 +19,7 @@ import {
   X,
   Loader2
 } from 'lucide-react';
-import { signOut, getCurrentUser, supabase } from '../lib/supabase';
+import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats } from '../lib/supabase';
 
 interface DashboardProps {
   onSignOut: () => void;
@@ -124,26 +124,36 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     try {
       setIsLoading(true);
 
-      // Load receipts data
-      const { data: receipts, error: receiptsError } = await supabase
-        .from('receipts')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+      // Load receipts data using the enhanced function
+      const { data: receipts, error: receiptsError } = await getUserReceipts(userId);
 
       if (receiptsError) {
         console.error('Error loading receipts:', receiptsError);
         return;
       }
 
-      // Calculate summary statistics
-      const stats: SummaryStats = {
-        receiptsScanned: receipts?.length || 0,
-        totalAmount: receipts?.reduce((sum, receipt) => sum + (receipt.amount || 0), 0) || 0,
-        itemsCaptured: receipts?.length || 0, // Assuming 1 item per receipt for now
-        warrantiesClaimed: 0 // This would need a separate tracking mechanism
-      };
-      setSummaryStats(stats);
+      // Load receipt statistics using the database function
+      const { data: stats, error: statsError } = await getUserReceiptStats(userId);
+
+      if (statsError) {
+        console.warn('Error loading receipt stats:', statsError);
+        // Use fallback calculation
+        const fallbackStats: SummaryStats = {
+          receiptsScanned: receipts?.length || 0,
+          totalAmount: receipts?.reduce((sum, receipt) => sum + (receipt.amount || 0), 0) || 0,
+          itemsCaptured: receipts?.length || 0,
+          warrantiesClaimed: 0
+        };
+        setSummaryStats(fallbackStats);
+      } else {
+        const summaryStats: SummaryStats = {
+          receiptsScanned: stats.total_receipts || 0,
+          totalAmount: stats.total_amount || 0,
+          itemsCaptured: stats.total_receipts || 0,
+          warrantiesClaimed: 0 // This would need a separate tracking mechanism
+        };
+        setSummaryStats(summaryStats);
+      }
 
       // Process recent receipts with product name and store name
       const recentReceiptsData: RecentReceipt[] = (receipts || [])

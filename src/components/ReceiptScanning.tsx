@@ -203,23 +203,33 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     }
 
     try {
-      const systemPrompt = `You are a reliable AI that extracts structured receipt details from plain text.
-Extract the following fields and return ONLY valid JSON with these exact field names:
+      const systemPrompt = `You are a receipt data extraction expert. Extract structured information from receipt text and return ONLY a valid JSON object with these exact field names:
 
 {
-  "product_description": "main product or service purchased",
-  "brand_name": "brand or manufacturer name",
+  "product_description": "main product or service purchased (required)",
+  "brand_name": "brand or manufacturer name (required)",
   "store_name": "store or merchant name",
-  "purchase_location": "store location or address",
-  "purchase_date": "date in YYYY-MM-DD format",
-  "amount": "total amount as number (no currency symbols)",
-  "warranty_period": "warranty period (e.g., '1 year', '6 months')",
-  "extended_warranty": "extended warranty if mentioned",
-  "model_number": "product model number if available",
-  "country": "country where purchased"
+  "purchase_location": "store location, address, or city",
+  "purchase_date": "date in YYYY-MM-DD format (required)",
+  "amount": "total amount as number without currency symbols",
+  "warranty_period": "warranty period like '1 year', '6 months', '2 years' (required)",
+  "extended_warranty": "extended warranty details if mentioned",
+  "model_number": "product model number or SKU if available",
+  "country": "country where purchased (default to 'United States' if not clear)"
 }
 
-Return only the JSON object. If a field is not found, use empty string or null.`;
+IMPORTANT RULES:
+1. Return ONLY the JSON object, no other text
+2. Use empty string "" for missing text fields
+3. Use null for missing numeric fields
+4. For warranty_period, if not explicitly mentioned, use "1 year" as default
+5. For country, if not mentioned, use "United States"
+6. Extract the most relevant product from the receipt
+7. Be precise with dates - convert to YYYY-MM-DD format
+8. For amounts, extract the total/final amount paid
+
+Receipt text to process:
+${text}`;
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -230,11 +240,10 @@ Return only the JSON object. If a field is not found, use empty string or null.`
         body: JSON.stringify({
           model: 'gpt-3.5-turbo',
           messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: text }
+            { role: 'system', content: systemPrompt }
           ],
-          temperature: 0,
-          max_tokens: 500
+          temperature: 0.1,
+          max_tokens: 800
         })
       });
 
@@ -243,19 +252,55 @@ Return only the JSON object. If a field is not found, use empty string or null.`
       }
 
       const result = await response.json();
-      const gptResponse = result.choices[0].message.content;
+      const gptResponse = result.choices[0].message.content.trim();
+      
+      console.log('GPT Response:', gptResponse);
       
       try {
-        const structuredData = JSON.parse(gptResponse);
-        console.log('Structured data from GPT:', structuredData);
-        updateProcessingStep('gpt', 'completed', 'Data structured successfully');
+        // Clean the response to extract JSON
+        let jsonString = gptResponse;
+        
+        // Remove any markdown formatting
+        if (jsonString.includes('```json')) {
+          jsonString = jsonString.replace(/```json\s*/, '').replace(/```\s*$/, '');
+        } else if (jsonString.includes('```')) {
+          jsonString = jsonString.replace(/```\s*/, '').replace(/```\s*$/, '');
+        }
+        
+        // Find JSON object boundaries
+        const jsonStart = jsonString.indexOf('{');
+        const jsonEnd = jsonString.lastIndexOf('}') + 1;
+        
+        if (jsonStart !== -1 && jsonEnd > jsonStart) {
+          jsonString = jsonString.substring(jsonStart, jsonEnd);
+        }
+        
+        const structuredData = JSON.parse(jsonString);
+        
+        // Validate and clean the extracted data
+        const cleanedData = {
+          product_description: structuredData.product_description || '',
+          brand_name: structuredData.brand_name || '',
+          store_name: structuredData.store_name || '',
+          purchase_location: structuredData.purchase_location || '',
+          purchase_date: structuredData.purchase_date || new Date().toISOString().split('T')[0],
+          amount: structuredData.amount && !isNaN(Number(structuredData.amount)) ? Number(structuredData.amount) : null,
+          warranty_period: structuredData.warranty_period || '1 year',
+          extended_warranty: structuredData.extended_warranty || '',
+          model_number: structuredData.model_number || '',
+          country: structuredData.country || 'United States'
+        };
+        
+        console.log('Cleaned structured data from GPT:', cleanedData);
+        updateProcessingStep('gpt', 'completed', 'Data structured successfully with AI');
         generateDynamicForm({ 
-          ...structuredData, 
+          ...cleanedData, 
           extracted_text: text, 
           processing_method: 'gpt_structured' 
         });
       } catch (parseError) {
         console.error('Failed to parse GPT response:', parseError);
+        console.log('Raw GPT response that failed to parse:', gptResponse);
         updateProcessingStep('gpt', 'error', 'Failed to parse AI response');
         const fallbackData = parseFallback(text);
         generateDynamicForm({ 
@@ -290,7 +335,7 @@ Return only the JSON object. If a field is not found, use empty string or null.`
       const amountPatterns = [
         /total[:\s]*\$?(\d+\.?\d*)/i,
         /amount[:\s]*\$?(\d+\.?\d*)/i,
-        /\$(\d+\.?\d*)/,
+        /\$(\d+\.\d{2})/,
         /(\d+\.\d{2})/
       ];
       
@@ -336,6 +381,7 @@ Return only the JSON object. If a field is not found, use empty string or null.`
     // Set defaults for required fields
     if (!data.country) data.country = 'United States';
     if (!data.warranty_period) data.warranty_period = '1 year';
+    if (!data.purchase_date) data.purchase_date = new Date().toISOString().split('T')[0];
 
     console.log('Fallback parsing result:', data);
     return data;

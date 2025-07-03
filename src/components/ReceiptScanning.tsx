@@ -1,34 +1,31 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import Webcam from 'react-webcam';
 import { 
   Camera, 
   Upload, 
   ArrowLeft, 
-  CheckCircle, 
+  X, 
+  Check, 
   AlertCircle, 
   Loader2, 
-  X,
-  Edit3,
-  Save,
   FileText,
   Zap,
   Brain,
   Eye,
+  Save,
+  RefreshCw,
   User,
   LogOut,
-  Bell,
-  Key,
-  Wifi,
-  WifiOff
+  Bell
 } from 'lucide-react';
-import Webcam from 'react-webcam';
+import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection } from '../lib/supabase';
 import { createWorker } from 'tesseract.js';
-import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testSupabaseConnection, testOpenAIConnection } from '../lib/supabase';
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
 }
 
-interface ReceiptData {
+interface ExtractedData {
   product_description: string;
   brand_name: string;
   store_name: string;
@@ -39,51 +36,30 @@ interface ReceiptData {
   extended_warranty: string;
   model_number: string;
   country: string;
-  image_url?: string;
-  processing_method?: string;
-  ocr_confidence?: number;
-  extracted_text?: string;
-}
-
-interface ProcessingStep {
-  id: string;
-  label: string;
-  status: 'pending' | 'processing' | 'completed' | 'error';
-  details?: string;
-}
-
-interface ConnectionStatus {
-  supabase: boolean;
-  openai: boolean;
-  checking: boolean;
 }
 
 const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) => {
   const [user, setUser] = useState<any>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState('');
+  const [extractedText, setExtractedText] = useState('');
+  const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [alertsCount] = useState(3);
-  const [captureMode, setCaptureMode] = useState<'camera' | 'upload' | null>(null);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
-  const [extractedData, setExtractedData] = useState<ReceiptData | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedData, setEditedData] = useState<ReceiptData | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
-    supabase: false,
-    openai: false,
-    checking: true
-  });
+  const [openaiAvailable, setOpenaiAvailable] = useState<boolean | null>(null);
   
   const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadUser();
-    checkConnections();
+    checkOpenAIAvailability();
   }, []);
 
   const loadUser = async () => {
@@ -91,34 +67,11 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     setUser(currentUser);
   };
 
-  const checkConnections = async () => {
-    setConnectionStatus(prev => ({ ...prev, checking: true }));
-    
-    try {
-      const [supabaseOk, openaiOk] = await Promise.all([
-        testSupabaseConnection(),
-        testOpenAIConnection()
-      ]);
-      
-      setConnectionStatus({
-        supabase: supabaseOk,
-        openai: openaiOk,
-        checking: false
-      });
-
-      if (!supabaseOk) {
-        setError('Database connection failed. Please check your Supabase configuration.');
-      } else if (!openaiOk) {
-        setError('OpenAI API connection failed. AI features will be limited. Please check your API key.');
-      }
-    } catch (err) {
-      console.error('Connection check failed:', err);
-      setConnectionStatus({
-        supabase: false,
-        openai: false,
-        checking: false
-      });
-      setError('Failed to verify API connections. Please check your configuration.');
+  const checkOpenAIAvailability = async () => {
+    const available = await testOpenAIConnection();
+    setOpenaiAvailable(available);
+    if (!available) {
+      console.warn('OpenAI API not available - AI features will be limited');
     }
   };
 
@@ -131,37 +84,21 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     }
   };
 
-  const updateProcessingStep = (stepId: string, status: ProcessingStep['status'], details?: string) => {
-    setProcessingSteps(prev => prev.map(step => 
-      step.id === stepId ? { ...step, status, details } : step
-    ));
-  };
-
-  const initializeProcessingSteps = () => {
-    const steps: ProcessingStep[] = [
-      { id: 'upload', label: 'Uploading image to secure storage', status: 'pending' },
-      { id: 'ocr', label: 'Extracting text using OCR technology', status: 'pending' },
-      { id: 'ai', label: 'Processing with AI to structure data', status: 'pending' },
-      { id: 'validation', label: 'Validating and organizing information', status: 'pending' }
-    ];
-    setProcessingSteps(steps);
-  };
-
   const capture = useCallback(() => {
     const imageSrc = webcamRef.current?.getScreenshot();
     if (imageSrc) {
       setCapturedImage(imageSrc);
-      setCaptureMode(null);
+      setShowCamera(false);
     }
   }, [webcamRef]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      setUploadedFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
         setCapturedImage(e.target?.result as string);
-        setCaptureMode(null);
       };
       reader.readAsDataURL(file);
     }
@@ -179,533 +116,323 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     return new Blob([u8arr], { type: mime });
   };
 
-  const performOCR = async (imageData: string): Promise<{ text: string; confidence: number }> => {
+  const performOCR = async (imageSource: string | File): Promise<string> => {
+    setProcessingStep('Initializing OCR engine...');
+    setOcrProgress(10);
+
+    const worker = await createWorker('eng');
+    
+    setProcessingStep('Analyzing receipt image...');
+    setOcrProgress(30);
+
     try {
-      updateProcessingStep('ocr', 'processing', 'Initializing OCR engine...');
+      const { data: { text, confidence } } = await worker.recognize(imageSource);
       
-      const worker = await createWorker('eng');
+      setProcessingStep('Extracting text from receipt...');
+      setOcrProgress(80);
       
-      updateProcessingStep('ocr', 'processing', 'Analyzing receipt image...');
+      console.log('OCR Confidence:', confidence);
+      console.log('Extracted text:', text);
       
-      const { data } = await worker.recognize(imageData);
       await worker.terminate();
+      setOcrProgress(100);
       
-      const confidence = data.confidence / 100; // Convert to 0-1 scale
-      
-      updateProcessingStep('ocr', 'completed', `Text extracted with ${Math.round(confidence * 100)}% confidence`);
-      
-      return {
-        text: data.text,
-        confidence: confidence
-      };
+      return text;
     } catch (error) {
-      console.error('OCR Error:', error);
-      updateProcessingStep('ocr', 'error', 'OCR processing failed');
-      throw new Error('Failed to extract text from image');
+      await worker.terminate();
+      throw error;
     }
   };
 
-  const processWithGPT = async (extractedText: string): Promise<ReceiptData> => {
+  const structureDataWithGPT = async (text: string): Promise<ExtractedData> => {
+    if (!openaiAvailable) {
+      throw new Error('OpenAI API not available. Please configure your API key.');
+    }
+
+    const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
+    
+    if (!openaiApiKey) {
+      throw new Error('OpenAI API key not configured');
+    }
+
+    setProcessingStep('Analyzing receipt with AI...');
+
+    const prompt = `You are a reliable AI that extracts structured receipt details from plain text.
+Given raw text from a receipt, extract the following fields and return ONLY valid JSON.
+If a field is missing, set its value to null. No extra explanation or text outside the JSON.
+
+Required JSON fields:
+- product_description (string): Main product or service purchased
+- brand_name (string): Brand or manufacturer name
+- store_name (string): Name of the store/merchant
+- purchase_location (string): Store location/address
+- purchase_date (string): Date in YYYY-MM-DD format
+- amount (number): Total amount paid (numeric only, no currency symbol)
+- warranty_period (string): Warranty duration (e.g., "1 year", "6 months")
+- extended_warranty (string): Extended warranty info if any
+- model_number (string): Product model number if available
+- country (string): Country where purchase was made
+
+Receipt text:
+${text}
+
+Return only valid JSON:`;
+
     try {
-      updateProcessingStep('ai', 'processing', 'Sending data to AI for structuring...');
-      
-      const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
-      
-      if (!openaiApiKey) {
-        throw new Error('OpenAI API key not configured. Please add VITE_OPENAI_API_KEY to your .env file.');
-      }
-
-      const prompt = `You are a precise AI that extracts structured receipt details from raw text.
-Given the following raw text from a receipt, extract the information and return ONLY valid JSON.
-If a field is missing or unclear, set its value to null or a reasonable default.
-Do not include any explanation or text outside the JSON.
-
-Required JSON structure:
-{
-  "product_description": "Main product or service purchased",
-  "brand_name": "Brand or manufacturer name",
-  "store_name": "Store or merchant name",
-  "purchase_location": "Store address or location",
-  "purchase_date": "YYYY-MM-DD format",
-  "amount": numeric value without currency symbol,
-  "warranty_period": "warranty duration (e.g., '1 year', '2 years', '6 months')",
-  "extended_warranty": "extended warranty if mentioned, else null",
-  "model_number": "product model number if mentioned, else null",
-  "country": "country where purchased (default to 'United States' if unclear)"
-}
-
-Raw receipt text:
-${extractedText}`;
-
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${openaiApiKey}`,
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openaiApiKey}`
         },
         body: JSON.stringify({
           model: 'gpt-3.5-turbo',
           messages: [
             {
               role: 'system',
-              content: 'You are a helpful assistant that extracts structured data from receipts. Always respond with valid JSON only.'
+              content: 'You are a precise data extraction assistant. Return only valid JSON with the requested fields.'
             },
             {
               role: 'user',
               content: prompt
             }
           ],
+          max_tokens: 500,
           temperature: 0.1,
-          max_tokens: 500
-        })
+        }),
       });
 
       if (!response.ok) {
         const errorData = await response.text();
-        console.error('OpenAI API Error:', errorData);
-        
-        if (response.status === 401) {
-          throw new Error('Invalid OpenAI API key. Please check your VITE_OPENAI_API_KEY in the .env file.');
-        } else if (response.status === 429) {
-          throw new Error('OpenAI API rate limit exceeded. Please try again later.');
-        } else {
-          throw new Error(`OpenAI API error: ${response.status} - ${response.statusText}`);
-        }
+        console.error('OpenAI API error:', response.status, errorData);
+        throw new Error(`OpenAI API error: ${response.status}`);
       }
 
       const data = await response.json();
-      const gptResponse = data.choices[0]?.message?.content?.trim();
+      const content = data.choices[0]?.message?.content;
 
-      if (!gptResponse) {
-        throw new Error('Empty response from GPT');
+      if (!content) {
+        throw new Error('No response from OpenAI');
       }
 
-      updateProcessingStep('ai', 'processing', 'Parsing AI response...');
-
-      // Extract JSON from the response (handle markdown formatting)
-      let jsonStr = gptResponse;
-      
-      // Remove markdown code blocks if present
-      if (jsonStr.includes('```')) {
-        const jsonMatch = jsonStr.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-        if (jsonMatch) {
-          jsonStr = jsonMatch[1];
-        }
+      // Clean the response to extract JSON
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No valid JSON found in response');
       }
+
+      const extractedData = JSON.parse(jsonMatch[0]);
       
-      // Find JSON boundaries if no markdown
-      if (!jsonStr.trim().startsWith('{')) {
-        const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          jsonStr = jsonMatch[0];
+      // Validate required fields
+      const requiredFields = ['product_description', 'brand_name', 'purchase_date', 'warranty_period', 'country'];
+      for (const field of requiredFields) {
+        if (!extractedData[field]) {
+          extractedData[field] = field === 'warranty_period' ? '1 year' : 
+                                field === 'country' ? 'United States' : 
+                                'Not specified';
         }
       }
 
-      // Clean up common JSON issues
-      jsonStr = jsonStr
-        .replace(/,\s*}/g, '}')  // Remove trailing commas
-        .replace(/,\s*]/g, ']')  // Remove trailing commas in arrays
-        .replace(/([{,]\s*)(\w+):/g, '$1"$2":'); // Quote unquoted keys
-
-      let parsedData: any;
-      try {
-        parsedData = JSON.parse(jsonStr);
-      } catch (parseError) {
-        console.error('JSON Parse Error:', parseError);
-        console.error('Attempted to parse:', jsonStr);
-        throw new Error('Invalid JSON response from AI. The response could not be parsed.');
+      // Ensure amount is a number or null
+      if (extractedData.amount && typeof extractedData.amount === 'string') {
+        const numericAmount = parseFloat(extractedData.amount.replace(/[^0-9.]/g, ''));
+        extractedData.amount = isNaN(numericAmount) ? null : numericAmount;
       }
 
-      // Validate and clean the parsed data
-      const receiptData: ReceiptData = {
-        product_description: String(parsedData.product_description || 'Unknown Product').trim(),
-        brand_name: String(parsedData.brand_name || 'Unknown Brand').trim(),
-        store_name: String(parsedData.store_name || '').trim(),
-        purchase_location: String(parsedData.purchase_location || '').trim(),
-        purchase_date: parsedData.purchase_date || new Date().toISOString().split('T')[0],
-        amount: parsedData.amount && !isNaN(Number(parsedData.amount)) ? Number(parsedData.amount) : null,
-        warranty_period: String(parsedData.warranty_period || '1 year').trim(),
-        extended_warranty: parsedData.extended_warranty ? String(parsedData.extended_warranty).trim() : '',
-        model_number: parsedData.model_number ? String(parsedData.model_number).trim() : '',
-        country: String(parsedData.country || 'United States').trim()
-      };
+      // Ensure date is in correct format
+      if (extractedData.purchase_date && !extractedData.purchase_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const date = new Date(extractedData.purchase_date);
+        if (!isNaN(date.getTime())) {
+          extractedData.purchase_date = date.toISOString().split('T')[0];
+        } else {
+          extractedData.purchase_date = new Date().toISOString().split('T')[0];
+        }
+      }
 
-      updateProcessingStep('ai', 'completed', 'Data successfully structured by AI');
-      return receiptData;
-
+      return extractedData;
     } catch (error: any) {
-      console.error('GPT Processing Error:', error);
-      updateProcessingStep('ai', 'error', `AI processing failed: ${error.message}`);
-      throw error;
+      console.error('GPT structuring error:', error);
+      throw new Error(`AI processing failed: ${error.message}`);
     }
   };
 
-  const enhancedFallbackParsing = (text: string): ReceiptData => {
-    console.log('Using enhanced fallback parsing for text:', text);
+  const fallbackDataExtraction = (text: string): ExtractedData => {
+    console.log('Using fallback data extraction');
     
+    // Simple pattern matching for common receipt elements
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     
-    // Enhanced amount detection patterns
-    const amountPatterns = [
-      /(?:total|amount|sum|grand total|final total)[\s:]*\$?(\d+\.?\d*)/i,
-      /\$(\d+\.\d{2})\s*(?:total|final|grand)?/i,
-      /(\d+\.\d{2})\s*(?:usd|dollars?|total)?$/i,
-      /(?:^|\s)(\d+\.\d{2})(?:\s|$)/
-    ];
+    // Try to find amount
+    const amountPattern = /\$?(\d+\.?\d*)/g;
+    const amounts = text.match(amountPattern);
+    const amount = amounts ? parseFloat(amounts[amounts.length - 1].replace('$', '')) : null;
     
-    let amount: number | null = null;
-    for (const pattern of amountPatterns) {
-      for (const line of lines) {
-        const match = line.match(pattern);
-        if (match) {
-          const value = parseFloat(match[1]);
-          if (value > 0 && value < 10000) { // Reasonable range
-            amount = value;
-            break;
-          }
-        }
-      }
-      if (amount) break;
-    }
-
-    // Enhanced date detection
-    const datePatterns = [
-      /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/,
-      /(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/,
-      /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2}),?\s+(\d{2,4})/i
-    ];
-    
+    // Try to find date
+    const datePattern = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/g;
+    const dateMatch = text.match(datePattern);
     let purchaseDate = new Date().toISOString().split('T')[0];
-    for (const pattern of datePatterns) {
-      for (const line of lines) {
-        const match = line.match(pattern);
-        if (match) {
-          try {
-            let date: Date;
-            if (pattern.source.includes('jan|feb')) {
-              // Month name format
-              const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-              const month = monthNames.indexOf(match[1].toLowerCase().substring(0, 3)) + 1;
-              const day = parseInt(match[2]);
-              let year = parseInt(match[3]);
-              if (year < 100) year += 2000;
-              date = new Date(year, month - 1, day);
-            } else if (match[1].length === 4) {
-              // YYYY-MM-DD format
-              date = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
-            } else {
-              // MM/DD/YYYY format
-              let year = parseInt(match[3]);
-              if (year < 100) year += 2000;
-              date = new Date(year, parseInt(match[1]) - 1, parseInt(match[2]));
-            }
-            
-            if (date.getTime() > 0 && date <= new Date()) {
-              purchaseDate = date.toISOString().split('T')[0];
-              break;
-            }
-          } catch (e) {
-            continue;
-          }
-        }
-      }
-      if (purchaseDate !== new Date().toISOString().split('T')[0]) break;
-    }
-
-    // Enhanced store name detection
-    let storeName = '';
-    const storePatterns = [
-      /^([A-Z][A-Z\s&]+)(?:\s+(?:STORE|SHOP|MARKET|MALL|CENTER))?$/,
-      /^([A-Z][a-zA-Z\s&]+(?:STORE|SHOP|MARKET|MALL|CENTER))$/i,
-      /^([A-Z][a-zA-Z\s&]{2,20})$/
-    ];
-    
-    for (let i = 0; i < Math.min(5, lines.length); i++) {
-      const line = lines[i];
-      for (const pattern of storePatterns) {
-        const match = line.match(pattern);
-        if (match && match[1].length > 2 && match[1].length < 30) {
-          storeName = match[1].trim();
-          break;
-        }
-      }
-      if (storeName) break;
-    }
-
-    // Enhanced brand detection with common brands
-    const commonBrands = [
-      'Apple', 'Samsung', 'Sony', 'LG', 'Dell', 'HP', 'Canon', 'Nikon', 'Nike', 'Adidas',
-      'Microsoft', 'Google', 'Amazon', 'Best Buy', 'Target', 'Walmart', 'Costco', 'Home Depot',
-      'Lowe\'s', 'Macy\'s', 'Nordstrom', 'Gap', 'Old Navy', 'H&M', 'Zara', 'Uniqlo'
-    ];
-    
-    let brandName = 'Unknown Brand';
-    const fullText = text.toLowerCase();
-    
-    for (const brand of commonBrands) {
-      if (fullText.includes(brand.toLowerCase())) {
-        brandName = brand;
-        break;
+    if (dateMatch) {
+      const date = new Date(dateMatch[0]);
+      if (!isNaN(date.getTime())) {
+        purchaseDate = date.toISOString().split('T')[0];
       }
     }
     
-    // If no common brand found, look for patterns
-    if (brandName === 'Unknown Brand') {
-      const brandPatterns = [
-        /(?:brand|make|manufacturer)[\s:]+([A-Za-z]+)/i,
-        /^([A-Z][a-z]+)\s+(?:model|product)/i
-      ];
-      
-      for (const pattern of brandPatterns) {
-        for (const line of lines) {
-          const match = line.match(pattern);
-          if (match && match[1].length > 2) {
-            brandName = match[1];
-            break;
-          }
-        }
-        if (brandName !== 'Unknown Brand') break;
-      }
-    }
-
-    // Enhanced product description
-    let productDescription = 'Unknown Product';
-    const productPatterns = [
-      /(?:item|product|description)[\s:]+(.+)/i,
-      /^([A-Za-z\s]+(?:phone|laptop|computer|camera|tv|monitor|tablet|watch|headphones|speaker))/i,
-      /^([A-Za-z\s]{10,50})$/
-    ];
+    // Extract potential store name (usually first few lines)
+    const storeName = lines[0] || 'Unknown Store';
     
-    for (const pattern of productPatterns) {
-      for (const line of lines) {
-        const match = line.match(pattern);
-        if (match && match[1].length > 5 && match[1].length < 100) {
-          productDescription = match[1].trim();
-          break;
-        }
-      }
-      if (productDescription !== 'Unknown Product') break;
-    }
-
-    // Location detection
-    let purchaseLocation = '';
-    const locationPatterns = [
-      /(\d+\s+[A-Za-z\s]+(?:street|st|avenue|ave|road|rd|blvd|boulevard|drive|dr|lane|ln|way|circle|cir|court|ct|place|pl))/i,
-      /([A-Za-z\s]+,\s*[A-Z]{2}\s+\d{5})/,
-      /([A-Za-z\s]+\s+\d{5})/
-    ];
-    
-    for (const pattern of locationPatterns) {
-      for (const line of lines) {
-        const match = line.match(pattern);
-        if (match) {
-          purchaseLocation = match[1].trim();
-          break;
-        }
-      }
-      if (purchaseLocation) break;
-    }
-
-    // Model number detection
-    let modelNumber = '';
-    const modelPatterns = [
-      /(?:model|part|item)[\s#:]+([A-Z0-9\-]+)/i,
-      /([A-Z]{2,}\d{3,})/,
-      /([A-Z]\d{4,})/
-    ];
-    
-    for (const pattern of modelPatterns) {
-      for (const line of lines) {
-        const match = line.match(pattern);
-        if (match && match[1].length > 3 && match[1].length < 20) {
-          modelNumber = match[1];
-          break;
-        }
-      }
-      if (modelNumber) break;
-    }
-
     return {
-      product_description: productDescription,
-      brand_name: brandName,
+      product_description: 'Receipt Item',
+      brand_name: 'Unknown Brand',
       store_name: storeName,
-      purchase_location: purchaseLocation,
+      purchase_location: 'Unknown Location',
       purchase_date: purchaseDate,
       amount: amount,
       warranty_period: '1 year',
       extended_warranty: '',
-      model_number: modelNumber,
+      model_number: '',
       country: 'United States'
     };
   };
 
   const processReceipt = async () => {
-    if (!capturedImage || !user) return;
+    if (!capturedImage && !uploadedFile) {
+      setError('Please capture or upload an image first');
+      return;
+    }
 
-    // Check connections before processing
-    if (!connectionStatus.supabase) {
-      setError('Database connection failed. Please check your Supabase configuration and try again.');
+    if (!user) {
+      setError('User not authenticated');
       return;
     }
 
     setIsProcessing(true);
     setError(null);
-    initializeProcessingSteps();
+    setSuccess(false);
+    setOcrProgress(0);
 
     try {
-      // Step 1: Upload image to Supabase storage
-      updateProcessingStep('upload', 'processing', 'Converting image...');
+      // Step 1: Upload image to storage
+      setProcessingStep('Uploading image...');
+      const imageFile = uploadedFile || dataURLtoBlob(capturedImage!);
       
-      const imageBlob = dataURLtoBlob(capturedImage);
-      const { data: uploadData, error: uploadError } = await uploadReceiptImage(imageBlob, user.id);
+      const { data: uploadData, error: uploadError } = await uploadReceiptImage(imageFile, user.id);
       
       if (uploadError) {
-        updateProcessingStep('upload', 'error', uploadError.message);
         throw new Error(`Upload failed: ${uploadError.message}`);
       }
-      
-      updateProcessingStep('upload', 'completed', 'Image uploaded successfully');
 
       // Step 2: Perform OCR
-      const { text: extractedText, confidence } = await performOCR(capturedImage);
-      
-      if (!extractedText || extractedText.trim().length < 10) {
-        throw new Error('Could not extract sufficient text from image');
+      const text = await performOCR(uploadedFile || capturedImage!);
+      setExtractedText(text);
+
+      if (!text.trim()) {
+        throw new Error('No text could be extracted from the image');
       }
 
-      // Step 3: Process with GPT or fallback
-      let receiptData: ReceiptData;
+      // Step 3: Structure data with GPT or fallback
+      let structuredData: ExtractedData;
       let processingMethod = 'manual';
-      
-      if (connectionStatus.openai) {
-        try {
-          receiptData = await processWithGPT(extractedText);
+
+      try {
+        if (openaiAvailable) {
+          setProcessingStep('Processing with AI...');
+          structuredData = await structureDataWithGPT(text);
           processingMethod = 'gpt_structured';
-          updateProcessingStep('validation', 'processing', 'Validating AI-extracted data...');
-        } catch (gptError) {
-          console.warn('GPT processing failed, using enhanced fallback:', gptError);
-          updateProcessingStep('ai', 'error', 'AI processing failed, using enhanced parsing');
-          
-          receiptData = enhancedFallbackParsing(extractedText);
-          processingMethod = 'fallback_parsing';
-          updateProcessingStep('validation', 'processing', 'Validating parsed data...');
+        } else {
+          throw new Error('OpenAI not available');
         }
-      } else {
-        console.warn('OpenAI not available, using enhanced fallback parsing');
-        updateProcessingStep('ai', 'error', 'AI not available, using enhanced parsing');
-        
-        receiptData = enhancedFallbackParsing(extractedText);
+      } catch (gptError) {
+        console.warn('GPT processing failed, using fallback:', gptError);
+        setProcessingStep('Using fallback processing...');
+        structuredData = fallbackDataExtraction(text);
         processingMethod = 'fallback_parsing';
-        updateProcessingStep('validation', 'processing', 'Validating parsed data...');
       }
 
-      // Add metadata
-      receiptData.image_url = uploadData?.url || '';
-      receiptData.processing_method = processingMethod;
-      receiptData.ocr_confidence = confidence;
-      receiptData.extracted_text = extractedText;
+      setExtractedData(structuredData);
 
-      // Validate required fields
-      if (!receiptData.product_description?.trim()) {
-        receiptData.product_description = 'Receipt Item';
+      // Step 4: Save to database
+      setProcessingStep('Saving receipt...');
+      const receiptData = {
+        ...structuredData,
+        image_url: uploadData?.url,
+        processing_method: processingMethod,
+        ocr_confidence: 0.85, // Mock confidence score
+        extracted_text: text
+      };
+
+      const { error: saveError } = await saveReceiptToDatabase(receiptData, user.id);
+
+      if (saveError) {
+        throw new Error(`Save failed: ${saveError.message}`);
       }
-      if (!receiptData.brand_name?.trim()) {
-        receiptData.brand_name = 'Unknown Brand';
-      }
-      if (!receiptData.country?.trim()) {
-        receiptData.country = 'United States';
-      }
 
-      updateProcessingStep('validation', 'completed', 'Data validation complete');
+      setSuccess(true);
+      setProcessingStep('Receipt saved successfully!');
 
-      setExtractedData(receiptData);
-      setEditedData({ ...receiptData });
-
-    } catch (error: any) {
-      console.error('Processing error:', error);
-      setError(error.message || 'Failed to process receipt');
-      
-      // Mark any pending steps as error
-      setProcessingSteps(prev => prev.map(step => 
-        step.status === 'pending' || step.status === 'processing' 
-          ? { ...step, status: 'error', details: 'Processing interrupted' }
-          : step
-      ));
+    } catch (err: any) {
+      console.error('Processing error:', err);
+      setError(err.message || 'Failed to process receipt');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleSaveReceipt = async () => {
-    if (!editedData || !user) return;
-
-    setIsSaving(true);
+  const resetForm = () => {
+    setCapturedImage(null);
+    setUploadedFile(null);
+    setExtractedText('');
+    setExtractedData(null);
     setError(null);
-
-    try {
-      const { data, error: saveError } = await saveReceiptToDatabase(editedData, user.id);
-      
-      if (saveError) {
-        throw new Error(saveError.message);
-      }
-
-      setSaveSuccess(true);
-      
-      // Reset after 3 seconds and go back to dashboard
-      setTimeout(() => {
-        onBackToDashboard();
-      }, 2000);
-
-    } catch (error: any) {
-      console.error('Save error:', error);
-      setError(error.message || 'Failed to save receipt');
-    } finally {
-      setIsSaving(false);
+    setSuccess(false);
+    setOcrProgress(0);
+    setProcessingStep('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
-  const resetScanning = () => {
-    setCapturedImage(null);
-    setExtractedData(null);
-    setEditedData(null);
-    setIsEditing(false);
-    setProcessingSteps([]);
+  const updateExtractedData = (field: keyof ExtractedData, value: string | number | null) => {
+    if (extractedData) {
+      setExtractedData({
+        ...extractedData,
+        [field]: value
+      });
+    }
+  };
+
+  const saveManualData = async () => {
+    if (!extractedData || !user) {
+      setError('No data to save');
+      return;
+    }
+
+    setIsProcessing(true);
     setError(null);
-    setSaveSuccess(false);
-  };
 
-  const getProcessingMethodBadge = (method?: string) => {
-    const badges = {
-      'gpt_structured': { icon: Brain, label: 'AI Structured', color: 'bg-purple-100 text-purple-800' },
-      'fallback_parsing': { icon: Zap, label: 'Smart Parsing', color: 'bg-blue-100 text-blue-800' },
-      'ocr': { icon: Eye, label: 'OCR Only', color: 'bg-green-100 text-green-800' },
-      'manual': { icon: Edit3, label: 'Manual Entry', color: 'bg-gray-100 text-gray-800' }
-    };
-    
-    const badge = badges[method as keyof typeof badges] || badges.manual;
-    const Icon = badge.icon;
-    
-    return (
-      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${badge.color}`}>
-        <Icon className="h-3 w-3 mr-1" />
-        {badge.label}
-      </span>
-    );
-  };
+    try {
+      const receiptData = {
+        ...extractedData,
+        image_url: capturedImage ? await uploadReceiptImage(dataURLtoBlob(capturedImage), user.id).then(r => r.data?.url) : null,
+        processing_method: 'manual',
+        ocr_confidence: null,
+        extracted_text: extractedText
+      };
 
-  if (saveSuccess) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="bg-green-100 rounded-full p-4 w-16 h-16 mx-auto mb-4">
-            <CheckCircle className="h-8 w-8 text-green-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-text-primary mb-2">Receipt Saved Successfully!</h2>
-          <p className="text-text-secondary">Redirecting to dashboard...</p>
-        </div>
-      </div>
-    );
-  }
+      const { error: saveError } = await saveReceiptToDatabase(receiptData, user.id);
+
+      if (saveError) {
+        throw new Error(`Save failed: ${saveError.message}`);
+      }
+
+      setSuccess(true);
+    } catch (err: any) {
+      console.error('Save error:', err);
+      setError(err.message || 'Failed to save receipt');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
@@ -727,28 +454,6 @@ ${extractedText}`;
 
             {/* Header Actions */}
             <div className="flex items-center space-x-4">
-              {/* Connection Status */}
-              <div className="flex items-center space-x-2">
-                {connectionStatus.checking ? (
-                  <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
-                ) : (
-                  <>
-                    <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs ${
-                      connectionStatus.supabase ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {connectionStatus.supabase ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-                      <span>DB</span>
-                    </div>
-                    <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs ${
-                      connectionStatus.openai ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {connectionStatus.openai ? <Key className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-                      <span>AI</span>
-                    </div>
-                  </>
-                )}
-              </div>
-
               {/* Alerts */}
               <button className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
                 <Bell className="h-6 w-6" />
@@ -821,39 +526,33 @@ ${extractedText}`;
             Scan Your Receipt
           </h1>
           <p className="text-xl text-text-secondary">
-            Use AI-powered technology to instantly digitize and organize your receipts
+            Capture or upload your receipt and let AI extract the details automatically
           </p>
         </div>
 
-        {/* Connection Status Warning */}
-        {!connectionStatus.checking && (!connectionStatus.supabase || !connectionStatus.openai) && (
+        {/* OpenAI Status Warning */}
+        {openaiAvailable === false && (
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-start">
-              <AlertCircle className="h-5 w-5 text-yellow-600 mr-2 mt-0.5" />
-              <div className="flex-1">
-                <h3 className="text-sm font-medium text-yellow-800">Configuration Issues Detected</h3>
-                <div className="mt-1 text-sm text-yellow-700">
-                  {!connectionStatus.supabase && (
-                    <p>• Database connection failed. Please check your Supabase configuration in the .env file.</p>
-                  )}
-                  {!connectionStatus.openai && (
-                    <p>• OpenAI API not available. AI features will be limited. Please add your OpenAI API key to the .env file.</p>
-                  )}
-                </div>
-                <div className="mt-2">
-                  <button
-                    onClick={checkConnections}
-                    className="text-sm text-yellow-800 underline hover:text-yellow-900"
-                  >
-                    Retry Connection Check
-                  </button>
-                </div>
-              </div>
+            <div className="flex items-center">
+              <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
+              <p className="text-sm text-yellow-700">
+                OpenAI API not available. AI features will be limited. Manual data entry will be required.
+              </p>
             </div>
           </div>
         )}
 
-        {/* Error Display */}
+        {/* Success Message */}
+        {success && (
+          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center">
+              <Check className="h-5 w-5 text-green-600 mr-2" />
+              <p className="text-sm text-green-700">Receipt saved successfully!</p>
+            </div>
+          </div>
+        )}
+
+        {/* Error Message */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-center">
@@ -863,411 +562,354 @@ ${extractedText}`;
           </div>
         )}
 
-        {/* Capture Options */}
-        {!capturedImage && !captureMode && (
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            <button
-              onClick={() => setCaptureMode('camera')}
-              className="group bg-white p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 border border-gray-100"
-            >
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-primary/10 to-primary/20 rounded-full p-6 w-fit mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                  <Camera className="h-12 w-12 text-primary" />
-                </div>
-                <h3 className="text-xl font-bold text-text-primary mb-2 group-hover:text-primary transition-colors duration-300">
-                  Take Photo
-                </h3>
-                <p className="text-text-secondary">
-                  Use your camera to capture a receipt photo
-                </p>
+        {/* Camera Modal */}
+        {showCamera && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-card max-w-2xl w-full">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                <h2 className="text-xl font-bold text-text-primary">Capture Receipt</h2>
+                <button
+                  onClick={() => setShowCamera(false)}
+                  className="text-text-secondary hover:text-text-primary transition-colors duration-200"
+                >
+                  <X className="h-6 w-6" />
+                </button>
               </div>
-            </button>
-
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="group bg-white p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 border border-gray-100"
-            >
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-secondary/10 to-secondary/20 rounded-full p-6 w-fit mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                  <Upload className="h-12 w-12 text-secondary" />
-                </div>
-                <h3 className="text-xl font-bold text-text-primary mb-2 group-hover:text-secondary transition-colors duration-300">
-                  Upload File
-                </h3>
-                <p className="text-text-secondary">
-                  Select an image file from your device
-                </p>
-              </div>
-            </button>
-          </div>
-        )}
-
-        {/* Camera View */}
-        {captureMode === 'camera' && (
-          <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
-            <div className="text-center mb-4">
-              <h3 className="text-xl font-bold text-text-primary mb-2">Position Your Receipt</h3>
-              <p className="text-text-secondary">Make sure the receipt is clearly visible and well-lit</p>
-            </div>
-            
-            <div className="relative max-w-md mx-auto">
-              <Webcam
-                ref={webcamRef}
-                audio={false}
-                screenshotFormat="image/jpeg"
-                className="w-full rounded-lg"
-                videoConstraints={{
-                  facingMode: { ideal: "environment" }
-                }}
-              />
               
-              <div className="flex justify-center space-x-4 mt-6">
-                <button
-                  onClick={() => setCaptureMode(null)}
-                  className="flex items-center space-x-2 bg-gray-100 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors duration-200"
-                >
-                  <X className="h-4 w-4" />
-                  <span>Cancel</span>
-                </button>
-                <button
-                  onClick={capture}
-                  className="flex items-center space-x-2 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200"
-                >
-                  <Camera className="h-4 w-4" />
-                  <span>Capture</span>
-                </button>
+              <div className="p-6">
+                <div className="relative">
+                  <Webcam
+                    ref={webcamRef}
+                    audio={false}
+                    screenshotFormat="image/jpeg"
+                    className="w-full rounded-lg"
+                    videoConstraints={{
+                      facingMode: 'environment'
+                    }}
+                  />
+                </div>
+                
+                <div className="flex justify-center mt-6">
+                  <button
+                    onClick={capture}
+                    className="bg-primary text-white px-8 py-4 rounded-full font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
+                  >
+                    <Camera className="h-5 w-5" />
+                    <span>Capture</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Captured Image Preview */}
-        {capturedImage && !isProcessing && !extractedData && (
-          <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
-            <div className="text-center mb-4">
-              <h3 className="text-xl font-bold text-text-primary mb-2">Receipt Captured</h3>
-              <p className="text-text-secondary">Review your image and process when ready</p>
-            </div>
+        {/* Main Content Area */}
+        <div className="grid lg:grid-cols-2 gap-8">
+          {/* Left Column - Image Capture/Upload */}
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
+            <h2 className="text-xl font-bold text-text-primary mb-6">1. Capture or Upload Receipt</h2>
             
-            <div className="max-w-md mx-auto">
-              <img
-                src={capturedImage}
-                alt="Captured receipt"
-                className="w-full rounded-lg shadow-md mb-6"
-              />
-              
-              <div className="flex justify-center space-x-4">
+            {!capturedImage ? (
+              <div className="space-y-4">
+                {/* Camera Capture */}
                 <button
-                  onClick={resetScanning}
-                  className="flex items-center space-x-2 bg-gray-100 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors duration-200"
+                  onClick={() => setShowCamera(true)}
+                  className="w-full bg-gradient-to-r from-primary to-secondary text-white p-6 rounded-xl font-medium hover:from-primary/90 hover:to-secondary/90 transition-all duration-200 flex items-center justify-center space-x-3"
                 >
-                  <X className="h-4 w-4" />
-                  <span>Retake</span>
+                  <Camera className="h-6 w-6" />
+                  <span>Take Photo</span>
                 </button>
+
+                {/* File Upload */}
+                <div className="relative">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full border-2 border-dashed border-gray-300 hover:border-primary p-6 rounded-xl transition-colors duration-200 flex items-center justify-center space-x-3 text-text-secondary hover:text-primary"
+                  >
+                    <Upload className="h-6 w-6" />
+                    <span>Upload Image</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Image Preview */}
+                <div className="relative">
+                  <img
+                    src={capturedImage}
+                    alt="Receipt"
+                    className="w-full rounded-lg shadow-md"
+                  />
+                  <button
+                    onClick={resetForm}
+                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors duration-200"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Process Button */}
                 <button
                   onClick={processReceipt}
-                  disabled={!connectionStatus.supabase}
-                  className="flex items-center space-x-2 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isProcessing}
+                  className="w-full bg-primary text-white p-4 rounded-xl font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
-                  <Brain className="h-4 w-4" />
-                  <span>Process Receipt</span>
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-5 w-5" />
+                      <span>Process Receipt</span>
+                    </>
+                  )}
                 </button>
               </div>
-            </div>
+            )}
           </div>
-        )}
 
-        {/* Processing Steps */}
-        {isProcessing && (
-          <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
-            <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-text-primary mb-2">Processing Your Receipt</h3>
-              <p className="text-text-secondary">Please wait while we extract and organize the information</p>
-            </div>
+          {/* Right Column - Processing Status & Results */}
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
+            <h2 className="text-xl font-bold text-text-primary mb-6">2. Processing Status</h2>
             
-            <div className="space-y-4">
-              {processingSteps.map((step) => (
-                <div key={step.id} className="flex items-center space-x-4">
-                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                    step.status === 'completed' ? 'bg-green-100' :
-                    step.status === 'processing' ? 'bg-blue-100' :
-                    step.status === 'error' ? 'bg-red-100' :
-                    'bg-gray-100'
-                  }`}>
-                    {step.status === 'completed' && <CheckCircle className="h-5 w-5 text-green-600" />}
-                    {step.status === 'processing' && <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />}
-                    {step.status === 'error' && <AlertCircle className="h-5 w-5 text-red-600" />}
-                    {step.status === 'pending' && <div className="w-3 h-3 bg-gray-400 rounded-full" />}
-                  </div>
-                  
-                  <div className="flex-1">
-                    <div className="font-medium text-text-primary">{step.label}</div>
-                    {step.details && (
-                      <div className="text-sm text-text-secondary">{step.details}</div>
-                    )}
-                  </div>
+            {isProcessing && (
+              <div className="space-y-4">
+                {/* Progress Bar */}
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-primary h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${ocrProgress}%` }}
+                  ></div>
                 </div>
-              ))}
+                
+                {/* Current Step */}
+                <div className="flex items-center space-x-2">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <span className="text-text-secondary">{processingStep}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Processing Steps */}
+            <div className="space-y-3">
+              <div className={`flex items-center space-x-3 p-3 rounded-lg ${extractedText ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                <div className={`rounded-full p-1 ${extractedText ? 'bg-green-500' : 'bg-gray-300'}`}>
+                  {extractedText ? <Check className="h-3 w-3 text-white" /> : <Eye className="h-3 w-3 text-white" />}
+                </div>
+                <span className={`text-sm ${extractedText ? 'text-green-700' : 'text-text-secondary'}`}>
+                  OCR Text Extraction
+                </span>
+              </div>
+
+              <div className={`flex items-center space-x-3 p-3 rounded-lg ${extractedData ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                <div className={`rounded-full p-1 ${extractedData ? 'bg-green-500' : 'bg-gray-300'}`}>
+                  {extractedData ? <Check className="h-3 w-3 text-white" /> : <Brain className="h-3 w-3 text-white" />}
+                </div>
+                <span className={`text-sm ${extractedData ? 'text-green-700' : 'text-text-secondary'}`}>
+                  AI Data Structuring
+                </span>
+              </div>
+
+              <div className={`flex items-center space-x-3 p-3 rounded-lg ${success ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                <div className={`rounded-full p-1 ${success ? 'bg-green-500' : 'bg-gray-300'}`}>
+                  {success ? <Check className="h-3 w-3 text-white" /> : <Save className="h-3 w-3 text-white" />}
+                </div>
+                <span className={`text-sm ${success ? 'text-green-700' : 'text-text-secondary'}`}>
+                  Save to Database
+                </span>
+              </div>
             </div>
+
+            {/* Extracted Text Preview */}
+            {extractedText && (
+              <div className="mt-6">
+                <h3 className="font-medium text-text-primary mb-2">Extracted Text:</h3>
+                <div className="bg-gray-50 p-3 rounded-lg max-h-32 overflow-y-auto">
+                  <pre className="text-xs text-text-secondary whitespace-pre-wrap">{extractedText}</pre>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Extracted Data Form */}
         {extractedData && (
-          <div className="bg-white rounded-2xl shadow-card p-6">
+          <div className="mt-8 bg-white rounded-2xl shadow-card border border-gray-100 p-6">
             <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-xl font-bold text-text-primary mb-2">Receipt Information</h3>
-                <div className="flex items-center space-x-2">
-                  <p className="text-text-secondary">Review and edit the extracted information</p>
-                  {getProcessingMethodBadge(extractedData.processing_method)}
-                </div>
-              </div>
-              
+              <h2 className="text-xl font-bold text-text-primary">3. Review & Edit Details</h2>
               <div className="flex items-center space-x-2">
-                {!isEditing ? (
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="flex items-center space-x-2 bg-gray-100 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors duration-200"
-                  >
-                    <Edit3 className="h-4 w-4" />
-                    <span>Edit</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setIsEditing(false)}
-                    className="flex items-center space-x-2 bg-gray-100 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors duration-200"
-                  >
-                    <Eye className="h-4 w-4" />
-                    <span>Preview</span>
-                  </button>
-                )}
+                <button
+                  onClick={resetForm}
+                  className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span>Start Over</span>
+                </button>
               </div>
             </div>
 
             <div className="grid md:grid-cols-2 gap-6">
-              {/* Form Fields */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">Product Description *</label>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editedData?.product_description || ''}
-                      onChange={(e) => setEditedData(prev => prev ? { ...prev, product_description: e.target.value } : null)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="Enter product description"
-                    />
-                  ) : (
-                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      {extractedData.product_description}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">Brand Name *</label>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editedData?.brand_name || ''}
-                      onChange={(e) => setEditedData(prev => prev ? { ...prev, brand_name: e.target.value } : null)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="Enter brand name"
-                    />
-                  ) : (
-                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      {extractedData.brand_name}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">Store Name</label>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editedData?.store_name || ''}
-                      onChange={(e) => setEditedData(prev => prev ? { ...prev, store_name: e.target.value } : null)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="Enter store name"
-                    />
-                  ) : (
-                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      {extractedData.store_name || 'Not specified'}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">Purchase Date *</label>
-                  {isEditing ? (
-                    <input
-                      type="date"
-                      value={editedData?.purchase_date || ''}
-                      onChange={(e) => setEditedData(prev => prev ? { ...prev, purchase_date: e.target.value } : null)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                    />
-                  ) : (
-                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      {new Date(extractedData.purchase_date).toLocaleDateString()}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">Amount</label>
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={editedData?.amount || ''}
-                      onChange={(e) => setEditedData(prev => prev ? { ...prev, amount: e.target.value ? parseFloat(e.target.value) : null } : null)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="Enter amount"
-                    />
-                  ) : (
-                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      {extractedData.amount ? `$${extractedData.amount.toFixed(2)}` : 'Not specified'}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">Warranty Period *</label>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editedData?.warranty_period || ''}
-                      onChange={(e) => setEditedData(prev => prev ? { ...prev, warranty_period: e.target.value } : null)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="e.g., 1 year, 2 years, 6 months"
-                    />
-                  ) : (
-                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      {extractedData.warranty_period}
-                    </div>
-                  )}
-                </div>
+              {/* Product Information */}
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-2">
+                  Product Description *
+                </label>
+                <input
+                  type="text"
+                  value={extractedData.product_description}
+                  onChange={(e) => updateExtractedData('product_description', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                  placeholder="Enter product description"
+                />
               </div>
 
-              {/* Additional Fields */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">Purchase Location</label>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editedData?.purchase_location || ''}
-                      onChange={(e) => setEditedData(prev => prev ? { ...prev, purchase_location: e.target.value } : null)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="Enter store address or location"
-                    />
-                  ) : (
-                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      {extractedData.purchase_location || 'Not specified'}
-                    </div>
-                  )}
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-2">
+                  Brand Name *
+                </label>
+                <input
+                  type="text"
+                  value={extractedData.brand_name}
+                  onChange={(e) => updateExtractedData('brand_name', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                  placeholder="Enter brand name"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">Model Number</label>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editedData?.model_number || ''}
-                      onChange={(e) => setEditedData(prev => prev ? { ...prev, model_number: e.target.value } : null)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="Enter model number"
-                    />
-                  ) : (
-                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      {extractedData.model_number || 'Not specified'}
-                    </div>
-                  )}
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-2">
+                  Store Name
+                </label>
+                <input
+                  type="text"
+                  value={extractedData.store_name}
+                  onChange={(e) => updateExtractedData('store_name', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                  placeholder="Enter store name"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">Extended Warranty</label>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editedData?.extended_warranty || ''}
-                      onChange={(e) => setEditedData(prev => prev ? { ...prev, extended_warranty: e.target.value } : null)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="Enter extended warranty details"
-                    />
-                  ) : (
-                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      {extractedData.extended_warranty || 'None'}
-                    </div>
-                  )}
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-2">
+                  Purchase Location
+                </label>
+                <input
+                  type="text"
+                  value={extractedData.purchase_location}
+                  onChange={(e) => updateExtractedData('purchase_location', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                  placeholder="Enter purchase location"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">Country *</label>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editedData?.country || ''}
-                      onChange={(e) => setEditedData(prev => prev ? { ...prev, country: e.target.value } : null)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="Enter country"
-                    />
-                  ) : (
-                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      {extractedData.country}
-                    </div>
-                  )}
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-2">
+                  Purchase Date *
+                </label>
+                <input
+                  type="date"
+                  value={extractedData.purchase_date}
+                  onChange={(e) => updateExtractedData('purchase_date', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                />
+              </div>
 
-                {/* Processing Info */}
-                {extractedData.ocr_confidence && (
-                  <div>
-                    <label className="block text-sm font-medium text-text-primary mb-2">OCR Confidence</label>
-                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      {Math.round(extractedData.ocr_confidence * 100)}%
-                    </div>
-                  </div>
-                )}
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-2">
+                  Amount
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={extractedData.amount || ''}
+                  onChange={(e) => updateExtractedData('amount', e.target.value ? parseFloat(e.target.value) : null)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                  placeholder="Enter amount"
+                />
+              </div>
 
-                {/* Receipt Image Preview */}
-                {capturedImage && (
-                  <div>
-                    <label className="block text-sm font-medium text-text-primary mb-2">Receipt Image</label>
-                    <img
-                      src={capturedImage}
-                      alt="Receipt"
-                      className="w-full max-w-xs rounded-lg shadow-md"
-                    />
-                  </div>
-                )}
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-2">
+                  Warranty Period *
+                </label>
+                <input
+                  type="text"
+                  value={extractedData.warranty_period}
+                  onChange={(e) => updateExtractedData('warranty_period', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                  placeholder="e.g., 1 year, 6 months"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-2">
+                  Model Number
+                </label>
+                <input
+                  type="text"
+                  value={extractedData.model_number}
+                  onChange={(e) => updateExtractedData('model_number', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                  placeholder="Enter model number"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-2">
+                  Extended Warranty
+                </label>
+                <input
+                  type="text"
+                  value={extractedData.extended_warranty}
+                  onChange={(e) => updateExtractedData('extended_warranty', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                  placeholder="Enter extended warranty details"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-2">
+                  Country *
+                </label>
+                <input
+                  type="text"
+                  value={extractedData.country}
+                  onChange={(e) => updateExtractedData('country', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                  placeholder="Enter country"
+                />
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex justify-center space-x-4 mt-8">
+            {/* Save Button */}
+            <div className="mt-8 flex justify-end">
               <button
-                onClick={resetScanning}
-                className="flex items-center space-x-2 bg-gray-100 text-text-secondary px-6 py-3 rounded-lg hover:bg-gray-200 transition-colors duration-200"
+                onClick={saveManualData}
+                disabled={isProcessing || success}
+                className="bg-primary text-white px-8 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
-                <X className="h-4 w-4" />
-                <span>Start Over</span>
-              </button>
-              
-              <button
-                onClick={handleSaveReceipt}
-                disabled={isSaving || !connectionStatus.supabase}
-                className="flex items-center space-x-2 bg-primary text-white px-8 py-3 rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSaving ? (
+                {isProcessing ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-5 w-5 animate-spin" />
                     <span>Saving...</span>
+                  </>
+                ) : success ? (
+                  <>
+                    <Check className="h-5 w-5" />
+                    <span>Saved</span>
                   </>
                 ) : (
                   <>
-                    <Save className="h-4 w-4" />
+                    <Save className="h-5 w-5" />
                     <span>Save Receipt</span>
                   </>
                 )}
@@ -1275,15 +917,6 @@ ${extractedText}`;
             </div>
           </div>
         )}
-
-        {/* Hidden File Input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleFileUpload}
-          className="hidden"
-        />
       </main>
 
       {/* Click outside to close user menu */}

@@ -82,11 +82,22 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
 
   React.useEffect(() => {
     const loadUser = async () => {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
+      try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser) {
+          console.error('No authenticated user found');
+          onBackToDashboard();
+          return;
+        }
+        console.log('Loaded user for receipt scanning:', currentUser.id);
+        setUser(currentUser);
+      } catch (error) {
+        console.error('Error loading user:', error);
+        onBackToDashboard();
+      }
     };
     loadUser();
-  }, []);
+  }, [onBackToDashboard]);
 
   const handleSignOut = async () => {
     try {
@@ -116,6 +127,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     updateProcessingStep('ocr', 'processing');
     
     try {
+      console.log('Starting Tesseract OCR processing...');
       const { data: { text } } = await Tesseract.recognize(
         imageSource,
         'eng',
@@ -204,7 +216,7 @@ Return only the JSON object. If a field is not found, use empty string or null.`
       
       try {
         const structuredData = JSON.parse(gptResponse);
-        console.log('Structured data:', structuredData);
+        console.log('Structured data from GPT:', structuredData);
         updateProcessingStep('gpt', 'completed', 'Data structured successfully');
         generateDynamicForm(structuredData);
       } catch (parseError) {
@@ -225,49 +237,86 @@ Return only the JSON object. If a field is not found, use empty string or null.`
     const lines = text.split('\n').map(line => line.trim()).filter(line => line);
     const data: ExtractedData = {};
 
+    console.log('Using fallback parsing for text:', text);
+
     // Simple pattern matching for common receipt elements
     for (const line of lines) {
       const lowerLine = line.toLowerCase();
       
-      // Look for amounts
-      const amountMatch = line.match(/\$?(\d+\.?\d*)/);
-      if (amountMatch && !data.amount) {
-        data.amount = parseFloat(amountMatch[1]);
-      }
+      // Look for amounts (more comprehensive patterns)
+      const amountPatterns = [
+        /total[:\s]*\$?(\d+\.?\d*)/i,
+        /amount[:\s]*\$?(\d+\.?\d*)/i,
+        /\$(\d+\.?\d*)/,
+        /(\d+\.\d{2})/
+      ];
       
-      // Look for dates
-      const dateMatch = line.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
-      if (dateMatch && !data.purchase_date) {
-        const date = new Date(dateMatch[1]);
-        if (!isNaN(date.getTime())) {
-          data.purchase_date = date.toISOString().split('T')[0];
+      for (const pattern of amountPatterns) {
+        const amountMatch = line.match(pattern);
+        if (amountMatch && !data.amount) {
+          const amount = parseFloat(amountMatch[1]);
+          if (amount > 0 && amount < 10000) { // Reasonable range
+            data.amount = amount;
+            break;
+          }
         }
       }
       
-      // Look for store names (usually at the top)
-      if (!data.store_name && lines.indexOf(line) < 3 && line.length > 3) {
-        data.store_name = line;
+      // Look for dates (multiple formats)
+      const datePatterns = [
+        /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/,
+        /(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/,
+        /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{4}/i
+      ];
+      
+      for (const pattern of datePatterns) {
+        const dateMatch = line.match(pattern);
+        if (dateMatch && !data.purchase_date) {
+          const date = new Date(dateMatch[1]);
+          if (!isNaN(date.getTime()) && date.getFullYear() > 2000) {
+            data.purchase_date = date.toISOString().split('T')[0];
+            break;
+          }
+        }
+      }
+      
+      // Look for store names (usually at the top, avoid common receipt words)
+      const avoidWords = ['receipt', 'invoice', 'total', 'subtotal', 'tax', 'date', 'time'];
+      if (!data.store_name && lines.indexOf(line) < 5 && line.length > 3 && line.length < 50) {
+        const hasAvoidWord = avoidWords.some(word => lowerLine.includes(word));
+        if (!hasAvoidWord && !/^\d+$/.test(line) && !/^[\d\s\-\(\)]+$/.test(line)) {
+          data.store_name = line;
+        }
       }
     }
 
+    // Set defaults for required fields
+    if (!data.country) data.country = 'United States';
+    if (!data.warranty_period) data.warranty_period = '1 year';
+
+    console.log('Fallback parsing result:', data);
     return data;
   };
 
   const generateDynamicForm = (data: ExtractedData) => {
     updateProcessingStep('form', 'processing');
     setStructuredData(data);
-    setFormData({
+    
+    // Ensure we have default values for required fields
+    const formDataWithDefaults = {
       product_description: data.product_description || '',
       brand_name: data.brand_name || '',
       store_name: data.store_name || '',
       purchase_location: data.purchase_location || '',
-      purchase_date: data.purchase_date || '',
+      purchase_date: data.purchase_date || new Date().toISOString().split('T')[0],
       amount: data.amount || 0,
       warranty_period: data.warranty_period || '1 year',
       extended_warranty: data.extended_warranty || '',
       model_number: data.model_number || '',
       country: data.country || 'United States'
-    });
+    };
+    
+    setFormData(formDataWithDefaults);
     updateProcessingStep('form', 'completed', 'Form ready for review');
     setShowForm(true);
     setIsProcessing(false);
@@ -285,6 +334,18 @@ Return only the JSON object. If a field is not found, use empty string or null.`
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setSaveError('Please select a valid image file');
+        return;
+      }
+      
+      // Validate file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        setSaveError('File size must be less than 10MB');
+        return;
+      }
+      
       setUploadedFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -297,7 +358,9 @@ Return only the JSON object. If a field is not found, use empty string or null.`
   };
 
   const startProcessing = async (imageSource: string | File) => {
+    console.log('Starting processing with image source:', typeof imageSource);
     setIsProcessing(true);
+    setSaveError(null);
     initializeProcessingSteps();
     await processWithTesseract(imageSource);
   };
@@ -315,6 +378,13 @@ Return only the JSON object. If a field is not found, use empty string or null.`
     
     if (!formData.purchase_date) {
       errors.purchase_date = 'Purchase date is required';
+    } else {
+      // Validate date is not in the future
+      const purchaseDate = new Date(formData.purchase_date);
+      const today = new Date();
+      if (purchaseDate > today) {
+        errors.purchase_date = 'Purchase date cannot be in the future';
+      }
     }
     
     if (!formData.warranty_period?.trim()) {
@@ -325,72 +395,98 @@ Return only the JSON object. If a field is not found, use empty string or null.`
       errors.country = 'Country is required';
     }
 
+    if (formData.amount && formData.amount < 0) {
+      errors.amount = 'Amount cannot be negative';
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const handleFormSubmission = async () => {
-    if (!validateForm() || !user) return;
+    if (!validateForm() || !user) {
+      console.error('Form validation failed or no user');
+      return;
+    }
 
     setIsSaving(true);
     setSaveError(null);
 
     try {
+      console.log('Starting receipt submission for user:', user.id);
+      
       // Upload image to Supabase storage if we have one
       let imageUrl = null;
       if (uploadedFile || capturedImage) {
-        const fileName = `${user.id}/${Date.now()}-receipt.jpg`;
-        
-        let fileToUpload: File;
-        if (uploadedFile) {
-          fileToUpload = uploadedFile;
-        } else if (capturedImage) {
-          // Convert base64 to file
-          const response = await fetch(capturedImage);
-          const blob = await response.blob();
-          fileToUpload = new File([blob], 'captured-receipt.jpg', { type: 'image/jpeg' });
-        } else {
-          throw new Error('No image to upload');
-        }
+        try {
+          const fileName = `${user.id}/${Date.now()}-receipt.jpg`;
+          
+          let fileToUpload: File;
+          if (uploadedFile) {
+            fileToUpload = uploadedFile;
+          } else if (capturedImage) {
+            // Convert base64 to file
+            const response = await fetch(capturedImage);
+            const blob = await response.blob();
+            fileToUpload = new File([blob], 'captured-receipt.jpg', { type: 'image/jpeg' });
+          } else {
+            throw new Error('No image to upload');
+          }
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('receipt-images')
-          .upload(fileName, fileToUpload);
-
-        if (uploadError) {
-          console.error('Image upload error:', uploadError);
-        } else {
-          const { data: urlData } = supabase.storage
+          console.log('Uploading image to Supabase storage...');
+          const { data: uploadData, error: uploadError } = await supabase.storage
             .from('receipt-images')
-            .getPublicUrl(fileName);
-          imageUrl = urlData.publicUrl;
+            .upload(fileName, fileToUpload, {
+              cacheControl: '3600',
+              upsert: false
+            });
+
+          if (uploadError) {
+            console.error('Image upload error:', uploadError);
+            // Don't fail the entire process if image upload fails
+            console.warn('Continuing without image upload');
+          } else {
+            console.log('Image uploaded successfully:', uploadData);
+            const { data: urlData } = supabase.storage
+              .from('receipt-images')
+              .getPublicUrl(fileName);
+            imageUrl = urlData.publicUrl;
+            console.log('Image URL:', imageUrl);
+          }
+        } catch (imageError) {
+          console.error('Image processing error:', imageError);
+          // Continue without image
         }
       }
 
-      // Insert receipt data
+      // Prepare receipt data with proper validation
       const receiptData = {
         user_id: user.id,
-        product_description: formData.product_description,
-        brand_name: formData.brand_name,
-        store_name: formData.store_name || null,
-        purchase_location: formData.purchase_location || null,
+        product_description: formData.product_description?.trim() || '',
+        brand_name: formData.brand_name?.trim() || '',
+        store_name: formData.store_name?.trim() || null,
+        purchase_location: formData.purchase_location?.trim() || null,
         purchase_date: formData.purchase_date,
-        amount: formData.amount || null,
-        warranty_period: formData.warranty_period,
-        extended_warranty: formData.extended_warranty || null,
-        model_number: formData.model_number || null,
-        country: formData.country,
+        amount: formData.amount && formData.amount > 0 ? formData.amount : null,
+        warranty_period: formData.warranty_period?.trim() || '1 year',
+        extended_warranty: formData.extended_warranty?.trim() || null,
+        model_number: formData.model_number?.trim() || null,
+        country: formData.country?.trim() || 'United States',
         image_url: imageUrl,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        image_path: imageUrl // For backward compatibility
       };
 
+      console.log('Inserting receipt data:', receiptData);
+
+      // Insert receipt data into Supabase
       const { data, error } = await supabase
         .from('receipts')
-        .insert([receiptData]);
+        .insert([receiptData])
+        .select();
 
       if (error) {
-        throw error;
+        console.error('Supabase insert error:', error);
+        throw new Error(`Failed to save receipt: ${error.message}`);
       }
 
       console.log('Receipt saved successfully:', data);
@@ -399,11 +495,11 @@ Return only the JSON object. If a field is not found, use empty string or null.`
       // Reset form after successful save
       setTimeout(() => {
         resetScanning();
-      }, 2000);
+      }, 3000);
 
     } catch (error: any) {
       console.error('Save error:', error);
-      setSaveError(error.message || 'Failed to save receipt');
+      setSaveError(error.message || 'Failed to save receipt. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -449,6 +545,18 @@ Return only the JSON object. If a field is not found, use empty string or null.`
         return <div className="h-5 w-5 rounded-full border-2 border-gray-300" />;
     }
   };
+
+  // Show loading if no user
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-text-secondary">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (saveSuccess) {
     return (
@@ -838,6 +946,7 @@ Return only the JSON object. If a field is not found, use empty string or null.`
                     type="date"
                     value={formData.purchase_date || ''}
                     onChange={(e) => handleInputChange('purchase_date', e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
                     className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
                       formErrors.purchase_date ? 'border-red-300 bg-red-50' : 'border-gray-300'
                     }`}
@@ -856,11 +965,17 @@ Return only the JSON object. If a field is not found, use empty string or null.`
                   <input
                     type="number"
                     step="0.01"
+                    min="0"
                     value={formData.amount || ''}
                     onChange={(e) => handleInputChange('amount', parseFloat(e.target.value) || 0)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
+                      formErrors.amount ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    }`}
                     placeholder="0.00"
                   />
+                  {formErrors.amount && (
+                    <p className="mt-1 text-sm text-red-600">{formErrors.amount}</p>
+                  )}
                 </div>
 
                 {/* Model Number */}

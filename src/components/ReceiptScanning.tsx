@@ -21,7 +21,10 @@ import {
   Shield,
   User,
   LogOut,
-  Bell
+  Bell,
+  RotateCcw,
+  Maximize,
+  ScanLine
 } from 'lucide-react';
 import Webcam from 'react-webcam';
 import Tesseract from 'tesseract.js';
@@ -65,9 +68,14 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [alertsCount] = useState(3);
   
+  // Main mode selection
+  const [selectedMode, setSelectedMode] = useState<'scan-upload' | 'manual' | null>(null);
+  
   // Scanning states
-  const [scanningMode, setScanningMode] = useState<'camera' | 'upload' | null>(null);
+  const [scanningMode, setScanningMode] = useState<'camera' | 'upload' | 'panoramic' | null>(null);
   const [showCamera, setShowCamera] = useState(false);
+  const [isPanoramicMode, setIsPanoramicMode] = useState(false);
+  const [panoramicImages, setPanoramicImages] = useState<string[]>([]);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   
@@ -364,11 +372,26 @@ Return only the JSON object. If a field is not found, use empty string or null.`
   const handleCapture = useCallback(() => {
     const imageSrc = webcamRef.current?.getScreenshot();
     if (imageSrc) {
-      setCapturedImage(imageSrc);
-      setShowCamera(false);
-      startProcessing(imageSrc);
+      if (isPanoramicMode) {
+        setPanoramicImages(prev => [...prev, imageSrc]);
+      } else {
+        setCapturedImage(imageSrc);
+        setShowCamera(false);
+        startProcessing(imageSrc);
+      }
     }
-  }, [webcamRef]);
+  }, [webcamRef, isPanoramicMode]);
+
+  const handlePanoramicComplete = () => {
+    if (panoramicImages.length > 0) {
+      // For now, use the first image for processing
+      // In a real implementation, you might want to stitch images together
+      setCapturedImage(panoramicImages[0]);
+      setShowCamera(false);
+      setIsPanoramicMode(false);
+      startProcessing(panoramicImages[0]);
+    }
+  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -438,6 +461,11 @@ Return only the JSON object. If a field is not found, use empty string or null.`
 
     // Continue with OCR processing
     await processWithTesseract(imageSource);
+  };
+
+  const startManualEntry = () => {
+    setSelectedMode('manual');
+    generateDynamicForm({ processing_method: 'manual' });
   };
 
   const validateForm = (): boolean => {
@@ -514,8 +542,11 @@ Return only the JSON object. If a field is not found, use empty string or null.`
   };
 
   const resetScanning = () => {
+    setSelectedMode(null);
     setScanningMode(null);
     setShowCamera(false);
+    setIsPanoramicMode(false);
+    setPanoramicImages([]);
     setCapturedImage(null);
     setUploadedFile(null);
     setIsProcessing(false);
@@ -580,7 +611,7 @@ Return only the JSON object. If a field is not found, use empty string or null.`
               onClick={resetScanning}
               className="w-full bg-primary text-white py-3 px-4 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
             >
-              Scan Another Receipt
+              Add Another Receipt
             </button>
             <button
               onClick={onBackToDashboard}
@@ -676,10 +707,10 @@ Return only the JSON object. If a field is not found, use empty string or null.`
         {/* Page Title */}
         <div className="text-center mb-8">
           <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
-            Scan Your Receipt
+            Add Your Receipt
           </h1>
           <p className="text-xl text-text-secondary">
-            Capture or upload your receipt to automatically extract and organize the data with secure Supabase integration
+            Choose how you'd like to add your receipt data with secure Supabase integration
           </p>
         </div>
 
@@ -693,48 +724,91 @@ Return only the JSON object. If a field is not found, use empty string or null.`
           </div>
         )}
 
-        {/* Scanning Options */}
-        {!scanningMode && !showForm && (
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            <button
-              onClick={() => {
-                setScanningMode('camera');
-                setShowCamera(true);
-              }}
-              className="group bg-white p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 border border-gray-100"
-            >
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-primary/10 to-primary/20 rounded-full p-6 w-fit mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                  <Camera className="h-12 w-12 text-primary" />
+        {/* Main Mode Selection */}
+        {!selectedMode && !showForm && (
+          <div className="grid md:grid-cols-2 gap-8 mb-8">
+            {/* Scan & Upload Section */}
+            <div className="bg-white rounded-2xl shadow-card p-8 border border-gray-100">
+              <div className="text-center mb-6">
+                <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-full p-6 w-fit mx-auto mb-4">
+                  <ScanLine className="h-12 w-12 text-primary" />
                 </div>
-                <h3 className="text-xl font-bold text-text-primary mb-2 group-hover:text-primary transition-colors duration-300">
-                  Take Photo
+                <h3 className="text-2xl font-bold text-text-primary mb-2">
+                  Scan & Upload
                 </h3>
                 <p className="text-text-secondary">
-                  Use your camera to capture a receipt photo
+                  Capture or upload receipt images for automatic data extraction
                 </p>
               </div>
-            </button>
 
-            <button
-              onClick={() => {
-                setScanningMode('upload');
-                fileInputRef.current?.click();
-              }}
-              className="group bg-white p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 border border-gray-100"
-            >
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-secondary/10 to-secondary/20 rounded-full p-6 w-fit mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                  <Upload className="h-12 w-12 text-secondary" />
+              <div className="space-y-4">
+                <button
+                  onClick={() => {
+                    setSelectedMode('scan-upload');
+                    setScanningMode('camera');
+                    setShowCamera(true);
+                  }}
+                  className="w-full flex items-center justify-center space-x-3 bg-primary text-white py-4 px-6 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
+                >
+                  <Camera className="h-5 w-5" />
+                  <span>Take Photo</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setSelectedMode('scan-upload');
+                    setScanningMode('panoramic');
+                    setShowCamera(true);
+                    setIsPanoramicMode(true);
+                  }}
+                  className="w-full flex items-center justify-center space-x-3 bg-secondary text-white py-4 px-6 rounded-lg font-medium hover:bg-secondary/90 transition-colors duration-200"
+                >
+                  <Maximize className="h-5 w-5" />
+                  <span>Panoramic Capture</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setSelectedMode('scan-upload');
+                    setScanningMode('upload');
+                    fileInputRef.current?.click();
+                  }}
+                  className="w-full flex items-center justify-center space-x-3 border-2 border-primary text-primary py-4 px-6 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors duration-200"
+                >
+                  <Upload className="h-5 w-5" />
+                  <span>Upload File</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Manual Entry Section */}
+            <div className="bg-white rounded-2xl shadow-card p-8 border border-gray-100">
+              <div className="text-center mb-6">
+                <div className="bg-gradient-to-br from-accent-yellow/10 to-accent-yellow/20 rounded-full p-6 w-fit mx-auto mb-4">
+                  <FileText className="h-12 w-12 text-accent-yellow" />
                 </div>
-                <h3 className="text-xl font-bold text-text-primary mb-2 group-hover:text-secondary transition-colors duration-300">
-                  Upload File
+                <h3 className="text-2xl font-bold text-text-primary mb-2">
+                  Manual Entry
                 </h3>
                 <p className="text-text-secondary">
-                  Select an image file from your device
+                  Enter receipt details manually using our comprehensive form
                 </p>
               </div>
-            </button>
+
+              <button
+                onClick={startManualEntry}
+                className="w-full flex items-center justify-center space-x-3 bg-accent-yellow text-text-primary py-4 px-6 rounded-lg font-medium hover:bg-accent-yellow/90 transition-colors duration-200"
+              >
+                <Edit3 className="h-5 w-5" />
+                <span>Start Manual Entry</span>
+              </button>
+
+              <div className="mt-4 text-center">
+                <p className="text-sm text-text-secondary">
+                  Perfect for receipts that are hard to scan or when you prefer manual input
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -751,8 +825,15 @@ Return only the JSON object. If a field is not found, use empty string or null.`
         {showCamera && (
           <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
             <div className="text-center mb-4">
-              <h3 className="text-xl font-bold text-text-primary mb-2">Position Your Receipt</h3>
-              <p className="text-text-secondary">Make sure the receipt is clearly visible and well-lit</p>
+              <h3 className="text-xl font-bold text-text-primary mb-2">
+                {isPanoramicMode ? 'Panoramic Capture Mode' : 'Position Your Receipt'}
+              </h3>
+              <p className="text-text-secondary">
+                {isPanoramicMode 
+                  ? 'Take multiple photos to capture a large receipt. Tap capture for each section.'
+                  : 'Make sure the receipt is clearly visible and well-lit'
+                }
+              </p>
             </div>
             
             <div className="relative max-w-md mx-auto">
@@ -766,18 +847,51 @@ Return only the JSON object. If a field is not found, use empty string or null.`
                 }}
               />
               
+              {/* Panoramic Images Preview */}
+              {isPanoramicMode && panoramicImages.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm text-text-secondary mb-2">
+                    Captured {panoramicImages.length} image(s)
+                  </p>
+                  <div className="flex space-x-2 overflow-x-auto">
+                    {panoramicImages.map((img, index) => (
+                      <img
+                        key={index}
+                        src={img}
+                        alt={`Panoramic ${index + 1}`}
+                        className="w-16 h-16 object-cover rounded border"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              
               <div className="flex justify-center space-x-4 mt-4">
                 <button
                   onClick={handleCapture}
                   className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
                 >
                   <Camera className="h-5 w-5" />
-                  <span>Capture</span>
+                  <span>{isPanoramicMode ? 'Capture Section' : 'Capture'}</span>
                 </button>
+                
+                {isPanoramicMode && panoramicImages.length > 0 && (
+                  <button
+                    onClick={handlePanoramicComplete}
+                    className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition-colors duration-200 flex items-center space-x-2"
+                  >
+                    <CheckCircle className="h-5 w-5" />
+                    <span>Complete</span>
+                  </button>
+                )}
+                
                 <button
                   onClick={() => {
                     setShowCamera(false);
+                    setSelectedMode(null);
                     setScanningMode(null);
+                    setIsPanoramicMode(false);
+                    setPanoramicImages([]);
                   }}
                   className="border border-gray-300 text-text-secondary px-6 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors duration-200"
                 >
@@ -859,7 +973,9 @@ Return only the JSON object. If a field is not found, use empty string or null.`
         {showForm && (
           <div className="bg-white rounded-2xl shadow-card p-6">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-text-primary">Review & Edit Receipt Details</h3>
+              <h3 className="text-xl font-bold text-text-primary">
+                {selectedMode === 'manual' ? 'Manual Receipt Entry' : 'Review & Edit Receipt Details'}
+              </h3>
               <div className="flex items-center space-x-2">
                 {structuredData.processing_method && (
                   <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">

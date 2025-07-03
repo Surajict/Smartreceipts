@@ -16,6 +16,239 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 })
 
+// Receipt-specific database functions
+export const saveReceiptToDatabase = async (receiptData: any, userId: string) => {
+  try {
+    console.log('Saving receipt to database for user:', userId);
+    console.log('Receipt data:', receiptData);
+
+    // Validate required fields
+    if (!receiptData.product_description?.trim()) {
+      throw new Error('Product description is required');
+    }
+    if (!receiptData.brand_name?.trim()) {
+      throw new Error('Brand name is required');
+    }
+    if (!receiptData.purchase_date) {
+      throw new Error('Purchase date is required');
+    }
+    if (!receiptData.warranty_period?.trim()) {
+      throw new Error('Warranty period is required');
+    }
+    if (!receiptData.country?.trim()) {
+      throw new Error('Country is required');
+    }
+
+    // Prepare the data for insertion
+    const insertData = {
+      user_id: userId,
+      product_description: receiptData.product_description.trim(),
+      brand_name: receiptData.brand_name.trim(),
+      store_name: receiptData.store_name?.trim() || null,
+      purchase_location: receiptData.purchase_location?.trim() || null,
+      purchase_date: receiptData.purchase_date,
+      amount: receiptData.amount && receiptData.amount > 0 ? receiptData.amount : null,
+      warranty_period: receiptData.warranty_period.trim(),
+      extended_warranty: receiptData.extended_warranty?.trim() || null,
+      model_number: receiptData.model_number?.trim() || null,
+      country: receiptData.country.trim(),
+      image_url: receiptData.image_url || null,
+      image_path: receiptData.image_url || null, // For backward compatibility
+      processing_method: receiptData.processing_method || 'scan',
+      ocr_confidence: receiptData.ocr_confidence || null,
+      extracted_text: receiptData.extracted_text || null
+    };
+
+    console.log('Prepared insert data:', insertData);
+
+    // Insert the receipt
+    const { data, error } = await supabase
+      .from('receipts')
+      .insert([insertData])
+      .select();
+
+    if (error) {
+      console.error('Database insert error:', error);
+      throw new Error(`Failed to save receipt: ${error.message}`);
+    }
+
+    console.log('Receipt saved successfully:', data);
+    return { data, error: null };
+
+  } catch (err: any) {
+    console.error('Save receipt error:', err);
+    return { 
+      data: null, 
+      error: { message: err.message || 'Failed to save receipt' } 
+    };
+  }
+};
+
+export const uploadReceiptImage = async (file: File | Blob, userId: string, filename?: string) => {
+  try {
+    console.log('Uploading receipt image for user:', userId);
+    
+    // Generate unique filename if not provided
+    const fileName = filename || `${userId}/${Date.now()}-receipt.jpg`;
+    
+    console.log('Uploading to path:', fileName);
+
+    // Upload to Supabase storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('receipt-images')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error('Image upload error:', uploadError);
+      throw new Error(`Failed to upload image: ${uploadError.message}`);
+    }
+
+    console.log('Image uploaded successfully:', uploadData);
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('receipt-images')
+      .getPublicUrl(fileName);
+
+    console.log('Image URL:', urlData.publicUrl);
+
+    return { 
+      data: { 
+        path: fileName, 
+        url: urlData.publicUrl 
+      }, 
+      error: null 
+    };
+
+  } catch (err: any) {
+    console.error('Upload image error:', err);
+    return { 
+      data: null, 
+      error: { message: err.message || 'Failed to upload image' } 
+    };
+  }
+};
+
+export const getUserReceiptStats = async (userId: string) => {
+  try {
+    console.log('Getting receipt stats for user:', userId);
+
+    const { data, error } = await supabase
+      .rpc('get_user_receipt_stats', { user_uuid: userId });
+
+    if (error) {
+      console.error('Error getting receipt stats:', error);
+      throw error;
+    }
+
+    console.log('Receipt stats:', data);
+    return { data: data[0] || {}, error: null };
+
+  } catch (err: any) {
+    console.error('Get receipt stats error:', err);
+    return { 
+      data: null, 
+      error: { message: err.message || 'Failed to get receipt stats' } 
+    };
+  }
+};
+
+export const searchUserReceipts = async (userId: string, query: string, limit: number = 10) => {
+  try {
+    console.log('Searching receipts for user:', userId, 'query:', query);
+
+    const { data, error } = await supabase
+      .rpc('search_user_receipts', { 
+        user_uuid: userId, 
+        search_query: query,
+        limit_count: limit 
+      });
+
+    if (error) {
+      console.error('Error searching receipts:', error);
+      throw error;
+    }
+
+    console.log('Search results:', data);
+    return { data: data || [], error: null };
+
+  } catch (err: any) {
+    console.error('Search receipts error:', err);
+    return { 
+      data: [], 
+      error: { message: err.message || 'Failed to search receipts' } 
+    };
+  }
+};
+
+export const getUserReceipts = async (userId: string, limit?: number, offset?: number) => {
+  try {
+    console.log('Getting receipts for user:', userId);
+
+    let query = supabase
+      .from('receipts')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (limit) {
+      query = query.limit(limit);
+    }
+
+    if (offset) {
+      query = query.range(offset, offset + (limit || 10) - 1);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error getting receipts:', error);
+      throw error;
+    }
+
+    console.log('Retrieved receipts:', data?.length);
+    return { data: data || [], error: null };
+
+  } catch (err: any) {
+    console.error('Get receipts error:', err);
+    return { 
+      data: [], 
+      error: { message: err.message || 'Failed to get receipts' } 
+    };
+  }
+};
+
+export const getReceiptWithWarrantyStatus = async (userId: string, receiptId: string) => {
+  try {
+    console.log('Getting receipt with warranty status:', receiptId);
+
+    const { data, error } = await supabase
+      .from('receipts_with_warranty_status')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('id', receiptId)
+      .single();
+
+    if (error) {
+      console.error('Error getting receipt with warranty status:', error);
+      throw error;
+    }
+
+    console.log('Receipt with warranty status:', data);
+    return { data, error: null };
+
+  } catch (err: any) {
+    console.error('Get receipt with warranty status error:', err);
+    return { 
+      data: null, 
+      error: { message: err.message || 'Failed to get receipt' } 
+    };
+  }
+};
+
 // Auth helper functions
 export const signUp = async (email: string, password: string, fullName: string) => {
   try {

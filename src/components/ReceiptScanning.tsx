@@ -25,7 +25,12 @@ import {
 } from 'lucide-react';
 import Webcam from 'react-webcam';
 import Tesseract from 'tesseract.js';
-import { getCurrentUser, supabase, signOut } from '../lib/supabase';
+import { 
+  getCurrentUser, 
+  signOut, 
+  saveReceiptToDatabase, 
+  uploadReceiptImage 
+} from '../lib/supabase';
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
@@ -42,6 +47,10 @@ interface ExtractedData {
   extended_warranty?: string;
   model_number?: string;
   country?: string;
+  processing_method?: string;
+  ocr_confidence?: number;
+  extracted_text?: string;
+  image_url?: string;
 }
 
 interface ProcessingStep {
@@ -116,6 +125,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
 
   const initializeProcessingSteps = () => {
     const steps: ProcessingStep[] = [
+      { id: 'upload', name: 'Uploading image to secure storage', status: 'pending' },
       { id: 'ocr', name: 'Extracting text from image', status: 'pending' },
       { id: 'gpt', name: 'Structuring data with AI', status: 'pending' },
       { id: 'form', name: 'Preparing editable form', status: 'pending' }
@@ -128,7 +138,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     
     try {
       console.log('Starting Tesseract OCR processing...');
-      const { data: { text } } = await Tesseract.recognize(
+      const { data: { text, confidence } } = await Tesseract.recognize(
         imageSource,
         'eng',
         {
@@ -141,19 +151,28 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       );
       
       console.log('Extracted text:', text);
+      console.log('OCR confidence:', confidence);
+      
       setExtractedText(text);
-      updateProcessingStep('ocr', 'completed', 'Text extracted successfully');
+      setStructuredData(prev => ({ 
+        ...prev, 
+        extracted_text: text, 
+        ocr_confidence: confidence / 100,
+        processing_method: 'ocr'
+      }));
+      
+      updateProcessingStep('ocr', 'completed', `Text extracted with ${Math.round(confidence)}% confidence`);
       
       if (text.trim()) {
         await processWithGPT(text);
       } else {
         updateProcessingStep('ocr', 'error', 'No text found in image');
-        generateDynamicForm({});
+        generateDynamicForm({ extracted_text: text, processing_method: 'manual' });
       }
     } catch (error) {
       console.error('Tesseract error:', error);
       updateProcessingStep('ocr', 'error', 'Failed to extract text');
-      generateDynamicForm({});
+      generateDynamicForm({ processing_method: 'manual' });
     }
   };
 
@@ -167,7 +186,11 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       console.warn('OpenAI API key not found, using fallback parsing');
       updateProcessingStep('gpt', 'completed', 'Using fallback text parsing');
       const fallbackData = parseFallback(text);
-      generateDynamicForm(fallbackData);
+      generateDynamicForm({ 
+        ...fallbackData, 
+        extracted_text: text, 
+        processing_method: 'fallback_parsing' 
+      });
       return;
     }
 
@@ -218,18 +241,30 @@ Return only the JSON object. If a field is not found, use empty string or null.`
         const structuredData = JSON.parse(gptResponse);
         console.log('Structured data from GPT:', structuredData);
         updateProcessingStep('gpt', 'completed', 'Data structured successfully');
-        generateDynamicForm(structuredData);
+        generateDynamicForm({ 
+          ...structuredData, 
+          extracted_text: text, 
+          processing_method: 'gpt_structured' 
+        });
       } catch (parseError) {
         console.error('Failed to parse GPT response:', parseError);
         updateProcessingStep('gpt', 'error', 'Failed to parse AI response');
         const fallbackData = parseFallback(text);
-        generateDynamicForm(fallbackData);
+        generateDynamicForm({ 
+          ...fallbackData, 
+          extracted_text: text, 
+          processing_method: 'fallback_parsing' 
+        });
       }
     } catch (error) {
       console.error('GPT processing error:', error);
       updateProcessingStep('gpt', 'error', 'AI processing failed');
       const fallbackData = parseFallback(text);
-      generateDynamicForm(fallbackData);
+      generateDynamicForm({ 
+        ...fallbackData, 
+        extracted_text: text, 
+        processing_method: 'fallback_parsing' 
+      });
     }
   };
 
@@ -313,7 +348,11 @@ Return only the JSON object. If a field is not found, use empty string or null.`
       warranty_period: data.warranty_period || '1 year',
       extended_warranty: data.extended_warranty || '',
       model_number: data.model_number || '',
-      country: data.country || 'United States'
+      country: data.country || 'United States',
+      processing_method: data.processing_method || 'manual',
+      ocr_confidence: data.ocr_confidence || null,
+      extracted_text: data.extracted_text || '',
+      image_url: data.image_url || null
     };
     
     setFormData(formDataWithDefaults);
@@ -362,6 +401,42 @@ Return only the JSON object. If a field is not found, use empty string or null.`
     setIsProcessing(true);
     setSaveError(null);
     initializeProcessingSteps();
+
+    // First upload the image to Supabase storage
+    if (user) {
+      updateProcessingStep('upload', 'processing');
+      
+      try {
+        let fileToUpload: File;
+        if (typeof imageSource === 'string') {
+          // Convert base64 to file
+          const response = await fetch(imageSource);
+          const blob = await response.blob();
+          fileToUpload = new File([blob], 'captured-receipt.jpg', { type: 'image/jpeg' });
+        } else {
+          fileToUpload = imageSource;
+        }
+
+        const { data: uploadData, error: uploadError } = await uploadReceiptImage(
+          fileToUpload, 
+          user.id
+        );
+
+        if (uploadError) {
+          console.warn('Image upload failed:', uploadError);
+          updateProcessingStep('upload', 'error', 'Image upload failed, continuing without storage');
+        } else {
+          console.log('Image uploaded successfully:', uploadData);
+          updateProcessingStep('upload', 'completed', 'Image uploaded securely');
+          setStructuredData(prev => ({ ...prev, image_url: uploadData.url }));
+        }
+      } catch (uploadErr) {
+        console.warn('Image upload error:', uploadErr);
+        updateProcessingStep('upload', 'error', 'Image upload failed, continuing without storage');
+      }
+    }
+
+    // Continue with OCR processing
     await processWithTesseract(imageSource);
   };
 
@@ -415,78 +490,11 @@ Return only the JSON object. If a field is not found, use empty string or null.`
     try {
       console.log('Starting receipt submission for user:', user.id);
       
-      // Upload image to Supabase storage if we have one
-      let imageUrl = null;
-      if (uploadedFile || capturedImage) {
-        try {
-          const fileName = `${user.id}/${Date.now()}-receipt.jpg`;
-          
-          let fileToUpload: File;
-          if (uploadedFile) {
-            fileToUpload = uploadedFile;
-          } else if (capturedImage) {
-            // Convert base64 to file
-            const response = await fetch(capturedImage);
-            const blob = await response.blob();
-            fileToUpload = new File([blob], 'captured-receipt.jpg', { type: 'image/jpeg' });
-          } else {
-            throw new Error('No image to upload');
-          }
-
-          console.log('Uploading image to Supabase storage...');
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('receipt-images')
-            .upload(fileName, fileToUpload, {
-              cacheControl: '3600',
-              upsert: false
-            });
-
-          if (uploadError) {
-            console.error('Image upload error:', uploadError);
-            // Don't fail the entire process if image upload fails
-            console.warn('Continuing without image upload');
-          } else {
-            console.log('Image uploaded successfully:', uploadData);
-            const { data: urlData } = supabase.storage
-              .from('receipt-images')
-              .getPublicUrl(fileName);
-            imageUrl = urlData.publicUrl;
-            console.log('Image URL:', imageUrl);
-          }
-        } catch (imageError) {
-          console.error('Image processing error:', imageError);
-          // Continue without image
-        }
-      }
-
-      // Prepare receipt data with proper validation
-      const receiptData = {
-        user_id: user.id,
-        product_description: formData.product_description?.trim() || '',
-        brand_name: formData.brand_name?.trim() || '',
-        store_name: formData.store_name?.trim() || null,
-        purchase_location: formData.purchase_location?.trim() || null,
-        purchase_date: formData.purchase_date,
-        amount: formData.amount && formData.amount > 0 ? formData.amount : null,
-        warranty_period: formData.warranty_period?.trim() || '1 year',
-        extended_warranty: formData.extended_warranty?.trim() || null,
-        model_number: formData.model_number?.trim() || null,
-        country: formData.country?.trim() || 'United States',
-        image_url: imageUrl,
-        image_path: imageUrl // For backward compatibility
-      };
-
-      console.log('Inserting receipt data:', receiptData);
-
-      // Insert receipt data into Supabase
-      const { data, error } = await supabase
-        .from('receipts')
-        .insert([receiptData])
-        .select();
+      // Save receipt to database using the enhanced function
+      const { data, error } = await saveReceiptToDatabase(formData, user.id);
 
       if (error) {
-        console.error('Supabase insert error:', error);
-        throw new Error(`Failed to save receipt: ${error.message}`);
+        throw new Error(error.message);
       }
 
       console.log('Receipt saved successfully:', data);
@@ -529,10 +537,6 @@ Return only the JSON object. If a field is not found, use empty string or null.`
     }
   };
 
-  const formatFieldName = (field: string) => {
-    return field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  };
-
   const getStepIcon = (status: ProcessingStep['status']) => {
     switch (status) {
       case 'completed':
@@ -569,7 +573,7 @@ Return only the JSON object. If a field is not found, use empty string or null.`
             Receipt Saved Successfully!
           </h2>
           <p className="text-text-secondary mb-6">
-            Your receipt has been processed and saved to your library.
+            Your receipt has been processed and securely saved to your library with full Supabase integration.
           </p>
           <div className="space-y-4">
             <button
@@ -675,7 +679,7 @@ Return only the JSON object. If a field is not found, use empty string or null.`
             Scan Your Receipt
           </h1>
           <p className="text-xl text-text-secondary">
-            Capture or upload your receipt to automatically extract and organize the data
+            Capture or upload your receipt to automatically extract and organize the data with secure Supabase integration
           </p>
         </div>
 
@@ -856,12 +860,19 @@ Return only the JSON object. If a field is not found, use empty string or null.`
           <div className="bg-white rounded-2xl shadow-card p-6">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-text-primary">Review & Edit Receipt Details</h3>
-              <button
-                onClick={resetScanning}
-                className="text-text-secondary hover:text-text-primary transition-colors duration-200"
-              >
-                <RefreshCw className="h-5 w-5" />
-              </button>
+              <div className="flex items-center space-x-2">
+                {structuredData.processing_method && (
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                    {structuredData.processing_method.replace('_', ' ')}
+                  </span>
+                )}
+                <button
+                  onClick={resetScanning}
+                  className="text-text-secondary hover:text-text-primary transition-colors duration-200"
+                >
+                  <RefreshCw className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             <form onSubmit={(e) => { e.preventDefault(); handleFormSubmission(); }} className="space-y-6">
@@ -1072,7 +1083,7 @@ Return only the JSON object. If a field is not found, use empty string or null.`
                   {isSaving ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      <span>Saving...</span>
+                      <span>Saving to Supabase...</span>
                     </>
                   ) : (
                     <>

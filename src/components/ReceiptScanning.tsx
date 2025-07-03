@@ -1,687 +1,489 @@
 import React, { useState, useRef, useCallback } from 'react';
-import Webcam from 'react-webcam';
 import { 
+  ArrowLeft, 
   Camera, 
   Upload, 
-  Edit3, 
-  ArrowLeft, 
-  Bell, 
-  Settings, 
-  Check, 
-  X, 
-  RotateCcw,
+  FileText, 
+  Loader2, 
+  CheckCircle, 
   AlertCircle,
-  Calendar,
-  MapPin,
-  Package,
-  Tag,
-  Shield,
-  Clock,
-  CheckCircle,
-  Store,
-  FileText,
-  Image,
+  X,
+  Edit3,
+  Save,
   RefreshCw,
-  Loader2,
-  SwitchCamera,
-  Maximize2,
-  Crop,
-  ZoomIn,
-  Info
+  Eye,
+  EyeOff,
+  Calendar,
+  DollarSign,
+  Tag,
+  Store,
+  MapPin,
+  Shield,
+  User,
+  LogOut,
+  Bell
 } from 'lucide-react';
-import { supabase, getCurrentUser } from '../lib/supabase';
+import Webcam from 'react-webcam';
+import Tesseract from 'tesseract.js';
+import { getCurrentUser, supabase, signOut } from '../lib/supabase';
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
 }
 
-interface FormData {
-  purchaseDate: string;
-  country: string;
-  productDescription: string;
-  brandName: string;
-  modelNumber: string;
-  warrantyPeriod: string;
-  extendedWarranty: string;
-  amount: string;
-  storeName: string;
-  purchaseLocation: string;
+interface ExtractedData {
+  product_description?: string;
+  brand_name?: string;
+  store_name?: string;
+  purchase_location?: string;
+  purchase_date?: string;
+  amount?: number;
+  warranty_period?: string;
+  extended_warranty?: string;
+  model_number?: string;
+  country?: string;
 }
 
-interface ToastMessage {
-  type: 'success' | 'error' | 'info';
-  message: string;
+interface ProcessingStep {
   id: string;
-}
-
-interface CaptureMode {
-  type: 'standard' | 'panoramic' | 'manual';
-  label: string;
-  description: string;
-  icon: React.ComponentType<any>;
+  name: string;
+  status: 'pending' | 'processing' | 'completed' | 'error';
+  message?: string;
 }
 
 const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) => {
-  const [currentStep, setCurrentStep] = useState<'options' | 'capture-mode' | 'camera' | 'upload' | 'manual' | 'preview' | 'success'>('options');
+  const [user, setUser] = useState<any>(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [alertsCount] = useState(3);
+  
+  // Scanning states
+  const [scanningMode, setScanningMode] = useState<'camera' | 'upload' | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [alertsCount] = useState(3);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [filePreview, setFilePreview] = useState<{ type: 'image' | 'pdf'; url: string; name: string; isPanoramic?: boolean } | null>(null);
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [selectedCaptureMode, setSelectedCaptureMode] = useState<CaptureMode['type']>('standard');
   
-  // Camera specific states
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [cameraReady, setCameraReady] = useState(false);
-  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
-  const [retakeCount, setRetakeCount] = useState(0);
-  const [capturedImages, setCapturedImages] = useState<string[]>([]);
-  const [isPanoramicMode, setIsPanoramicMode] = useState(false);
+  // Processing states
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
+  const [extractedText, setExtractedText] = useState<string>('');
+  const [structuredData, setStructuredData] = useState<ExtractedData>({});
+  const [showExtractedText, setShowExtractedText] = useState(false);
+  
+  // Form states
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState<ExtractedData>({});
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   
   const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [formData, setFormData] = useState<FormData>({
-    purchaseDate: '',
-    country: '',
-    productDescription: '',
-    brandName: '',
-    modelNumber: '',
-    warrantyPeriod: '',
-    extendedWarranty: '',
-    amount: '',
-    storeName: '',
-    purchaseLocation: ''
-  });
+  React.useEffect(() => {
+    const loadUser = async () => {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+    };
+    loadUser();
+  }, []);
 
-  const [formErrors, setFormErrors] = useState<Partial<FormData>>({});
-
-  const countries = [
-    'United States', 'Canada', 'United Kingdom', 'Australia', 'Germany', 
-    'France', 'Japan', 'South Korea', 'Singapore', 'Other'
-  ];
-
-  const warrantyPeriods = [
-    '6 months', '1 year', '2 years', '3 years', '4 years', '5 years', 'Lifetime'
-  ];
-
-  // Capture modes
-  const captureModes: CaptureMode[] = [
-    {
-      type: 'standard',
-      label: 'Standard Receipt',
-      description: 'Perfect for regular-sized receipts and documents',
-      icon: Camera
-    },
-    {
-      type: 'panoramic',
-      label: 'Long Receipt',
-      description: 'Capture extra-long receipts in multiple shots that will be stitched together',
-      icon: Maximize2
-    },
-    {
-      type: 'manual',
-      label: 'Upload File',
-      description: 'Upload panoramic images, PDFs, or long receipt photos from your device',
-      icon: Upload
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error signing out:', error);
     }
-  ];
-
-  // Accepted file types - enhanced for panoramic
-  const ACCEPTED_FILE_TYPES = {
-    'image/jpeg': ['.jpg', '.jpeg'],
-    'image/png': ['.png'],
-    'image/heic': ['.heic'],
-    'image/webp': ['.webp'],
-    'application/pdf': ['.pdf']
   };
 
-  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB for panoramic images
+  const updateProcessingStep = (stepId: string, status: ProcessingStep['status'], message?: string) => {
+    setProcessingSteps(prev => prev.map(step => 
+      step.id === stepId ? { ...step, status, message } : step
+    ));
+  };
 
-  // Toast management
-  const addToast = useCallback((type: ToastMessage['type'], message: string) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    const toast: ToastMessage = { type, message, id };
-    setToasts(prev => [...prev, toast]);
+  const initializeProcessingSteps = () => {
+    const steps: ProcessingStep[] = [
+      { id: 'ocr', name: 'Extracting text from image', status: 'pending' },
+      { id: 'gpt', name: 'Structuring data with AI', status: 'pending' },
+      { id: 'form', name: 'Preparing editable form', status: 'pending' }
+    ];
+    setProcessingSteps(steps);
+  };
+
+  const processWithTesseract = async (imageSource: string | File) => {
+    updateProcessingStep('ocr', 'processing');
     
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 5000);
-  }, []);
-
-  const removeToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  }, []);
-
-  // Get available camera devices
-  const getDevices = useCallback(async () => {
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(device => device.kind === 'videoinput');
-      setDevices(videoDevices);
-      
-      // Prefer back camera if available
-      const backCamera = videoDevices.find(device => 
-        device.label.toLowerCase().includes('back') || 
-        device.label.toLowerCase().includes('rear') ||
-        device.label.toLowerCase().includes('environment')
+      const { data: { text } } = await Tesseract.recognize(
+        imageSource,
+        'eng',
+        {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              updateProcessingStep('ocr', 'processing', `${Math.round(m.progress * 100)}% complete`);
+            }
+          }
+        }
       );
       
-      if (backCamera) {
-        setSelectedDeviceId(backCamera.deviceId);
-        setFacingMode('environment');
-      } else if (videoDevices.length > 0) {
-        setSelectedDeviceId(videoDevices[0].deviceId);
-        setFacingMode('user');
+      console.log('Extracted text:', text);
+      setExtractedText(text);
+      updateProcessingStep('ocr', 'completed', 'Text extracted successfully');
+      
+      if (text.trim()) {
+        await processWithGPT(text);
+      } else {
+        updateProcessingStep('ocr', 'error', 'No text found in image');
+        generateDynamicForm({});
       }
     } catch (error) {
-      console.error('Error getting devices:', error);
+      console.error('Tesseract error:', error);
+      updateProcessingStep('ocr', 'error', 'Failed to extract text');
+      generateDynamicForm({});
     }
-  }, []);
-
-  // File validation function - enhanced for panoramic
-  const validateFile = (file: File): { isValid: boolean; error?: string; isPanoramic?: boolean } => {
-    // Check file type
-    const acceptedTypes = Object.keys(ACCEPTED_FILE_TYPES);
-    if (!acceptedTypes.includes(file.type)) {
-      return {
-        isValid: false,
-        error: 'Only JPG, PNG, HEIC, WebP, and PDF files are allowed'
-      };
-    }
-
-    // Check file size
-    if (file.size > MAX_FILE_SIZE) {
-      return {
-        isValid: false,
-        error: 'File size must be less than 25MB'
-      };
-    }
-
-    // Detect if image might be panoramic based on file size and name
-    const isPanoramic = file.size > 5 * 1024 * 1024 || // > 5MB
-                       file.name.toLowerCase().includes('pano') ||
-                       file.name.toLowerCase().includes('panoramic') ||
-                       file.name.toLowerCase().includes('long');
-
-    return { isValid: true, isPanoramic };
   };
 
-  // Generate unique receipt ID for filename
-  const generateReceiptId = (): string => {
-    return `receipt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  };
-
-  // Camera Functions
-  const startCamera = useCallback(async () => {
-    try {
-      setError(null);
-      setCameraError(null);
-      setIsLoading(true);
-      setCameraReady(false);
-
-      // Check if camera is supported
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Camera access is not supported in this browser. Please try uploading an image instead.');
-      }
-
-      // Get available devices first
-      await getDevices();
-      
-      setCurrentStep('camera');
-      addToast('info', 'Initializing camera...');
-      
-    } catch (err: any) {
-      console.error('Camera initialization error:', err);
-      setIsLoading(false);
-      
-      if (err.name === 'NotAllowedError') {
-        const errorMsg = 'Camera access denied. Please allow camera permissions in your browser settings and try again.';
-        setCameraError(errorMsg);
-        addToast('error', errorMsg);
-      } else if (err.name === 'NotFoundError') {
-        const errorMsg = 'No camera found on this device. Please try uploading an image instead.';
-        setCameraError(errorMsg);
-        addToast('error', errorMsg);
-      } else if (err.name === 'NotSupportedError') {
-        const errorMsg = 'Camera is not supported in this browser. Please try uploading an image instead.';
-        setCameraError(errorMsg);
-        addToast('error', errorMsg);
-      } else {
-        const errorMsg = err.message || 'Unable to access camera. Please check permissions or try uploading an image instead.';
-        setCameraError(errorMsg);
-        addToast('error', errorMsg);
-      }
-    }
-  }, [getDevices, addToast]);
-
-  // Handle camera ready
-  const handleCameraReady = useCallback(() => {
-    setCameraReady(true);
-    setIsLoading(false);
-    setCameraError(null);
+  const processWithGPT = async (text: string) => {
+    updateProcessingStep('gpt', 'processing');
     
-    if (isPanoramicMode) {
-      addToast('info', 'Panoramic mode: Capture multiple shots of your long receipt. Tap "Finish" when done.');
-    } else {
-      addToast('success', 'Camera ready! Position your receipt and tap capture.');
-    }
-  }, [addToast, isPanoramicMode]);
-
-  // Handle camera error
-  const handleCameraError = useCallback((error: string | DOMException) => {
-    console.error('Camera error:', error);
-    setCameraReady(false);
-    setIsLoading(false);
+    // Check if OpenAI API key is available
+    const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
     
-    let errorMessage = 'Camera error occurred';
-    
-    if (typeof error === 'string') {
-      errorMessage = error;
-    } else if (error instanceof DOMException) {
-      switch (error.name) {
-        case 'NotAllowedError':
-          errorMessage = 'Camera permission denied. Please allow camera access and try again.';
-          break;
-        case 'NotFoundError':
-          errorMessage = 'No camera found. Please try uploading an image instead.';
-          break;
-        case 'NotSupportedError':
-          errorMessage = 'Camera not supported in this browser. Please try uploading an image instead.';
-          break;
-        case 'OverconstrainedError':
-          errorMessage = 'Camera constraints not supported. Trying alternative settings...';
-          // Try switching to front camera
-          setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
-          return;
-        default:
-          errorMessage = `Camera error: ${error.message}`;
-      }
-    }
-    
-    setCameraError(errorMessage);
-    addToast('error', errorMessage);
-  }, [addToast]);
-
-  // Capture image from webcam
-  const captureImage = useCallback(() => {
-    if (!webcamRef.current || !cameraReady) {
-      addToast('error', 'Camera not ready. Please wait for camera to initialize.');
+    if (!openaiApiKey) {
+      console.warn('OpenAI API key not found, using fallback parsing');
+      updateProcessingStep('gpt', 'completed', 'Using fallback text parsing');
+      const fallbackData = parseFallback(text);
+      generateDynamicForm(fallbackData);
       return;
     }
 
     try {
-      const imageSrc = webcamRef.current.getScreenshot({
-        width: isPanoramicMode ? 2560 : 1920, // Higher resolution for panoramic
-        height: isPanoramicMode ? 1440 : 1080,
-        screenshotFormat: 'image/jpeg',
-        screenshotQuality: 0.95 // Higher quality for panoramic
+      const systemPrompt = `You are a reliable AI that extracts structured receipt details from plain text.
+Extract the following fields and return ONLY valid JSON with these exact field names:
+
+{
+  "product_description": "main product or service purchased",
+  "brand_name": "brand or manufacturer name",
+  "store_name": "store or merchant name",
+  "purchase_location": "store location or address",
+  "purchase_date": "date in YYYY-MM-DD format",
+  "amount": "total amount as number (no currency symbols)",
+  "warranty_period": "warranty period (e.g., '1 year', '6 months')",
+  "extended_warranty": "extended warranty if mentioned",
+  "model_number": "product model number if available",
+  "country": "country where purchased"
+}
+
+Return only the JSON object. If a field is not found, use empty string or null.`;
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiApiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: text }
+          ],
+          temperature: 0,
+          max_tokens: 500
+        })
       });
 
-      if (!imageSrc) {
-        addToast('error', 'Failed to capture image. Please try again.');
-        return;
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.status}`);
       }
 
-      if (isPanoramicMode) {
-        // Add to panoramic sequence
-        setCapturedImages(prev => [...prev, imageSrc]);
-        addToast('success', `Captured segment ${capturedImages.length + 1}. Continue capturing or tap "Finish".`);
-      } else {
-        // Single capture
-        setCapturedImage(imageSrc);
-        
-        // Create file preview
-        setFilePreview({
-          type: 'image',
-          url: imageSrc,
-          name: 'captured_receipt.jpg'
-        });
-        
-        setCurrentStep('preview');
-        addToast('success', 'Image captured successfully!');
+      const result = await response.json();
+      const gptResponse = result.choices[0].message.content;
+      
+      try {
+        const structuredData = JSON.parse(gptResponse);
+        console.log('Structured data:', structuredData);
+        updateProcessingStep('gpt', 'completed', 'Data structured successfully');
+        generateDynamicForm(structuredData);
+      } catch (parseError) {
+        console.error('Failed to parse GPT response:', parseError);
+        updateProcessingStep('gpt', 'error', 'Failed to parse AI response');
+        const fallbackData = parseFallback(text);
+        generateDynamicForm(fallbackData);
       }
-      
-      setRetakeCount(prev => prev + 1);
-      
     } catch (error) {
-      console.error('Capture error:', error);
-      addToast('error', 'Failed to capture image. Please try again.');
+      console.error('GPT processing error:', error);
+      updateProcessingStep('gpt', 'error', 'AI processing failed');
+      const fallbackData = parseFallback(text);
+      generateDynamicForm(fallbackData);
     }
-  }, [cameraReady, addToast, isPanoramicMode, capturedImages.length]);
+  };
 
-  // Finish panoramic capture
-  const finishPanoramicCapture = useCallback(() => {
-    if (capturedImages.length === 0) {
-      addToast('error', 'No images captured. Please capture at least one segment.');
-      return;
-    }
+  const parseFallback = (text: string): ExtractedData => {
+    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+    const data: ExtractedData = {};
 
-    // For now, use the first image as preview (in production, you'd stitch them)
-    setCapturedImage(capturedImages[0]);
-    
-    setFilePreview({
-      type: 'image',
-      url: capturedImages[0],
-      name: `panoramic_receipt_${capturedImages.length}_segments.jpg`,
-      isPanoramic: true
-    });
-    
-    setCurrentStep('preview');
-    addToast('success', `Panoramic capture complete! ${capturedImages.length} segments captured.`);
-  }, [capturedImages, addToast]);
-
-  // Switch camera (front/back)
-  const switchCamera = useCallback(() => {
-    if (devices.length > 1) {
-      const currentIndex = devices.findIndex(device => device.deviceId === selectedDeviceId);
-      const nextIndex = (currentIndex + 1) % devices.length;
-      setSelectedDeviceId(devices[nextIndex].deviceId);
+    // Simple pattern matching for common receipt elements
+    for (const line of lines) {
+      const lowerLine = line.toLowerCase();
       
-      // Update facing mode based on device label
-      const nextDevice = devices[nextIndex];
-      if (nextDevice.label.toLowerCase().includes('front') || nextDevice.label.toLowerCase().includes('user')) {
-        setFacingMode('user');
-      } else {
-        setFacingMode('environment');
+      // Look for amounts
+      const amountMatch = line.match(/\$?(\d+\.?\d*)/);
+      if (amountMatch && !data.amount) {
+        data.amount = parseFloat(amountMatch[1]);
       }
       
-      addToast('info', 'Switching camera...');
-    } else {
-      // Fallback: toggle facing mode
-      setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
-      addToast('info', 'Switching camera...');
+      // Look for dates
+      const dateMatch = line.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
+      if (dateMatch && !data.purchase_date) {
+        const date = new Date(dateMatch[1]);
+        if (!isNaN(date.getTime())) {
+          data.purchase_date = date.toISOString().split('T')[0];
+        }
+      }
+      
+      // Look for store names (usually at the top)
+      if (!data.store_name && lines.indexOf(line) < 3 && line.length > 3) {
+        data.store_name = line;
+      }
     }
-  }, [devices, selectedDeviceId, addToast]);
 
-  // File Upload Functions
+    return data;
+  };
+
+  const generateDynamicForm = (data: ExtractedData) => {
+    updateProcessingStep('form', 'processing');
+    setStructuredData(data);
+    setFormData({
+      product_description: data.product_description || '',
+      brand_name: data.brand_name || '',
+      store_name: data.store_name || '',
+      purchase_location: data.purchase_location || '',
+      purchase_date: data.purchase_date || '',
+      amount: data.amount || 0,
+      warranty_period: data.warranty_period || '1 year',
+      extended_warranty: data.extended_warranty || '',
+      model_number: data.model_number || '',
+      country: data.country || 'United States'
+    });
+    updateProcessingStep('form', 'completed', 'Form ready for review');
+    setShowForm(true);
+    setIsProcessing(false);
+  };
+
+  const handleCapture = useCallback(() => {
+    const imageSrc = webcamRef.current?.getScreenshot();
+    if (imageSrc) {
+      setCapturedImage(imageSrc);
+      setShowCamera(false);
+      startProcessing(imageSrc);
+    }
+  }, [webcamRef]);
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      const validation = validateFile(file);
-      
-      if (!validation.isValid) {
-        setError(validation.error || 'Invalid file');
-        addToast('error', validation.error || 'Invalid file');
-        return;
-      }
-
-      setError(null);
       setUploadedFile(file);
-      
-      // Create file preview
-      if (file.type === 'application/pdf') {
-        setFilePreview({
-          type: 'pdf',
-          url: URL.createObjectURL(file),
-          name: file.name,
-          isPanoramic: validation.isPanoramic
-        });
-        setCurrentStep('preview');
-        addToast('success', validation.isPanoramic ? 'Panoramic PDF selected!' : 'PDF file selected successfully!');
-      } else {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const imageUrl = e.target?.result as string;
-          setCapturedImage(imageUrl);
-          setFilePreview({
-            type: 'image',
-            url: imageUrl,
-            name: file.name,
-            isPanoramic: validation.isPanoramic
-          });
-          setCurrentStep('preview');
-          addToast('success', validation.isPanoramic ? 'Panoramic image selected!' : 'Image file selected successfully!');
-        };
-        reader.onerror = () => {
-          setError('Failed to read the selected file');
-          addToast('error', 'Failed to read the selected file');
-        };
-        reader.readAsDataURL(file);
-      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const imageSrc = e.target?.result as string;
+        setCapturedImage(imageSrc);
+        startProcessing(file);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  // Form Validation
+  const startProcessing = async (imageSource: string | File) => {
+    setIsProcessing(true);
+    initializeProcessingSteps();
+    await processWithTesseract(imageSource);
+  };
+
   const validateForm = (): boolean => {
-    const errors: Partial<FormData> = {};
+    const errors: Record<string, string> = {};
     
-    if (!formData.purchaseDate) errors.purchaseDate = 'Purchase date is required';
-    if (!formData.country) errors.country = 'Country is required';
-    if (!formData.productDescription) errors.productDescription = 'Product description is required';
-    if (!formData.brandName) errors.brandName = 'Brand name is required';
-    if (!formData.warrantyPeriod) errors.warrantyPeriod = 'Warranty period is required';
+    if (!formData.product_description?.trim()) {
+      errors.product_description = 'Product description is required';
+    }
     
+    if (!formData.brand_name?.trim()) {
+      errors.brand_name = 'Brand name is required';
+    }
+    
+    if (!formData.purchase_date) {
+      errors.purchase_date = 'Purchase date is required';
+    }
+    
+    if (!formData.warranty_period?.trim()) {
+      errors.warranty_period = 'Warranty period is required';
+    }
+    
+    if (!formData.country?.trim()) {
+      errors.country = 'Country is required';
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  // Supabase Integration with progress tracking
-  const uploadFileToSupabase = async (file: File | string): Promise<string | null> => {
+  const handleFormSubmission = async () => {
+    if (!validateForm() || !user) return;
+
+    setIsSaving(true);
+    setSaveError(null);
+
     try {
-      const user = await getCurrentUser();
-      if (!user) {
-        throw new Error('User not authenticated');
+      // Upload image to Supabase storage if we have one
+      let imageUrl = null;
+      if (uploadedFile || capturedImage) {
+        const fileName = `${user.id}/${Date.now()}-receipt.jpg`;
+        
+        let fileToUpload: File;
+        if (uploadedFile) {
+          fileToUpload = uploadedFile;
+        } else if (capturedImage) {
+          // Convert base64 to file
+          const response = await fetch(capturedImage);
+          const blob = await response.blob();
+          fileToUpload = new File([blob], 'captured-receipt.jpg', { type: 'image/jpeg' });
+        } else {
+          throw new Error('No image to upload');
+        }
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('receipt-images')
+          .upload(fileName, fileToUpload);
+
+        if (uploadError) {
+          console.error('Image upload error:', uploadError);
+        } else {
+          const { data: urlData } = supabase.storage
+            .from('receipt-images')
+            .getPublicUrl(fileName);
+          imageUrl = urlData.publicUrl;
+        }
       }
 
-      let fileToUpload: File;
-      let fileName: string;
-      const receiptId = generateReceiptId();
-
-      if (typeof file === 'string') {
-        // Convert base64 to blob for captured images
-        const response = await fetch(file);
-        const blob = await response.blob();
-        const suffix = filePreview?.isPanoramic ? '_panoramic' : '';
-        fileName = `${receiptId}${suffix}.jpg`;
-        fileToUpload = new File([blob], fileName, { type: 'image/jpeg' });
-      } else {
-        // Use uploaded file directly
-        const fileExtension = file.name.split('.').pop() || 'jpg';
-        const suffix = filePreview?.isPanoramic ? '_panoramic' : '';
-        fileName = `${receiptId}${suffix}.${fileExtension}`;
-        fileToUpload = file;
-      }
-
-      // Upload to receipt-images bucket with user-specific path
-      const filePath = `${user.id}/${fileName}`;
-      
-      setUploadProgress(0);
-      addToast('info', 'Uploading receipt...');
-      
-      const { data, error } = await supabase.storage
-        .from('receipt-images')
-        .upload(filePath, fileToUpload, {
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (error) {
-        console.error('Storage upload error:', error);
-        throw error;
-      }
-      
-      setUploadProgress(100);
-      addToast('success', 'Receipt uploaded successfully!');
-      return data.path;
-    } catch (error) {
-      console.error('Upload error:', error);
-      addToast('error', 'Failed to upload receipt. Please try again.');
-      throw error;
-    }
-  };
-
-  const saveReceiptToDatabase = async (imagePath?: string) => {
-    try {
-      const user = await getCurrentUser();
-      if (!user) {
-        throw new Error('User not authenticated');
-      }
-
+      // Insert receipt data
       const receiptData = {
         user_id: user.id,
-        purchase_date: formData.purchaseDate,
+        product_description: formData.product_description,
+        brand_name: formData.brand_name,
+        store_name: formData.store_name || null,
+        purchase_location: formData.purchase_location || null,
+        purchase_date: formData.purchase_date,
+        amount: formData.amount || null,
+        warranty_period: formData.warranty_period,
+        extended_warranty: formData.extended_warranty || null,
+        model_number: formData.model_number || null,
         country: formData.country,
-        product_description: formData.productDescription,
-        brand_name: formData.brandName,
-        model_number: formData.modelNumber || null,
-        warranty_period: formData.warrantyPeriod,
-        extended_warranty: formData.extendedWarranty || null,
-        amount: formData.amount ? parseFloat(formData.amount) : null,
-        image_url: imagePath || null,
-        store_name: formData.storeName || null,
-        purchase_location: formData.purchaseLocation || null
+        image_url: imageUrl,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
 
       const { data, error } = await supabase
         .from('receipts')
-        .insert([receiptData])
-        .select()
-        .single();
+        .insert([receiptData]);
 
       if (error) {
-        console.error('Database save error:', error);
         throw error;
       }
 
-      addToast('success', 'Receipt saved to your library!');
-      return data;
-    } catch (error) {
-      console.error('Save error:', error);
-      addToast('error', 'Failed to save receipt data. Please try again.');
-      throw error;
-    }
-  };
-
-  // Handle Submissions
-  const handleImageSubmit = async () => {
-    if (!capturedImage && !uploadedFile) return;
-    
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      // Upload file to Supabase Storage
-      const imagePath = await uploadFileToSupabase(uploadedFile || capturedImage!);
+      console.log('Receipt saved successfully:', data);
+      setSaveSuccess(true);
       
-      if (imagePath) {
-        // Save receipt record with file path
-        await saveReceiptToDatabase(imagePath);
-        setCurrentStep('success');
-      }
-    } catch (err: any) {
-      console.error('Submit error:', err);
-      setError(err.message || 'Failed to save receipt. Please try again.');
+      // Reset form after successful save
+      setTimeout(() => {
+        resetScanning();
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Save error:', error);
+      setSaveError(error.message || 'Failed to save receipt');
     } finally {
-      setIsLoading(false);
-      setUploadProgress(0);
+      setIsSaving(false);
     }
   };
 
-  const handleManualSubmit = async () => {
-    if (!validateForm()) return;
-    
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      await saveReceiptToDatabase();
-      setCurrentStep('success');
-    } catch (err: any) {
-      console.error('Manual submit error:', err);
-      setError(err.message || 'Failed to save receipt data. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const resetForm = () => {
+  const resetScanning = () => {
+    setScanningMode(null);
+    setShowCamera(false);
     setCapturedImage(null);
     setUploadedFile(null);
-    setFilePreview(null);
-    setUploadProgress(0);
-    setCameraError(null);
-    setCameraReady(false);
-    setRetakeCount(0);
-    setCapturedImages([]);
-    setIsPanoramicMode(false);
-    setSelectedCaptureMode('standard');
-    setFormData({
-      purchaseDate: '',
-      country: '',
-      productDescription: '',
-      brandName: '',
-      modelNumber: '',
-      warrantyPeriod: '',
-      extendedWarranty: '',
-      amount: '',
-      storeName: '',
-      purchaseLocation: ''
-    });
+    setIsProcessing(false);
+    setProcessingSteps([]);
+    setExtractedText('');
+    setStructuredData({});
+    setShowForm(false);
+    setFormData({});
     setFormErrors({});
-    setError(null);
-    setCurrentStep('options');
+    setSaveSuccess(false);
+    setSaveError(null);
+    setShowExtractedText(false);
   };
 
-  // Cleanup on unmount
-  React.useEffect(() => {
-    return () => {
-      if (filePreview?.url && filePreview.type === 'pdf') {
-        URL.revokeObjectURL(filePreview.url);
-      }
-    };
-  }, [filePreview]);
-
-  // Get camera constraints
-  const getVideoConstraints = () => {
-    const constraints: MediaTrackConstraints = {
-      width: { ideal: isPanoramicMode ? 2560 : 1920, min: 640 },
-      height: { ideal: isPanoramicMode ? 1440 : 1080, min: 480 },
-      facingMode: facingMode
-    };
-
-    if (selectedDeviceId) {
-      constraints.deviceId = { exact: selectedDeviceId };
-      // Remove facingMode when using specific device
-      delete constraints.facingMode;
+  const handleInputChange = (field: keyof ExtractedData, value: string | number) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (formErrors[field]) {
+      setFormErrors(prev => ({ ...prev, [field]: '' }));
     }
-
-    return constraints;
   };
+
+  const formatFieldName = (field: string) => {
+    return field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  const getStepIcon = (status: ProcessingStep['status']) => {
+    switch (status) {
+      case 'completed':
+        return <CheckCircle className="h-5 w-5 text-green-500" />;
+      case 'processing':
+        return <Loader2 className="h-5 w-5 text-primary animate-spin" />;
+      case 'error':
+        return <AlertCircle className="h-5 w-5 text-red-500" />;
+      default:
+        return <div className="h-5 w-5 rounded-full border-2 border-gray-300" />;
+    }
+  };
+
+  if (saveSuccess) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-card p-8 text-center">
+          <div className="bg-green-100 rounded-full p-4 w-16 h-16 mx-auto mb-6">
+            <CheckCircle className="h-8 w-8 text-green-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-text-primary mb-4">
+            Receipt Saved Successfully!
+          </h2>
+          <p className="text-text-secondary mb-6">
+            Your receipt has been processed and saved to your library.
+          </p>
+          <div className="space-y-4">
+            <button
+              onClick={resetScanning}
+              className="w-full bg-primary text-white py-3 px-4 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
+            >
+              Scan Another Receipt
+            </button>
+            <button
+              onClick={onBackToDashboard}
+              className="w-full border border-gray-300 text-text-secondary py-3 px-4 rounded-lg font-medium hover:bg-gray-50 transition-colors duration-200"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
-      {/* Toast Container */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={`flex items-center space-x-2 px-4 py-3 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 ${
-              toast.type === 'success' ? 'bg-green-500 text-white' :
-              toast.type === 'error' ? 'bg-red-500 text-white' :
-              'bg-blue-500 text-white'
-            }`}
-          >
-            {toast.type === 'success' && <CheckCircle className="h-5 w-5" />}
-            {toast.type === 'error' && <AlertCircle className="h-5 w-5" />}
-            {toast.type === 'info' && <Clock className="h-5 w-5" />}
-            <span className="text-sm font-medium flex-1">{toast.message}</span>
-            <button
-              onClick={() => removeToast(toast.id)}
-              className="text-white hover:text-gray-200 transition-colors duration-200"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        ))}
-      </div>
-
       {/* Header */}
       <header className="bg-white shadow-card border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -710,19 +512,48 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                 )}
               </button>
 
-              {/* Settings */}
-              <button className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
-                <Settings className="h-6 w-6" />
-              </button>
-
-              {/* Back to Dashboard */}
+              {/* Back Button */}
               <button
                 onClick={onBackToDashboard}
-                className="flex items-center space-x-2 bg-white text-primary border-2 border-primary px-4 py-2 rounded-lg font-medium hover:bg-primary hover:text-white transition-all duration-200"
+                className="flex items-center space-x-2 bg-white text-text-primary border-2 border-gray-300 hover:border-primary px-4 py-2 rounded-lg font-medium transition-all duration-200"
               >
                 <ArrowLeft className="h-4 w-4" />
                 <span className="hidden sm:inline">Back to Dashboard</span>
               </button>
+
+              {/* User Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+                >
+                  <div className="bg-primary rounded-full p-2">
+                    <User className="h-4 w-4 text-white" />
+                  </div>
+                  <span className="text-sm font-medium text-text-primary hidden sm:inline">
+                    {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
+                  </span>
+                </button>
+
+                {/* User Dropdown */}
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-200">
+                      <p className="text-sm font-medium text-text-primary">
+                        {user?.user_metadata?.full_name || 'User'}
+                      </p>
+                      <p className="text-xs text-text-secondary">{user?.email}</p>
+                    </div>
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -736,526 +567,214 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
             Scan Your Receipt
           </h1>
           <p className="text-xl text-text-secondary">
-            Choose how you'd like to capture your receipt information
+            Capture or upload your receipt to automatically extract and organize the data
           </p>
         </div>
 
         {/* Error Message */}
-        {error && (
+        {saveError && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-center">
               <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
-              <p className="text-sm text-red-700">{error}</p>
+              <p className="text-sm text-red-700">{saveError}</p>
             </div>
           </div>
         )}
 
         {/* Scanning Options */}
-        {currentStep === 'options' && (
-          <div className="grid md:grid-cols-3 gap-8">
+        {!scanningMode && !showForm && (
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
             <button
-              onClick={() => setCurrentStep('capture-mode')}
-              className="group bg-gradient-to-br from-primary to-teal-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+              onClick={() => {
+                setScanningMode('camera');
+                setShowCamera(true);
+              }}
+              className="group bg-white p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 border border-gray-100"
             >
-              <div className="flex flex-col items-center text-center">
-                <div className="bg-white/20 rounded-full p-6 mb-6 group-hover:bg-white/30 transition-colors duration-300">
-                  <Camera className="h-12 w-12" />
+              <div className="text-center">
+                <div className="bg-gradient-to-br from-primary/10 to-primary/20 rounded-full p-6 w-fit mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+                  <Camera className="h-12 w-12 text-primary" />
                 </div>
-                <h3 className="text-2xl font-bold mb-4">Camera Capture</h3>
-                <p className="text-white/90 leading-relaxed">
-                  Use your device camera to capture receipts. 
-                  Supports both standard and panoramic modes for long receipts.
+                <h3 className="text-xl font-bold text-text-primary mb-2 group-hover:text-primary transition-colors duration-300">
+                  Take Photo
+                </h3>
+                <p className="text-text-secondary">
+                  Use your camera to capture a receipt photo
                 </p>
               </div>
             </button>
 
             <button
-              onClick={() => fileInputRef.current?.click()}
-              className="group bg-gradient-to-br from-secondary to-purple-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+              onClick={() => {
+                setScanningMode('upload');
+                fileInputRef.current?.click();
+              }}
+              className="group bg-white p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 border border-gray-100"
             >
-              <div className="flex flex-col items-center text-center">
-                <div className="bg-white/20 rounded-full p-6 mb-6 group-hover:bg-white/30 transition-colors duration-300">
-                  <Upload className="h-12 w-12" />
+              <div className="text-center">
+                <div className="bg-gradient-to-br from-secondary/10 to-secondary/20 rounded-full p-6 w-fit mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+                  <Upload className="h-12 w-12 text-secondary" />
                 </div>
-                <h3 className="text-2xl font-bold mb-4">Upload File</h3>
-                <p className="text-white/90 leading-relaxed">
-                  Upload panoramic images, long receipt photos, or PDF files from your device.
-                </p>
-                <div className="mt-4 text-sm text-white/80">
-                  <p>Supports: JPG, PNG, HEIC, WebP, PDF</p>
-                  <p>Max size: 25MB for panoramic images</p>
-                </div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => setCurrentStep('manual')}
-              className="group bg-gradient-to-br from-accent-yellow to-yellow-500 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
-            >
-              <div className="flex flex-col items-center text-center">
-                <div className="bg-white/20 rounded-full p-6 mb-6 group-hover:bg-white/30 transition-colors duration-300">
-                  <Edit3 className="h-12 w-12" />
-                </div>
-                <h3 className="text-2xl font-bold mb-4">Manual Entry</h3>
-                <p className="text-white/90 leading-relaxed">
-                  Enter receipt details manually using our 
-                  structured form for complete accuracy.
+                <h3 className="text-xl font-bold text-text-primary mb-2 group-hover:text-secondary transition-colors duration-300">
+                  Upload File
+                </h3>
+                <p className="text-text-secondary">
+                  Select an image file from your device
                 </p>
               </div>
             </button>
           </div>
         )}
 
-        {/* Capture Mode Selection */}
-        {currentStep === 'capture-mode' && (
-          <div className="bg-white rounded-2xl shadow-card p-8">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-text-primary mb-2">Choose Capture Mode</h2>
-              <p className="text-text-secondary">Select the best option for your receipt type</p>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-6 mb-8">
-              {captureModes.filter(mode => mode.type !== 'manual').map((mode) => {
-                const Icon = mode.icon;
-                const isSelected = selectedCaptureMode === mode.type;
-                
-                return (
-                  <button
-                    key={mode.type}
-                    onClick={() => setSelectedCaptureMode(mode.type)}
-                    className={`p-6 rounded-xl border-2 transition-all duration-200 text-left ${
-                      isSelected 
-                        ? 'border-primary bg-primary/5' 
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-start space-x-4">
-                      <div className={`rounded-lg p-3 ${
-                        isSelected ? 'bg-primary text-white' : 'bg-gray-100 text-text-secondary'
-                      }`}>
-                        <Icon className="h-6 w-6" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className={`font-bold mb-2 ${
-                          isSelected ? 'text-primary' : 'text-text-primary'
-                        }`}>
-                          {mode.label}
-                        </h3>
-                        <p className="text-text-secondary text-sm leading-relaxed">
-                          {mode.description}
-                        </p>
-                        {mode.type === 'panoramic' && (
-                          <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-                            <div className="flex items-start space-x-2">
-                              <Info className="h-4 w-4 text-blue-600 mt-0.5" />
-                              <div className="text-xs text-blue-700">
-                                <p className="font-medium mb-1">Perfect for:</p>
-                                <ul className="space-y-1">
-                                  <li>• Long grocery receipts</li>
-                                  <li>• Restaurant bills with many items</li>
-                                  <li>• Hardware store receipts</li>
-                                  <li>• Any receipt longer than standard size</li>
-                                </ul>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex justify-center space-x-4">
-              <button
-                onClick={() => setCurrentStep('options')}
-                className="flex items-center space-x-2 px-6 py-3 border-2 border-gray-300 text-text-secondary rounded-lg hover:border-gray-400 hover:text-text-primary transition-colors duration-200"
-              >
-                <ArrowLeft className="h-5 w-5" />
-                <span>Back</span>
-              </button>
-              <button
-                onClick={() => {
-                  setIsPanoramicMode(selectedCaptureMode === 'panoramic');
-                  startCamera();
-                }}
-                className="flex items-center space-x-2 bg-primary text-white px-8 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
-              >
-                <Camera className="h-5 w-5" />
-                <span>Start {selectedCaptureMode === 'panoramic' ? 'Panoramic ' : ''}Capture</span>
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Hidden File Input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileUpload}
+          className="hidden"
+        />
 
         {/* Camera View */}
-        {currentStep === 'camera' && (
-          <div className="bg-white rounded-2xl shadow-card p-6">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-text-primary mb-2">
-                {isPanoramicMode ? 'Panoramic Capture Mode' : 'Position Your Receipt'}
-              </h2>
-              <p className="text-text-secondary">
-                {isPanoramicMode 
-                  ? 'Capture your long receipt in multiple segments. Start from the top and work your way down.'
-                  : 'Make sure the entire receipt is visible and well-lit'
-                }
-              </p>
+        {showCamera && (
+          <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
+            <div className="text-center mb-4">
+              <h3 className="text-xl font-bold text-text-primary mb-2">Position Your Receipt</h3>
+              <p className="text-text-secondary">Make sure the receipt is clearly visible and well-lit</p>
             </div>
-
-            {/* Panoramic Progress */}
-            {isPanoramicMode && capturedImages.length > 0 && (
-              <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-blue-900">
-                    Segments Captured: {capturedImages.length}
-                  </span>
-                  <button
-                    onClick={() => setCapturedImages([])}
-                    className="text-blue-600 hover:text-blue-800 text-sm"
-                  >
-                    Reset
-                  </button>
-                </div>
-                <div className="flex space-x-2">
-                  {capturedImages.map((_, index) => (
-                    <div key={index} className="w-4 h-4 bg-blue-500 rounded-full"></div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Camera Error */}
-            {cameraError && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
-                    <p className="text-sm text-red-700">{cameraError}</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setCameraError(null);
-                      startCamera();
-                    }}
-                    className="text-red-600 hover:text-red-800 transition-colors duration-200"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Camera Container */}
-            <div className="relative bg-gray-100 rounded-lg overflow-hidden mb-6" style={{ aspectRatio: '4/3' }}>
-              {!cameraError && (
-                <Webcam
-                  ref={webcamRef}
-                  audio={false}
-                  screenshotFormat="image/jpeg"
-                  videoConstraints={getVideoConstraints()}
-                  onUserMedia={handleCameraReady}
-                  onUserMediaError={handleCameraError}
-                  className="w-full h-full object-cover"
-                  mirrored={facingMode === 'user'}
-                />
-              )}
-              
-              {/* Camera overlay */}
-              <div className="absolute inset-4 border-2 border-primary border-dashed rounded-lg pointer-events-none"></div>
-              
-              {/* Camera status */}
-              {isLoading && (
-                <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                  <div className="text-center text-white">
-                    <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-                    <p>Initializing camera...</p>
-                  </div>
-                </div>
-              )}
-              
-              {/* Camera controls */}
-              {cameraReady && !cameraError && (
-                <>
-                  {/* Switch camera button */}
-                  {devices.length > 1 && (
-                    <button
-                      onClick={switchCamera}
-                      className="absolute top-4 right-4 bg-black bg-opacity-50 text-white rounded-full p-2 hover:bg-opacity-70 transition-colors duration-200"
-                    >
-                      <SwitchCamera className="h-5 w-5" />
-                    </button>
-                  )}
-                  
-                  {/* Mode indicator */}
-                  {isPanoramicMode && (
-                    <div className="absolute top-4 left-4 bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-medium">
-                      <Maximize2 className="h-4 w-4 inline mr-1" />
-                      Panoramic Mode
-                    </div>
-                  )}
-                  
-                  {/* Capture button */}
-                  <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-                    <button
-                      onClick={captureImage}
-                      className="bg-primary text-white rounded-full p-4 shadow-lg hover:bg-primary/90 transition-colors duration-200 transform hover:scale-105"
-                    >
-                      <Camera className="h-8 w-8" />
-                    </button>
-                  </div>
-                  
-                  {/* Finish panoramic button */}
-                  {isPanoramicMode && capturedImages.length > 0 && (
-                    <div className="absolute bottom-4 right-4">
-                      <button
-                        onClick={finishPanoramicCapture}
-                        className="bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-green-600 transition-colors duration-200 text-sm font-medium"
-                      >
-                        Finish ({capturedImages.length})
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Camera info */}
-            {cameraReady && (
-              <div className="text-center text-sm text-text-secondary mb-4">
-                <p>Camera: {facingMode === 'environment' ? 'Back' : 'Front'}</p>
-                {retakeCount > 0 && <p>Captures: {retakeCount}</p>}
-                {isPanoramicMode && (
-                  <p className="text-blue-600 font-medium">
-                    Tip: Overlap each segment by about 20% for best results
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div className="flex justify-center space-x-4">
-              <button
-                onClick={() => {
-                  setCurrentStep('capture-mode');
-                  setCameraError(null);
-                  setCameraReady(false);
-                  setCapturedImages([]);
+            
+            <div className="relative max-w-md mx-auto">
+              <Webcam
+                ref={webcamRef}
+                audio={false}
+                screenshotFormat="image/jpeg"
+                className="w-full rounded-lg"
+                videoConstraints={{
+                  facingMode: 'environment'
                 }}
-                className="flex items-center space-x-2 px-6 py-3 border-2 border-gray-300 text-text-secondary rounded-lg hover:border-gray-400 hover:text-text-primary transition-colors duration-200"
+              />
+              
+              <div className="flex justify-center space-x-4 mt-4">
+                <button
+                  onClick={handleCapture}
+                  className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
+                >
+                  <Camera className="h-5 w-5" />
+                  <span>Capture</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCamera(false);
+                    setScanningMode(null);
+                  }}
+                  className="border border-gray-300 text-text-secondary px-6 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors duration-200"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Processing Steps */}
+        {isProcessing && (
+          <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
+            <h3 className="text-xl font-bold text-text-primary mb-6">Processing Your Receipt</h3>
+            
+            <div className="space-y-4">
+              {processingSteps.map((step, index) => (
+                <div key={step.id} className="flex items-center space-x-4">
+                  <div className="flex-shrink-0">
+                    {getStepIcon(step.status)}
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium text-text-primary">{step.name}</div>
+                    {step.message && (
+                      <div className="text-sm text-text-secondary">{step.message}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Captured Image Preview */}
+        {capturedImage && !isProcessing && (
+          <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-text-primary">Captured Receipt</h3>
+              <button
+                onClick={resetScanning}
+                className="text-text-secondary hover:text-text-primary transition-colors duration-200"
               >
                 <X className="h-5 w-5" />
-                <span>Cancel</span>
               </button>
-              
-              {cameraError && (
+            </div>
+            
+            <div className="max-w-md mx-auto">
+              <img
+                src={capturedImage}
+                alt="Captured receipt"
+                className="w-full rounded-lg border border-gray-200"
+              />
+            </div>
+
+            {/* Show Extracted Text Toggle */}
+            {extractedText && (
+              <div className="mt-4 text-center">
                 <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center space-x-2 bg-secondary text-white px-6 py-3 rounded-lg hover:bg-secondary/90 transition-colors duration-200"
+                  onClick={() => setShowExtractedText(!showExtractedText)}
+                  className="text-primary hover:text-primary/80 font-medium text-sm flex items-center space-x-2 mx-auto"
                 >
-                  <Upload className="h-5 w-5" />
-                  <span>Upload Instead</span>
+                  {showExtractedText ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  <span>{showExtractedText ? 'Hide' : 'Show'} Extracted Text</span>
                 </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* File Preview */}
-        {currentStep === 'preview' && filePreview && (
-          <div className="bg-white rounded-2xl shadow-card p-6">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-text-primary mb-2">Review Your Receipt</h2>
-              <p className="text-text-secondary">
-                {filePreview.isPanoramic ? 'Panoramic receipt detected - ' : ''}
-                Make sure the file is clear and readable
-              </p>
-              {filePreview.isPanoramic && (
-                <div className="mt-2 inline-flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
-                  <Maximize2 className="h-4 w-4" />
-                  <span>Panoramic Receipt</span>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-gray-100 rounded-lg p-4 mb-6">
-              {filePreview.type === 'image' ? (
-                <img
-                  src={filePreview.url}
-                  alt="Receipt preview"
-                  className="w-full max-h-96 object-contain rounded-lg"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <FileText className="h-16 w-16 text-text-secondary mb-4" />
-                  <h3 className="text-lg font-medium text-text-primary mb-2">
-                    {filePreview.isPanoramic ? 'Panoramic PDF Receipt' : 'PDF Receipt'}
-                  </h3>
-                  <p className="text-text-secondary text-sm">{filePreview.name}</p>
-                  <button
-                    onClick={() => window.open(filePreview.url, '_blank')}
-                    className="mt-4 text-primary hover:text-primary/80 font-medium"
-                  >
-                    Open PDF to Preview
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Upload Progress */}
-            {isLoading && uploadProgress > 0 && (
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-text-primary">Uploading...</span>
-                  <span className="text-sm text-text-secondary">{uploadProgress}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-primary h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${uploadProgress}%` }}
-                  ></div>
-                </div>
+                
+                {showExtractedText && (
+                  <div className="mt-4 p-4 bg-gray-50 rounded-lg text-left">
+                    <pre className="text-sm text-text-secondary whitespace-pre-wrap font-mono">
+                      {extractedText}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
-
-            <div className="flex justify-center space-x-4">
-              <button
-                onClick={() => {
-                  setCapturedImage(null);
-                  setUploadedFile(null);
-                  setFilePreview(null);
-                  setCapturedImages([]);
-                  setCurrentStep('options');
-                }}
-                className="flex items-center space-x-2 px-6 py-3 border-2 border-gray-300 text-text-secondary rounded-lg hover:border-gray-400 hover:text-text-primary transition-colors duration-200"
-              >
-                <RotateCcw className="h-5 w-5" />
-                <span>Choose Different File</span>
-              </button>
-              <button
-                onClick={handleImageSubmit}
-                disabled={isLoading}
-                className="flex items-center space-x-2 bg-primary text-white px-8 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="h-5 w-5" />
-                    <span>Confirm & Save</span>
-                  </>
-                )}
-              </button>
-            </div>
           </div>
         )}
 
-        {/* Manual Entry Form */}
-        {currentStep === 'manual' && (
-          <div className="bg-white rounded-2xl shadow-card p-8">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-text-primary mb-2">Enter Receipt Details</h2>
-              <p className="text-text-secondary">Fill in the information from your receipt</p>
+        {/* Dynamic Form */}
+        {showForm && (
+          <div className="bg-white rounded-2xl shadow-card p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-text-primary">Review & Edit Receipt Details</h3>
+              <button
+                onClick={resetScanning}
+                className="text-text-secondary hover:text-text-primary transition-colors duration-200"
+              >
+                <RefreshCw className="h-5 w-5" />
+              </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleManualSubmit(); }} className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Purchase Date */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <Calendar className="inline h-4 w-4 mr-1" />
-                    Date of Purchase *
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.purchaseDate}
-                    onChange={(e) => setFormData(prev => ({ ...prev, purchaseDate: e.target.value }))}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
-                      formErrors.purchaseDate ? 'border-accent-red bg-red-50' : 'border-gray-300'
-                    }`}
-                  />
-                  {formErrors.purchaseDate && (
-                    <p className="mt-1 text-sm text-accent-red">{formErrors.purchaseDate}</p>
-                  )}
-                </div>
-
-                {/* Country */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <MapPin className="inline h-4 w-4 mr-1" />
-                    Country of Purchase *
-                  </label>
-                  <select
-                    value={formData.country}
-                    onChange={(e) => setFormData(prev => ({ ...prev, country: e.target.value }))}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
-                      formErrors.country ? 'border-accent-red bg-red-50' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">Select country</option>
-                    {countries.map(country => (
-                      <option key={country} value={country}>{country}</option>
-                    ))}
-                  </select>
-                  {formErrors.country && (
-                    <p className="mt-1 text-sm text-accent-red">{formErrors.country}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Store Name */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <Store className="inline h-4 w-4 mr-1" />
-                    Store Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.storeName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, storeName: e.target.value }))}
-                    placeholder="e.g., Apple Store, Best Buy"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                  />
-                </div>
-
-                {/* Purchase Location */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <MapPin className="inline h-4 w-4 mr-1" />
-                    Purchase Location
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.purchaseLocation}
-                    onChange={(e) => setFormData(prev => ({ ...prev, purchaseLocation: e.target.value }))}
-                    placeholder="e.g., New York, NY or Online"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                  />
-                </div>
-              </div>
-
+            <form onSubmit={(e) => { e.preventDefault(); handleFormSubmission(); }} className="space-y-6">
               <div className="grid md:grid-cols-2 gap-6">
                 {/* Product Description */}
                 <div>
                   <label className="block text-sm font-medium text-text-primary mb-2">
-                    <Package className="inline h-4 w-4 mr-1" />
+                    <FileText className="inline h-4 w-4 mr-1" />
                     Product Description *
                   </label>
                   <input
                     type="text"
-                    value={formData.productDescription}
-                    onChange={(e) => setFormData(prev => ({ ...prev, productDescription: e.target.value }))}
-                    placeholder="e.g., MacBook Pro 16-inch"
+                    value={formData.product_description || ''}
+                    onChange={(e) => handleInputChange('product_description', e.target.value)}
                     className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
-                      formErrors.productDescription ? 'border-accent-red bg-red-50' : 'border-gray-300'
+                      formErrors.product_description ? 'border-red-300 bg-red-50' : 'border-gray-300'
                     }`}
+                    placeholder="Enter product description"
                   />
-                  {formErrors.productDescription && (
-                    <p className="mt-1 text-sm text-accent-red">{formErrors.productDescription}</p>
+                  {formErrors.product_description && (
+                    <p className="mt-1 text-sm text-red-600">{formErrors.product_description}</p>
                   )}
                 </div>
 
@@ -1267,116 +786,183 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                   </label>
                   <input
                     type="text"
-                    value={formData.brandName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, brandName: e.target.value }))}
-                    placeholder="e.g., Apple"
+                    value={formData.brand_name || ''}
+                    onChange={(e) => handleInputChange('brand_name', e.target.value)}
                     className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
-                      formErrors.brandName ? 'border-accent-red bg-red-50' : 'border-gray-300'
+                      formErrors.brand_name ? 'border-red-300 bg-red-50' : 'border-gray-300'
                     }`}
+                    placeholder="Enter brand name"
                   />
-                  {formErrors.brandName && (
-                    <p className="mt-1 text-sm text-accent-red">{formErrors.brandName}</p>
+                  {formErrors.brand_name && (
+                    <p className="mt-1 text-sm text-red-600">{formErrors.brand_name}</p>
                   )}
                 </div>
-              </div>
 
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Model Number */}
+                {/* Store Name */}
                 <div>
                   <label className="block text-sm font-medium text-text-primary mb-2">
-                    Series/Model Number
+                    <Store className="inline h-4 w-4 mr-1" />
+                    Store Name
                   </label>
                   <input
                     type="text"
-                    value={formData.modelNumber}
-                    onChange={(e) => setFormData(prev => ({ ...prev, modelNumber: e.target.value }))}
-                    placeholder="e.g., A2485"
+                    value={formData.store_name || ''}
+                    onChange={(e) => handleInputChange('store_name', e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    placeholder="Enter store name"
                   />
+                </div>
+
+                {/* Purchase Location */}
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    <MapPin className="inline h-4 w-4 mr-1" />
+                    Purchase Location
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.purchase_location || ''}
+                    onChange={(e) => handleInputChange('purchase_location', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    placeholder="Enter store location"
+                  />
+                </div>
+
+                {/* Purchase Date */}
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    <Calendar className="inline h-4 w-4 mr-1" />
+                    Purchase Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.purchase_date || ''}
+                    onChange={(e) => handleInputChange('purchase_date', e.target.value)}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
+                      formErrors.purchase_date ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    }`}
+                  />
+                  {formErrors.purchase_date && (
+                    <p className="mt-1 text-sm text-red-600">{formErrors.purchase_date}</p>
+                  )}
                 </div>
 
                 {/* Amount */}
                 <div>
                   <label className="block text-sm font-medium text-text-primary mb-2">
+                    <DollarSign className="inline h-4 w-4 mr-1" />
                     Amount
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    value={formData.amount}
-                    onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                    placeholder="0.00"
+                    value={formData.amount || ''}
+                    onChange={(e) => handleInputChange('amount', parseFloat(e.target.value) || 0)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    placeholder="0.00"
                   />
                 </div>
-              </div>
 
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Warranty Period */}
+                {/* Model Number */}
                 <div>
                   <label className="block text-sm font-medium text-text-primary mb-2">
-                    <Shield className="inline h-4 w-4 mr-1" />
-                    Warranty Period *
+                    Model Number
                   </label>
-                  <select
-                    value={formData.warrantyPeriod}
-                    onChange={(e) => setFormData(prev => ({ ...prev, warrantyPeriod: e.target.value }))}
+                  <input
+                    type="text"
+                    value={formData.model_number || ''}
+                    onChange={(e) => handleInputChange('model_number', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    placeholder="Enter model number"
+                  />
+                </div>
+
+                {/* Country */}
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    Country *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.country || ''}
+                    onChange={(e) => handleInputChange('country', e.target.value)}
                     className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
-                      formErrors.warrantyPeriod ? 'border-accent-red bg-red-50' : 'border-gray-300'
+                      formErrors.country ? 'border-red-300 bg-red-50' : 'border-gray-300'
                     }`}
-                  >
-                    <option value="">Select warranty period</option>
-                    {warrantyPeriods.map(period => (
-                      <option key={period} value={period}>{period}</option>
-                    ))}
-                  </select>
-                  {formErrors.warrantyPeriod && (
-                    <p className="mt-1 text-sm text-accent-red">{formErrors.warrantyPeriod}</p>
+                    placeholder="Enter country"
+                  />
+                  {formErrors.country && (
+                    <p className="mt-1 text-sm text-red-600">{formErrors.country}</p>
                   )}
                 </div>
+              </div>
 
-                {/* Extended Warranty */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <Clock className="inline h-4 w-4 mr-1" />
-                    Extended Warranty
-                  </label>
-                  <select
-                    value={formData.extendedWarranty}
-                    onChange={(e) => setFormData(prev => ({ ...prev, extendedWarranty: e.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                  >
-                    <option value="">No extended warranty</option>
-                    <option value="1 year">1 year extended</option>
-                    <option value="2 years">2 years extended</option>
-                    <option value="3 years">3 years extended</option>
-                  </select>
+              {/* Warranty Fields */}
+              <div className="border-t border-gray-200 pt-6">
+                <h4 className="text-lg font-semibold text-text-primary mb-4 flex items-center">
+                  <Shield className="h-5 w-5 mr-2" />
+                  Warranty Information
+                </h4>
+                
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Warranty Period */}
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-2">
+                      Warranty Period *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.warranty_period || ''}
+                      onChange={(e) => handleInputChange('warranty_period', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
+                        formErrors.warranty_period ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
+                      placeholder="e.g., 1 year, 6 months"
+                    />
+                    {formErrors.warranty_period && (
+                      <p className="mt-1 text-sm text-red-600">{formErrors.warranty_period}</p>
+                    )}
+                  </div>
+
+                  {/* Extended Warranty */}
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-2">
+                      Extended Warranty
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.extended_warranty || ''}
+                      onChange={(e) => handleInputChange('extended_warranty', e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                      placeholder="Enter extended warranty details"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="flex justify-center space-x-4 pt-6">
+              {/* Submit Button */}
+              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={() => setCurrentStep('options')}
-                  className="flex items-center space-x-2 px-6 py-3 border-2 border-gray-300 text-text-secondary rounded-lg hover:border-gray-400 hover:text-text-primary transition-colors duration-200"
+                  onClick={resetScanning}
+                  className="px-6 py-3 border border-gray-300 text-text-secondary rounded-lg font-medium hover:bg-gray-50 transition-colors duration-200"
                 >
-                  <X className="h-5 w-5" />
-                  <span>Cancel</span>
+                  Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isLoading}
-                  className="flex items-center space-x-2 bg-primary text-white px-8 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isSaving}
+                  className="px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                 >
-                  {isLoading ? (
+                  {isSaving ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Saving...</span>
                     </>
                   ) : (
                     <>
-                      <Check className="h-5 w-5" />
-                      <span>Save Details</span>
+                      <Save className="h-5 w-5" />
+                      <span>Save Receipt</span>
                     </>
                   )}
                 </button>
@@ -1384,48 +970,15 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
             </form>
           </div>
         )}
-
-        {/* Success State */}
-        {currentStep === 'success' && (
-          <div className="bg-white rounded-2xl shadow-card p-8 text-center">
-            <div className="bg-green-100 rounded-full p-6 w-24 h-24 mx-auto mb-6">
-              <CheckCircle className="h-12 w-12 text-green-600" />
-            </div>
-            <h2 className="text-3xl font-bold text-text-primary mb-4">
-              Receipt Saved Successfully!
-            </h2>
-            <p className="text-xl text-text-secondary mb-8">
-              Your {filePreview?.isPanoramic ? 'panoramic ' : ''}receipt has been securely uploaded and processed. 
-              Warranty tracking has been automatically set up.
-            </p>
-            <div className="flex justify-center space-x-4">
-              <button
-                onClick={resetForm}
-                className="flex items-center space-x-2 border-2 border-primary text-primary px-6 py-3 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors duration-200"
-              >
-                <Camera className="h-5 w-5" />
-                <span>Scan Another Receipt</span>
-              </button>
-              <button
-                onClick={onBackToDashboard}
-                className="flex items-center space-x-2 bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
-              >
-                <ArrowLeft className="h-5 w-5" />
-                <span>Back to Dashboard</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".jpg,.jpeg,.png,.heic,.webp,.pdf"
-          onChange={handleFileUpload}
-          className="hidden"
-        />
       </main>
+
+      {/* Click outside to close user menu */}
+      {showUserMenu && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowUserMenu(false)}
+        />
+      )}
     </div>
   );
 };

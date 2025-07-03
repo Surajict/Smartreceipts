@@ -284,6 +284,113 @@ export const getReceiptWithWarrantyStatus = async (userId: string, receiptId: st
   }
 };
 
+export const deleteReceipt = async (userId: string, receiptId: string) => {
+  try {
+    console.log('Deleting receipt:', receiptId, 'for user:', userId);
+
+    // First get the receipt to check for image
+    const { data: receipt, error: fetchError } = await supabase
+      .from('receipts')
+      .select('image_url, image_path')
+      .eq('user_id', userId)
+      .eq('id', receiptId)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching receipt for deletion:', fetchError);
+      throw fetchError;
+    }
+
+    // Delete the receipt from database
+    const { error: deleteError } = await supabase
+      .from('receipts')
+      .delete()
+      .eq('user_id', userId)
+      .eq('id', receiptId);
+
+    if (deleteError) {
+      console.error('Error deleting receipt:', deleteError);
+      throw deleteError;
+    }
+
+    // Delete associated image if exists
+    if (receipt?.image_path) {
+      try {
+        const { error: storageError } = await supabase.storage
+          .from('receipt-images')
+          .remove([receipt.image_path]);
+
+        if (storageError) {
+          console.warn('Failed to delete image from storage:', storageError);
+          // Don't fail the entire operation if image deletion fails
+        }
+      } catch (storageErr) {
+        console.warn('Error deleting image from storage:', storageErr);
+      }
+    }
+
+    console.log('Receipt deleted successfully');
+    return { data: true, error: null };
+
+  } catch (err: any) {
+    console.error('Delete receipt error:', err);
+    return { 
+      data: null, 
+      error: { message: err.message || 'Failed to delete receipt' } 
+    };
+  }
+};
+
+export const updateReceipt = async (userId: string, receiptId: string, updateData: any) => {
+  try {
+    console.log('Updating receipt:', receiptId, 'for user:', userId);
+
+    // Prepare the update data
+    const cleanedData = {
+      product_description: updateData.product_description?.trim(),
+      brand_name: updateData.brand_name?.trim(),
+      store_name: updateData.store_name?.trim() || null,
+      purchase_location: updateData.purchase_location?.trim() || null,
+      purchase_date: updateData.purchase_date,
+      amount: updateData.amount && updateData.amount > 0 ? updateData.amount : null,
+      warranty_period: updateData.warranty_period?.trim(),
+      extended_warranty: updateData.extended_warranty?.trim() || null,
+      model_number: updateData.model_number?.trim() || null,
+      country: updateData.country?.trim(),
+      updated_at: new Date().toISOString()
+    };
+
+    // Remove undefined values
+    Object.keys(cleanedData).forEach(key => {
+      if (cleanedData[key] === undefined) {
+        delete cleanedData[key];
+      }
+    });
+
+    const { data, error } = await supabase
+      .from('receipts')
+      .update(cleanedData)
+      .eq('user_id', userId)
+      .eq('id', receiptId)
+      .select();
+
+    if (error) {
+      console.error('Error updating receipt:', error);
+      throw error;
+    }
+
+    console.log('Receipt updated successfully:', data);
+    return { data: data[0], error: null };
+
+  } catch (err: any) {
+    console.error('Update receipt error:', err);
+    return { 
+      data: null, 
+      error: { message: err.message || 'Failed to update receipt' } 
+    };
+  }
+};
+
 // Auth helper functions
 export const signUp = async (email: string, password: string, fullName: string) => {
   try {

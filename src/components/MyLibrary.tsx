@@ -22,9 +22,19 @@ import {
   Eye,
   User,
   LogOut,
-  Loader2
+  Loader2,
+  Image as ImageIcon,
+  FileText,
+  Download,
+  ExternalLink
 } from 'lucide-react';
-import { supabase, getCurrentUser, signOut } from '../lib/supabase';
+import { 
+  supabase, 
+  getCurrentUser, 
+  signOut, 
+  getUserReceipts, 
+  searchUserReceipts 
+} from '../lib/supabase';
 
 interface MyLibraryProps {
   onBackToDashboard: () => void;
@@ -43,21 +53,25 @@ interface ReceiptData {
   extended_warranty?: string;
   amount?: number;
   image_path?: string;
+  image_url?: string;
   store_name?: string;
   purchase_location?: string;
+  processing_method?: string;
+  ocr_confidence?: number;
+  extracted_text?: string;
   created_at: string;
   updated_at: string;
 }
 
 interface SearchResult {
   id: string;
-  title: string;
-  brand: string;
-  model?: string;
-  purchaseDate: string;
+  product_description: string;
+  brand_name: string;
+  store_name?: string;
+  purchase_date: string;
   amount?: number;
-  warrantyPeriod: string;
-  relevanceScore: number;
+  warranty_period: string;
+  relevance_score: number;
 }
 
 interface FilterState {
@@ -83,6 +97,8 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   const [showFilters, setShowFilters] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState<ReceiptData | null>(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [alertsCount] = useState(3);
   
   // Filter and sort states
@@ -126,26 +142,34 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   const loadUserAndReceipts = async () => {
     try {
       setLoading(true);
+      setError(null);
+      
       const currentUser = await getCurrentUser();
       
       if (!currentUser) {
         setError('User not authenticated');
+        onBackToDashboard();
         return;
       }
 
+      console.log('Loading receipts for user:', currentUser.id);
       setUser(currentUser);
 
-      const { data, error: fetchError } = await supabase
-        .from('receipts')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false });
+      // Load receipts using the enhanced function
+      const { data, error: fetchError } = await getUserReceipts(currentUser.id);
 
       if (fetchError) {
-        throw fetchError;
+        console.error('Error loading receipts:', fetchError);
+        throw new Error(fetchError.message);
       }
 
+      console.log('Loaded receipts:', data?.length || 0);
       setReceipts(data || []);
+      
+      if (data && data.length === 0) {
+        console.log('No receipts found for user');
+      }
+
     } catch (err: any) {
       console.error('Error loading receipts:', err);
       setError(err.message || 'Failed to load receipts');
@@ -163,8 +187,8 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     }
   };
 
-  // Vector similarity search using Edge Function
-  const performVectorSearch = async (query: string) => {
+  // Enhanced search using the database function
+  const performSearch = async (query: string) => {
     if (!query.trim() || !user) {
       setSearchResults([]);
       setShowSearchResults(false);
@@ -175,37 +199,19 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     setSearchError(null);
 
     try {
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/smart-search`;
+      console.log('Performing search for:', query);
       
-      const headers = {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      };
+      const { data, error } = await searchUserReceipts(user.id, query.trim(), 10);
 
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          query: query.trim(),
-          userId: user.id
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Search failed: ${response.status} ${errorText}`);
+      if (error) {
+        throw new Error(error.message);
       }
 
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      setSearchResults(data.results || []);
+      console.log('Search results:', data);
+      setSearchResults(data || []);
       setShowSearchResults(true);
     } catch (err: any) {
-      console.error('Vector search error:', err);
+      console.error('Search error:', err);
       setSearchError(err.message || 'Search failed. Please try again.');
       
       // Fallback to local search
@@ -223,18 +229,19 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
         receipt.brand_name.toLowerCase().includes(query.toLowerCase()) ||
         receipt.model_number?.toLowerCase().includes(query.toLowerCase()) ||
         receipt.store_name?.toLowerCase().includes(query.toLowerCase()) ||
-        receipt.purchase_location?.toLowerCase().includes(query.toLowerCase())
+        receipt.purchase_location?.toLowerCase().includes(query.toLowerCase()) ||
+        receipt.extracted_text?.toLowerCase().includes(query.toLowerCase())
       )
-      .slice(0, 5)
+      .slice(0, 10)
       .map(receipt => ({
         id: receipt.id,
-        title: receipt.product_description,
-        brand: receipt.brand_name,
-        model: receipt.model_number,
-        purchaseDate: receipt.purchase_date,
+        product_description: receipt.product_description,
+        brand_name: receipt.brand_name,
+        store_name: receipt.store_name,
+        purchase_date: receipt.purchase_date,
         amount: receipt.amount,
-        warrantyPeriod: receipt.warranty_period,
-        relevanceScore: 0.7 // Mock score for local search
+        warranty_period: receipt.warranty_period,
+        relevance_score: 0.7 // Mock score for local search
       }));
 
     setSearchResults(localResults);
@@ -243,7 +250,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    performVectorSearch(searchQuery);
+    performSearch(searchQuery);
   };
 
   const clearSearch = () => {
@@ -359,6 +366,9 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
       purchase.setFullYear(purchase.getFullYear() + parseInt(years[1]));
     } else if (months) {
       purchase.setMonth(purchase.getMonth() + parseInt(months[1]));
+    } else {
+      // Default to 1 year if no specific period found
+      purchase.setFullYear(purchase.getFullYear() + 1);
     }
     
     return purchase;
@@ -410,6 +420,45 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
         ? prev[type].filter(item => item !== value)
         : [...prev[type], value]
     }));
+  };
+
+  const handleReceiptClick = (receipt: ReceiptData) => {
+    setSelectedReceipt(receipt);
+    setShowReceiptModal(true);
+  };
+
+  const getImageUrl = (receipt: ReceiptData) => {
+    if (receipt.image_url) {
+      return receipt.image_url;
+    }
+    if (receipt.image_path) {
+      // Generate public URL from image path
+      const { data } = supabase.storage
+        .from('receipt-images')
+        .getPublicUrl(receipt.image_path);
+      return data.publicUrl;
+    }
+    return null;
+  };
+
+  const downloadImage = async (receipt: ReceiptData) => {
+    const imageUrl = getImageUrl(receipt);
+    if (imageUrl) {
+      try {
+        const response = await fetch(imageUrl);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `receipt-${receipt.product_description.replace(/[^a-zA-Z0-9]/g, '-')}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } catch (error) {
+        console.error('Error downloading image:', error);
+      }
+    }
   };
 
   // Get unique brands from receipts
@@ -655,29 +704,39 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                       <div
                         key={result.id}
                         className="px-6 py-4 hover:bg-gray-50 transition-colors duration-200 cursor-pointer"
+                        onClick={() => {
+                          const fullReceipt = receipts.find(r => r.id === result.id);
+                          if (fullReceipt) handleReceiptClick(fullReceipt);
+                        }}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center space-x-3 mb-2">
                               <h4 className="text-base font-semibold text-text-primary truncate">
-                                {result.title}
+                                {result.product_description}
                               </h4>
                               <div className="flex items-center space-x-1 text-xs text-text-secondary bg-gray-100 px-2 py-1 rounded-full">
                                 <span>Relevance:</span>
-                                <span className="font-medium">{Math.round(result.relevanceScore * 100)}%</span>
+                                <span className="font-medium">{Math.round(result.relevance_score * 100)}%</span>
                               </div>
                             </div>
                             
                             <div className="flex flex-wrap items-center gap-4 text-sm text-text-secondary">
                               <div className="flex items-center space-x-1">
                                 <Tag className="h-4 w-4" />
-                                <span>{result.brand}</span>
-                                {result.model && <span>• {result.model}</span>}
+                                <span>{result.brand_name}</span>
                               </div>
+                              
+                              {result.store_name && (
+                                <div className="flex items-center space-x-1">
+                                  <Store className="h-4 w-4" />
+                                  <span>{result.store_name}</span>
+                                </div>
+                              )}
                               
                               <div className="flex items-center space-x-1">
                                 <Calendar className="h-4 w-4" />
-                                <span>{formatDate(result.purchaseDate)}</span>
+                                <span>{formatDate(result.purchase_date)}</span>
                               </div>
                               
                               {result.amount && (
@@ -691,7 +750,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                               
                               <div className="flex items-center space-x-1">
                                 <Clock className="h-4 w-4" />
-                                <span>Warranty: {result.warrantyPeriod}</span>
+                                <span>Warranty: {result.warranty_period}</span>
                               </div>
                             </div>
                           </div>
@@ -824,7 +883,10 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
         {/* Error Message */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-700">{error}</p>
+            <div className="flex items-center">
+              <AlertTriangle className="h-5 w-5 text-red-600 mr-2" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
           </div>
         )}
 
@@ -856,11 +918,13 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                 {displayedReceipts.map((receipt) => {
                   const warrantyStatus = getWarrantyStatus(receipt.purchase_date, receipt.warranty_period);
                   const StatusIcon = warrantyStatus.icon;
+                  const imageUrl = getImageUrl(receipt);
                   
                   return (
                     <div
                       key={receipt.id}
-                      className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-1 group"
+                      className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-1 group cursor-pointer"
+                      onClick={() => handleReceiptClick(receipt)}
                     >
                       {/* Receipt Header */}
                       <div className="flex items-start justify-between mb-4">
@@ -874,14 +938,41 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                           </p>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <button className="text-text-secondary hover:text-primary transition-colors duration-200">
+                          {imageUrl && (
+                            <div className="text-primary">
+                              <ImageIcon className="h-4 w-4" />
+                            </div>
+                          )}
+                          {receipt.extracted_text && (
+                            <div className="text-secondary">
+                              <FileText className="h-4 w-4" />
+                            </div>
+                          )}
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleReceiptClick(receipt);
+                            }}
+                            className="text-text-secondary hover:text-primary transition-colors duration-200"
+                          >
                             <Eye className="h-4 w-4" />
-                          </button>
-                          <button className="text-text-secondary hover:text-primary transition-colors duration-200">
-                            <Edit3 className="h-4 w-4" />
                           </button>
                         </div>
                       </div>
+
+                      {/* Receipt Image Preview */}
+                      {imageUrl && (
+                        <div className="mb-4">
+                          <img
+                            src={imageUrl}
+                            alt="Receipt"
+                            className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      )}
 
                       {/* Receipt Details */}
                       <div className="space-y-3 mb-4">
@@ -914,6 +1005,20 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                             </span>
                           </div>
                         )}
+
+                        {/* Processing Method Badge */}
+                        {receipt.processing_method && receipt.processing_method !== 'manual' && (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                              {receipt.processing_method.replace('_', ' ')}
+                            </span>
+                            {receipt.ocr_confidence && (
+                              <span className="text-xs text-text-secondary">
+                                {Math.round(receipt.ocr_confidence * 100)}% confidence
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Warranty Status */}
@@ -932,11 +1037,46 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
 
                       {/* Actions */}
                       <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                        <button className="text-primary hover:text-primary/80 font-medium text-sm transition-colors duration-200">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReceiptClick(receipt);
+                          }}
+                          className="text-primary hover:text-primary/80 font-medium text-sm transition-colors duration-200"
+                        >
                           View Details
                         </button>
                         <div className="flex items-center space-x-2">
-                          <button className="text-text-secondary hover:text-accent-red transition-colors duration-200">
+                          {imageUrl && (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                downloadImage(receipt);
+                              }}
+                              className="text-text-secondary hover:text-primary transition-colors duration-200"
+                              title="Download Image"
+                            >
+                              <Download className="h-4 w-4" />
+                            </button>
+                          )}
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Add edit functionality here
+                            }}
+                            className="text-text-secondary hover:text-primary transition-colors duration-200"
+                            title="Edit Receipt"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Add delete functionality here
+                            }}
+                            className="text-text-secondary hover:text-accent-red transition-colors duration-200"
+                            title="Delete Receipt"
+                          >
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
@@ -949,6 +1089,175 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
           </>
         )}
       </main>
+
+      {/* Receipt Detail Modal */}
+      {showReceiptModal && selectedReceipt && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-card max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-text-primary">Receipt Details</h2>
+              <button
+                onClick={() => setShowReceiptModal(false)}
+                className="text-text-secondary hover:text-text-primary transition-colors duration-200"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              <div className="grid lg:grid-cols-2 gap-8">
+                {/* Receipt Image */}
+                <div>
+                  {getImageUrl(selectedReceipt) ? (
+                    <div className="space-y-4">
+                      <img
+                        src={getImageUrl(selectedReceipt)!}
+                        alt="Receipt"
+                        className="w-full rounded-lg border border-gray-200"
+                      />
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => downloadImage(selectedReceipt)}
+                          className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200"
+                        >
+                          <Download className="h-4 w-4" />
+                          <span>Download</span>
+                        </button>
+                        <button
+                          onClick={() => window.open(getImageUrl(selectedReceipt)!, '_blank')}
+                          className="flex items-center space-x-2 border border-gray-300 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          <span>Open in New Tab</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-100 rounded-lg p-8 text-center">
+                      <ImageIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-500">No image available</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Receipt Information */}
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-xl font-bold text-text-primary mb-4">Product Information</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm font-medium text-text-secondary">Product Description</label>
+                        <p className="text-text-primary font-medium">{selectedReceipt.product_description}</p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-text-secondary">Brand</label>
+                        <p className="text-text-primary">{selectedReceipt.brand_name}</p>
+                      </div>
+                      {selectedReceipt.model_number && (
+                        <div>
+                          <label className="text-sm font-medium text-text-secondary">Model Number</label>
+                          <p className="text-text-primary">{selectedReceipt.model_number}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-xl font-bold text-text-primary mb-4">Purchase Details</h3>
+                    <div className="space-y-3">
+                      {selectedReceipt.store_name && (
+                        <div>
+                          <label className="text-sm font-medium text-text-secondary">Store</label>
+                          <p className="text-text-primary">{selectedReceipt.store_name}</p>
+                        </div>
+                      )}
+                      {selectedReceipt.purchase_location && (
+                        <div>
+                          <label className="text-sm font-medium text-text-secondary">Location</label>
+                          <p className="text-text-primary">{selectedReceipt.purchase_location}</p>
+                        </div>
+                      )}
+                      <div>
+                        <label className="text-sm font-medium text-text-secondary">Purchase Date</label>
+                        <p className="text-text-primary">{formatDate(selectedReceipt.purchase_date)}</p>
+                      </div>
+                      {selectedReceipt.amount && (
+                        <div>
+                          <label className="text-sm font-medium text-text-secondary">Amount</label>
+                          <p className="text-text-primary font-medium">{formatCurrency(selectedReceipt.amount)}</p>
+                        </div>
+                      )}
+                      <div>
+                        <label className="text-sm font-medium text-text-secondary">Country</label>
+                        <p className="text-text-primary">{selectedReceipt.country}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-xl font-bold text-text-primary mb-4">Warranty Information</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm font-medium text-text-secondary">Warranty Period</label>
+                        <p className="text-text-primary">{selectedReceipt.warranty_period}</p>
+                      </div>
+                      {selectedReceipt.extended_warranty && (
+                        <div>
+                          <label className="text-sm font-medium text-text-secondary">Extended Warranty</label>
+                          <p className="text-text-primary">{selectedReceipt.extended_warranty}</p>
+                        </div>
+                      )}
+                      <div>
+                        <label className="text-sm font-medium text-text-secondary">Warranty Expires</label>
+                        <p className="text-text-primary">
+                          {formatDate(calculateWarrantyExpiry(selectedReceipt.purchase_date, selectedReceipt.warranty_period).toISOString())}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Processing Information */}
+                  {selectedReceipt.processing_method && (
+                    <div>
+                      <h3 className="text-xl font-bold text-text-primary mb-4">Processing Information</h3>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-sm font-medium text-text-secondary">Processing Method</label>
+                          <p className="text-text-primary capitalize">{selectedReceipt.processing_method.replace('_', ' ')}</p>
+                        </div>
+                        {selectedReceipt.ocr_confidence && (
+                          <div>
+                            <label className="text-sm font-medium text-text-secondary">OCR Confidence</label>
+                            <p className="text-text-primary">{Math.round(selectedReceipt.ocr_confidence * 100)}%</p>
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-sm font-medium text-text-secondary">Added</label>
+                          <p className="text-text-primary">{formatDate(selectedReceipt.created_at)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Extracted Text */}
+                  {selectedReceipt.extracted_text && (
+                    <div>
+                      <h3 className="text-xl font-bold text-text-primary mb-4">Extracted Text</h3>
+                      <div className="bg-gray-50 rounded-lg p-4 max-h-40 overflow-y-auto">
+                        <pre className="text-sm text-text-secondary whitespace-pre-wrap font-mono">
+                          {selectedReceipt.extracted_text}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Click outside to close dropdowns */}
       {(showSortMenu || showFilters || showUserMenu) && (

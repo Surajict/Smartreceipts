@@ -18,7 +18,7 @@ import {
   LogOut,
   Bell
 } from 'lucide-react';
-import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection } from '../lib/supabase';
+import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
 import { createWorker } from 'tesseract.js';
 
 interface ReceiptScanningProps {
@@ -144,118 +144,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     }
   };
 
-  const structureDataWithGPT = async (text: string): Promise<ExtractedData> => {
-    if (!openaiAvailable) {
-      throw new Error('OpenAI API not available. Please configure your API key.');
-    }
-
-    const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
-    
-    if (!openaiApiKey) {
-      throw new Error('OpenAI API key not configured');
-    }
-
-    setProcessingStep('Analyzing receipt with AI...');
-
-    const prompt = `You are a reliable AI that extracts structured receipt details from plain text.
-Given raw text from a receipt, extract the following fields and return ONLY valid JSON.
-If a field is missing, set its value to null. No extra explanation or text outside the JSON.
-
-Required JSON fields:
-- product_description (string): Main product or service purchased
-- brand_name (string): Brand or manufacturer name
-- store_name (string): Name of the store/merchant
-- purchase_location (string): Store location/address
-- purchase_date (string): Date in YYYY-MM-DD format
-- amount (number): Total amount paid (numeric only, no currency symbol)
-- warranty_period (string): Warranty duration (e.g., "1 year", "6 months")
-- extended_warranty (string): Extended warranty info if any
-- model_number (string): Product model number if available
-- country (string): Country where purchase was made
-
-Receipt text:
-${text}
-
-Return only valid JSON:`;
-
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a precise data extraction assistant. Return only valid JSON with the requested fields.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          max_tokens: 500,
-          temperature: 0.1,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error('OpenAI API error:', response.status, errorData);
-        throw new Error(`OpenAI API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const content = data.choices[0]?.message?.content;
-
-      if (!content) {
-        throw new Error('No response from OpenAI');
-      }
-
-      // Clean the response to extract JSON
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No valid JSON found in response');
-      }
-
-      const extractedData = JSON.parse(jsonMatch[0]);
-      
-      // Validate required fields
-      const requiredFields = ['product_description', 'brand_name', 'purchase_date', 'warranty_period', 'country'];
-      for (const field of requiredFields) {
-        if (!extractedData[field]) {
-          extractedData[field] = field === 'warranty_period' ? '1 year' : 
-                                field === 'country' ? 'United States' : 
-                                'Not specified';
-        }
-      }
-
-      // Ensure amount is a number or null
-      if (extractedData.amount && typeof extractedData.amount === 'string') {
-        const numericAmount = parseFloat(extractedData.amount.replace(/[^0-9.]/g, ''));
-        extractedData.amount = isNaN(numericAmount) ? null : numericAmount;
-      }
-
-      // Ensure date is in correct format
-      if (extractedData.purchase_date && !extractedData.purchase_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        const date = new Date(extractedData.purchase_date);
-        if (!isNaN(date.getTime())) {
-          extractedData.purchase_date = date.toISOString().split('T')[0];
-        } else {
-          extractedData.purchase_date = new Date().toISOString().split('T')[0];
-        }
-      }
-
-      return extractedData;
-    } catch (error: any) {
-      console.error('GPT structuring error:', error);
-      throw new Error(`AI processing failed: ${error.message}`);
-    }
-  };
-
   const fallbackDataExtraction = (text: string): ExtractedData => {
     console.log('Using fallback data extraction');
     
@@ -337,7 +225,13 @@ Return only valid JSON:`;
       try {
         if (openaiAvailable) {
           setProcessingStep('Processing with AI...');
-          structuredData = await structureDataWithGPT(text);
+          const { data: gptData, error: gptError } = await extractReceiptDataWithGPT(text);
+          
+          if (gptError) {
+            throw new Error(gptError.message);
+          }
+          
+          structuredData = gptData!;
           processingMethod = 'gpt_structured';
         } else {
           throw new Error('OpenAI not available');
@@ -411,9 +305,20 @@ Return only valid JSON:`;
     setError(null);
 
     try {
+      let imageUrl = null;
+      
+      if (capturedImage) {
+        const { data: uploadData, error: uploadError } = await uploadReceiptImage(dataURLtoBlob(capturedImage), user.id);
+        if (uploadError) {
+          console.warn('Failed to upload image:', uploadError);
+        } else {
+          imageUrl = uploadData?.url;
+        }
+      }
+
       const receiptData = {
         ...extractedData,
-        image_url: capturedImage ? await uploadReceiptImage(dataURLtoBlob(capturedImage), user.id).then(r => r.data?.url) : null,
+        image_url: imageUrl,
         processing_method: 'manual',
         ocr_confidence: null,
         extracted_text: extractedText

@@ -191,9 +191,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
     
     if (!openaiApiKey) {
-      console.warn('OpenAI API key not found, using fallback parsing');
-      updateProcessingStep('gpt', 'completed', 'Using fallback text parsing');
-      const fallbackData = parseFallback(text);
+      console.warn('OpenAI API key not found, using enhanced fallback parsing');
+      updateProcessingStep('gpt', 'completed', 'Using enhanced fallback text parsing');
+      const fallbackData = parseReceiptWithEnhancedFallback(text);
       generateDynamicForm({ 
         ...fallbackData, 
         extracted_text: text, 
@@ -203,33 +203,50 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     }
 
     try {
-      const systemPrompt = `You are a receipt data extraction expert. Extract structured information from receipt text and return ONLY a valid JSON object with these exact field names:
+      // Enhanced GPT prompt with strict formatting requirements
+      const systemPrompt = `You are an expert receipt data extraction AI. Your task is to extract structured information from receipt text and return ONLY a valid JSON object.
 
+CRITICAL INSTRUCTIONS:
+1. Return ONLY the JSON object - no explanations, no markdown, no additional text
+2. Use these EXACT field names (case-sensitive)
+3. All text fields must be strings, amounts must be numbers
+4. If a field cannot be determined, use empty string "" for text or null for numbers
+
+REQUIRED JSON STRUCTURE:
 {
-  "product_description": "main product or service purchased (required)",
-  "brand_name": "brand or manufacturer name (required)",
+  "product_description": "main product or service purchased",
+  "brand_name": "brand or manufacturer name", 
   "store_name": "store or merchant name",
-  "purchase_location": "store location, address, or city",
-  "purchase_date": "date in YYYY-MM-DD format (required)",
-  "amount": "total amount as number without currency symbols",
-  "warranty_period": "warranty period like '1 year', '6 months', '2 years' (required)",
-  "extended_warranty": "extended warranty details if mentioned",
-  "model_number": "product model number or SKU if available",
-  "country": "country where purchased (default to 'United States' if not clear)"
+  "purchase_location": "store address or city",
+  "purchase_date": "date in YYYY-MM-DD format",
+  "amount": number_without_currency_symbols,
+  "warranty_period": "warranty duration like '1 year' or '6 months'",
+  "extended_warranty": "extended warranty details if any",
+  "model_number": "product model/SKU if available",
+  "country": "country where purchased"
 }
 
-IMPORTANT RULES:
-1. Return ONLY the JSON object, no other text
-2. Use empty string "" for missing text fields
-3. Use null for missing numeric fields
-4. For warranty_period, if not explicitly mentioned, use "1 year" as default
-5. For country, if not mentioned, use "United States"
-6. Extract the most relevant product from the receipt
-7. Be precise with dates - convert to YYYY-MM-DD format
-8. For amounts, extract the total/final amount paid
+EXTRACTION RULES:
+- For product_description: Extract the main item purchased, be specific
+- For brand_name: Look for manufacturer/brand names (Apple, Samsung, etc.)
+- For store_name: Extract merchant name (Best Buy, Amazon, etc.)
+- For purchase_location: Extract store address, city, or location
+- For purchase_date: Convert any date format to YYYY-MM-DD
+- For amount: Extract total amount as number only (no $, currency symbols)
+- For warranty_period: Look for warranty terms, default to "1 year" if unclear
+- For model_number: Extract product model, SKU, or part number
+- For country: Default to "United States" if not specified
+
+IMPORTANT:
+- Be precise with amounts - extract the final total paid
+- For dates, ensure YYYY-MM-DD format (e.g., "2024-01-15")
+- For warranty, use common formats: "1 year", "2 years", "6 months"
+- If multiple products, focus on the main/most expensive item
 
 Receipt text to process:
 ${text}`;
+
+      console.log('Sending request to OpenAI with enhanced prompt...');
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -240,58 +257,41 @@ ${text}`;
         body: JSON.stringify({
           model: 'gpt-3.5-turbo',
           messages: [
-            { role: 'system', content: systemPrompt }
+            { 
+              role: 'system', 
+              content: 'You are a precise receipt data extraction expert. Return only valid JSON with the exact structure requested.' 
+            },
+            { 
+              role: 'user', 
+              content: systemPrompt 
+            }
           ],
           temperature: 0.1,
-          max_tokens: 800
+          max_tokens: 1000,
+          top_p: 0.9
         })
       });
 
       if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.status}`);
+        const errorText = await response.text();
+        console.error('OpenAI API error:', response.status, errorText);
+        throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
-      const gptResponse = result.choices[0].message.content.trim();
       
-      console.log('GPT Response:', gptResponse);
+      if (!result.choices || !result.choices[0] || !result.choices[0].message) {
+        throw new Error('Invalid response structure from OpenAI');
+      }
+
+      const gptResponse = result.choices[0].message.content.trim();
+      console.log('Raw GPT Response:', gptResponse);
       
       try {
-        // Clean the response to extract JSON
-        let jsonString = gptResponse;
+        // Enhanced JSON extraction and cleaning
+        const cleanedData = extractAndValidateJSON(gptResponse, text);
         
-        // Remove any markdown formatting
-        if (jsonString.includes('```json')) {
-          jsonString = jsonString.replace(/```json\s*/, '').replace(/```\s*$/, '');
-        } else if (jsonString.includes('```')) {
-          jsonString = jsonString.replace(/```\s*/, '').replace(/```\s*$/, '');
-        }
-        
-        // Find JSON object boundaries
-        const jsonStart = jsonString.indexOf('{');
-        const jsonEnd = jsonString.lastIndexOf('}') + 1;
-        
-        if (jsonStart !== -1 && jsonEnd > jsonStart) {
-          jsonString = jsonString.substring(jsonStart, jsonEnd);
-        }
-        
-        const structuredData = JSON.parse(jsonString);
-        
-        // Validate and clean the extracted data
-        const cleanedData = {
-          product_description: structuredData.product_description || '',
-          brand_name: structuredData.brand_name || '',
-          store_name: structuredData.store_name || '',
-          purchase_location: structuredData.purchase_location || '',
-          purchase_date: structuredData.purchase_date || new Date().toISOString().split('T')[0],
-          amount: structuredData.amount && !isNaN(Number(structuredData.amount)) ? Number(structuredData.amount) : null,
-          warranty_period: structuredData.warranty_period || '1 year',
-          extended_warranty: structuredData.extended_warranty || '',
-          model_number: structuredData.model_number || '',
-          country: structuredData.country || 'United States'
-        };
-        
-        console.log('Cleaned structured data from GPT:', cleanedData);
+        console.log('Successfully parsed and validated GPT data:', cleanedData);
         updateProcessingStep('gpt', 'completed', 'Data structured successfully with AI');
         generateDynamicForm({ 
           ...cleanedData, 
@@ -301,18 +301,22 @@ ${text}`;
       } catch (parseError) {
         console.error('Failed to parse GPT response:', parseError);
         console.log('Raw GPT response that failed to parse:', gptResponse);
-        updateProcessingStep('gpt', 'error', 'Failed to parse AI response');
-        const fallbackData = parseFallback(text);
+        updateProcessingStep('gpt', 'error', 'AI parsing failed, using fallback');
+        
+        // Use enhanced fallback parsing
+        const fallbackData = parseReceiptWithEnhancedFallback(text);
         generateDynamicForm({ 
           ...fallbackData, 
           extracted_text: text, 
           processing_method: 'fallback_parsing' 
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('GPT processing error:', error);
-      updateProcessingStep('gpt', 'error', 'AI processing failed');
-      const fallbackData = parseFallback(text);
+      updateProcessingStep('gpt', 'error', `AI processing failed: ${error.message}`);
+      
+      // Use enhanced fallback parsing
+      const fallbackData = parseReceiptWithEnhancedFallback(text);
       generateDynamicForm({ 
         ...fallbackData, 
         extracted_text: text, 
@@ -321,70 +325,296 @@ ${text}`;
     }
   };
 
-  const parseFallback = (text: string): ExtractedData => {
+  const extractAndValidateJSON = (gptResponse: string, originalText: string): ExtractedData => {
+    let jsonString = gptResponse.trim();
+    
+    // Remove markdown formatting
+    if (jsonString.includes('```json')) {
+      jsonString = jsonString.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
+    } else if (jsonString.includes('```')) {
+      jsonString = jsonString.replace(/```\s*/g, '').replace(/```\s*$/g, '');
+    }
+    
+    // Find JSON object boundaries
+    const jsonStart = jsonString.indexOf('{');
+    const jsonEnd = jsonString.lastIndexOf('}') + 1;
+    
+    if (jsonStart === -1 || jsonEnd <= jsonStart) {
+      throw new Error('No valid JSON object found in response');
+    }
+    
+    jsonString = jsonString.substring(jsonStart, jsonEnd);
+    
+    // Parse JSON
+    let parsedData;
+    try {
+      parsedData = JSON.parse(jsonString);
+    } catch (e) {
+      // Try to fix common JSON issues
+      jsonString = jsonString
+        .replace(/,\s*}/g, '}')  // Remove trailing commas
+        .replace(/,\s*]/g, ']')  // Remove trailing commas in arrays
+        .replace(/([{,]\s*)(\w+):/g, '$1"$2":')  // Quote unquoted keys
+        .replace(/:\s*'([^']*)'/g, ': "$1"');  // Replace single quotes with double quotes
+      
+      try {
+        parsedData = JSON.parse(jsonString);
+      } catch (e2) {
+        throw new Error(`JSON parsing failed: ${e2.message}`);
+      }
+    }
+    
+    // Validate and clean the extracted data
+    const cleanedData: ExtractedData = {
+      product_description: validateAndCleanString(parsedData.product_description),
+      brand_name: validateAndCleanString(parsedData.brand_name),
+      store_name: validateAndCleanString(parsedData.store_name),
+      purchase_location: validateAndCleanString(parsedData.purchase_location),
+      purchase_date: validateAndCleanDate(parsedData.purchase_date),
+      amount: validateAndCleanAmount(parsedData.amount),
+      warranty_period: validateAndCleanString(parsedData.warranty_period) || '1 year',
+      extended_warranty: validateAndCleanString(parsedData.extended_warranty),
+      model_number: validateAndCleanString(parsedData.model_number),
+      country: validateAndCleanString(parsedData.country) || 'United States'
+    };
+    
+    // Validate required fields and apply fallbacks if needed
+    if (!cleanedData.product_description) {
+      const fallbackProduct = extractProductFromText(originalText);
+      cleanedData.product_description = fallbackProduct || 'Product';
+    }
+    
+    if (!cleanedData.brand_name) {
+      const fallbackBrand = extractBrandFromText(originalText);
+      cleanedData.brand_name = fallbackBrand || 'Unknown Brand';
+    }
+    
+    if (!cleanedData.purchase_date) {
+      const fallbackDate = extractDateFromText(originalText);
+      cleanedData.purchase_date = fallbackDate || new Date().toISOString().split('T')[0];
+    }
+    
+    return cleanedData;
+  };
+
+  const validateAndCleanString = (value: any): string => {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+    return '';
+  };
+
+  const validateAndCleanDate = (value: any): string => {
+    if (typeof value === 'string' && value.trim()) {
+      const date = new Date(value.trim());
+      if (!isNaN(date.getTime()) && date.getFullYear() > 2000 && date <= new Date()) {
+        return date.toISOString().split('T')[0];
+      }
+    }
+    return '';
+  };
+
+  const validateAndCleanAmount = (value: any): number | null => {
+    if (typeof value === 'number' && value > 0 && value < 1000000) {
+      return Math.round(value * 100) / 100; // Round to 2 decimal places
+    }
+    if (typeof value === 'string') {
+      const numValue = parseFloat(value.replace(/[^0-9.]/g, ''));
+      if (!isNaN(numValue) && numValue > 0 && numValue < 1000000) {
+        return Math.round(numValue * 100) / 100;
+      }
+    }
+    return null;
+  };
+
+  const parseReceiptWithEnhancedFallback = (text: string): ExtractedData => {
+    console.log('Using enhanced fallback parsing for text:', text);
+    
     const lines = text.split('\n').map(line => line.trim()).filter(line => line);
     const data: ExtractedData = {};
 
-    console.log('Using fallback parsing for text:', text);
-
-    // Simple pattern matching for common receipt elements
-    for (const line of lines) {
-      const lowerLine = line.toLowerCase();
-      
-      // Look for amounts (more comprehensive patterns)
-      const amountPatterns = [
-        /total[:\s]*\$?(\d+\.?\d*)/i,
-        /amount[:\s]*\$?(\d+\.?\d*)/i,
-        /\$(\d+\.\d{2})/,
-        /(\d+\.\d{2})/
-      ];
-      
-      for (const pattern of amountPatterns) {
-        const amountMatch = line.match(pattern);
-        if (amountMatch && !data.amount) {
-          const amount = parseFloat(amountMatch[1]);
-          if (amount > 0 && amount < 10000) { // Reasonable range
-            data.amount = amount;
-            break;
-          }
-        }
-      }
-      
-      // Look for dates (multiple formats)
-      const datePatterns = [
-        /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/,
-        /(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/,
-        /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{4}/i
-      ];
-      
-      for (const pattern of datePatterns) {
-        const dateMatch = line.match(pattern);
-        if (dateMatch && !data.purchase_date) {
-          const date = new Date(dateMatch[1]);
-          if (!isNaN(date.getTime()) && date.getFullYear() > 2000) {
-            data.purchase_date = date.toISOString().split('T')[0];
-            break;
-          }
-        }
-      }
-      
-      // Look for store names (usually at the top, avoid common receipt words)
-      const avoidWords = ['receipt', 'invoice', 'total', 'subtotal', 'tax', 'date', 'time'];
-      if (!data.store_name && lines.indexOf(line) < 5 && line.length > 3 && line.length < 50) {
-        const hasAvoidWord = avoidWords.some(word => lowerLine.includes(word));
-        if (!hasAvoidWord && !/^\d+$/.test(line) && !/^[\d\s\-\(\)]+$/.test(line)) {
-          data.store_name = line;
+    // Enhanced amount extraction with multiple patterns
+    const amountPatterns = [
+      /(?:total|amount|sum|grand\s*total|final)[:\s]*\$?(\d+\.?\d*)/i,
+      /\$(\d+\.\d{2})(?!\d)/g,
+      /(\d+\.\d{2})\s*(?:total|usd|dollars?)/i,
+      /(?:^|\s)(\d{1,4}\.\d{2})(?:\s|$)/g
+    ];
+    
+    const amounts: number[] = [];
+    for (const pattern of amountPatterns) {
+      const matches = text.matchAll(pattern);
+      for (const match of matches) {
+        const amount = parseFloat(match[1]);
+        if (amount > 0 && amount < 10000) {
+          amounts.push(amount);
         }
       }
     }
-
+    
+    if (amounts.length > 0) {
+      // Use the largest reasonable amount (likely the total)
+      data.amount = Math.max(...amounts);
+    }
+    
+    // Enhanced date extraction
+    data.purchase_date = extractDateFromText(text);
+    
+    // Enhanced store name extraction
+    data.store_name = extractStoreFromText(lines);
+    
+    // Enhanced product extraction
+    data.product_description = extractProductFromText(text);
+    
+    // Enhanced brand extraction
+    data.brand_name = extractBrandFromText(text);
+    
+    // Extract location information
+    data.purchase_location = extractLocationFromText(text);
+    
+    // Extract model number
+    data.model_number = extractModelFromText(text);
+    
     // Set defaults for required fields
-    if (!data.country) data.country = 'United States';
-    if (!data.warranty_period) data.warranty_period = '1 year';
-    if (!data.purchase_date) data.purchase_date = new Date().toISOString().split('T')[0];
-
-    console.log('Fallback parsing result:', data);
+    data.country = data.country || 'United States';
+    data.warranty_period = data.warranty_period || '1 year';
+    data.purchase_date = data.purchase_date || new Date().toISOString().split('T')[0];
+    
+    console.log('Enhanced fallback parsing result:', data);
     return data;
+  };
+
+  const extractDateFromText = (text: string): string => {
+    const datePatterns = [
+      /(\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/,
+      /(\d{1,2}[-\/]\d{1,2}[-\/]\d{4})/,
+      /(\d{1,2}[-\/]\d{1,2}[-\/]\d{2})/,
+      /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{4}/i,
+      /\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4}/i
+    ];
+    
+    for (const pattern of datePatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const date = new Date(match[1] || match[0]);
+        if (!isNaN(date.getTime()) && date.getFullYear() > 2000 && date <= new Date()) {
+          return date.toISOString().split('T')[0];
+        }
+      }
+    }
+    return '';
+  };
+
+  const extractStoreFromText = (lines: string[]): string => {
+    const storeIndicators = ['store', 'shop', 'market', 'inc', 'llc', 'corp', 'ltd'];
+    const avoidWords = ['receipt', 'invoice', 'total', 'subtotal', 'tax', 'date', 'time', 'thank', 'you'];
+    
+    // Check first few lines for store name
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      const line = lines[i];
+      if (line.length > 2 && line.length < 50) {
+        const lowerLine = line.toLowerCase();
+        const hasAvoidWord = avoidWords.some(word => lowerLine.includes(word));
+        const hasStoreIndicator = storeIndicators.some(word => lowerLine.includes(word));
+        
+        if (!hasAvoidWord && (hasStoreIndicator || i < 3)) {
+          if (!/^\d+$/.test(line) && !/^[\d\s\-\(\)]+$/.test(line)) {
+            return line;
+          }
+        }
+      }
+    }
+    return '';
+  };
+
+  const extractProductFromText = (text: string): string => {
+    const productPatterns = [
+      /(?:item|product|description)[:\s]+([^\n\r]+)/i,
+      /^([A-Za-z][A-Za-z0-9\s]{5,30})(?:\s+\$|\s+\d+\.\d{2})/m
+    ];
+    
+    for (const pattern of productPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    }
+    
+    // Fallback: look for lines that might be products
+    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+    for (const line of lines) {
+      if (line.length > 5 && line.length < 50 && 
+          /[A-Za-z]/.test(line) && 
+          !line.toLowerCase().includes('total') &&
+          !line.toLowerCase().includes('tax') &&
+          !line.toLowerCase().includes('receipt')) {
+        return line;
+      }
+    }
+    
+    return '';
+  };
+
+  const extractBrandFromText = (text: string): string => {
+    const commonBrands = [
+      'apple', 'samsung', 'google', 'microsoft', 'sony', 'lg', 'hp', 'dell', 'lenovo',
+      'nike', 'adidas', 'amazon', 'walmart', 'target', 'best buy', 'costco', 'home depot',
+      'starbucks', 'mcdonalds', 'subway', 'dominos', 'pizza hut', 'kfc', 'taco bell'
+    ];
+    
+    const lowerText = text.toLowerCase();
+    for (const brand of commonBrands) {
+      if (lowerText.includes(brand)) {
+        return brand.charAt(0).toUpperCase() + brand.slice(1);
+      }
+    }
+    
+    // Look for brand patterns
+    const brandPatterns = [
+      /(?:brand|manufacturer)[:\s]+([^\n\r]+)/i,
+      /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:inc|corp|ltd|llc)/i
+    ];
+    
+    for (const pattern of brandPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    }
+    
+    return '';
+  };
+
+  const extractLocationFromText = (text: string): string => {
+    const locationPatterns = [
+      /(?:address|location)[:\s]+([^\n\r]+)/i,
+      /\d+\s+[A-Za-z\s]+(?:st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive)/i,
+      /([A-Za-z\s]+,\s*[A-Z]{2}\s*\d{5})/
+    ];
+    
+    for (const pattern of locationPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return match[1] ? match[1].trim() : match[0].trim();
+      }
+    }
+    return '';
+  };
+
+  const extractModelFromText = (text: string): string => {
+    const modelPatterns = [
+      /(?:model|sku|part\s*#|item\s*#)[:\s]+([A-Za-z0-9\-]+)/i,
+      /([A-Z]{2,}\d{3,})/,
+      /([A-Za-z]+\d{3,}[A-Za-z]*)/
+    ];
+    
+    for (const pattern of modelPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    }
+    return '';
   };
 
   const generateDynamicForm = (data: ExtractedData) => {
@@ -410,7 +640,7 @@ ${text}`;
     };
     
     setFormData(formDataWithDefaults);
-    updateProcessingStep('form', 'completed', 'Form ready for review');
+    updateProcessingStep('form', 'completed', 'Form ready for review and editing');
     setShowForm(true);
     setIsProcessing(false);
   };
@@ -756,7 +986,7 @@ ${text}`;
             Add Your Receipt
           </h1>
           <p className="text-xl text-text-secondary">
-            Choose how you'd like to add your receipt data with secure Supabase integration
+            Choose how you'd like to add your receipt data with enhanced AI processing
           </p>
         </div>
 
@@ -783,7 +1013,7 @@ ${text}`;
                   Scan & Upload
                 </h3>
                 <p className="text-text-secondary">
-                  Capture or upload receipt images for automatic data extraction
+                  Capture or upload receipt images for automatic data extraction with enhanced AI
                 </p>
               </div>
 

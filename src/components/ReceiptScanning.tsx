@@ -16,7 +16,10 @@ import {
   RefreshCw,
   User,
   LogOut,
-  Bell
+  Bell,
+  Edit3,
+  RotateCcw,
+  Plus
 } from 'lucide-react';
 import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
 import { createWorker } from 'tesseract.js';
@@ -38,8 +41,13 @@ interface ExtractedData {
   country: string;
 }
 
+type CaptureMode = 'normal' | 'panorama';
+type InputMode = 'capture' | 'upload' | 'manual';
+
 const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) => {
   const [user, setUser] = useState<any>(null);
+  const [inputMode, setInputMode] = useState<InputMode>('capture');
+  const [captureMode, setCaptureMode] = useState<CaptureMode>('normal');
   const [showCamera, setShowCamera] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -53,6 +61,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [alertsCount] = useState(3);
   const [openaiAvailable, setOpenaiAvailable] = useState<boolean | null>(null);
+  const [showExtractedForm, setShowExtractedForm] = useState(false);
   
   const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -200,17 +209,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     setOcrProgress(0);
 
     try {
-      // Step 1: Upload image to storage
-      setProcessingStep('Uploading image...');
-      const imageFile = uploadedFile || dataURLtoBlob(capturedImage!);
-      
-      const { data: uploadData, error: uploadError } = await uploadReceiptImage(imageFile, user.id);
-      
-      if (uploadError) {
-        throw new Error(`Upload failed: ${uploadError.message}`);
-      }
-
-      // Step 2: Perform OCR
+      // Step 1: Perform OCR
       const text = await performOCR(uploadedFile || capturedImage!);
       setExtractedText(text);
 
@@ -218,9 +217,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         throw new Error('No text could be extracted from the image');
       }
 
-      // Step 3: Structure data with GPT or fallback
+      // Step 2: Structure data with GPT or fallback
       let structuredData: ExtractedData;
-      let processingMethod = 'manual';
 
       try {
         if (openaiAvailable) {
@@ -232,7 +230,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           }
           
           structuredData = gptData!;
-          processingMethod = 'gpt_structured';
         } else {
           throw new Error('OpenAI not available');
         }
@@ -240,29 +237,11 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         console.warn('GPT processing failed, using fallback:', gptError);
         setProcessingStep('Using fallback processing...');
         structuredData = fallbackDataExtraction(text);
-        processingMethod = 'fallback_parsing';
       }
 
       setExtractedData(structuredData);
-
-      // Step 4: Save to database
-      setProcessingStep('Saving receipt...');
-      const receiptData = {
-        ...structuredData,
-        image_url: uploadData?.url,
-        processing_method: processingMethod,
-        ocr_confidence: 0.85, // Mock confidence score
-        extracted_text: text
-      };
-
-      const { error: saveError } = await saveReceiptToDatabase(receiptData, user.id);
-
-      if (saveError) {
-        throw new Error(`Save failed: ${saveError.message}`);
-      }
-
-      setSuccess(true);
-      setProcessingStep('Receipt saved successfully!');
+      setShowExtractedForm(true);
+      setProcessingStep('Data extracted successfully! Please review and edit as needed.');
 
     } catch (err: any) {
       console.error('Processing error:', err);
@@ -281,9 +260,18 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     setSuccess(false);
     setOcrProgress(0);
     setProcessingStep('');
+    setShowExtractedForm(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const cancelAndRetry = () => {
+    setShowExtractedForm(false);
+    setExtractedData(null);
+    setExtractedText('');
+    setError(null);
+    setProcessingStep('');
   };
 
   const updateExtractedData = (field: keyof ExtractedData, value: string | number | null) => {
@@ -295,7 +283,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     }
   };
 
-  const saveManualData = async () => {
+  const saveReceiptData = async () => {
     if (!extractedData || !user) {
       setError('No data to save');
       return;
@@ -307,8 +295,12 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     try {
       let imageUrl = null;
       
-      if (capturedImage) {
-        const { data: uploadData, error: uploadError } = await uploadReceiptImage(dataURLtoBlob(capturedImage), user.id);
+      // Upload image if we have one
+      if (capturedImage || uploadedFile) {
+        setProcessingStep('Uploading image...');
+        const imageFile = uploadedFile || dataURLtoBlob(capturedImage!);
+        const { data: uploadData, error: uploadError } = await uploadReceiptImage(imageFile, user.id);
+        
         if (uploadError) {
           console.warn('Failed to upload image:', uploadError);
         } else {
@@ -316,12 +308,13 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         }
       }
 
+      setProcessingStep('Saving receipt...');
       const receiptData = {
         ...extractedData,
         image_url: imageUrl,
-        processing_method: 'manual',
-        ocr_confidence: null,
-        extracted_text: extractedText
+        processing_method: inputMode === 'manual' ? 'manual' : (extractedText ? 'gpt_structured' : 'manual'),
+        ocr_confidence: extractedText ? 0.85 : null,
+        extracted_text: extractedText || null
       };
 
       const { error: saveError } = await saveReceiptToDatabase(receiptData, user.id);
@@ -331,12 +324,32 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       }
 
       setSuccess(true);
+      setProcessingStep('Receipt saved successfully!');
+      setShowExtractedForm(false);
+
     } catch (err: any) {
       console.error('Save error:', err);
       setError(err.message || 'Failed to save receipt');
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const startManualEntry = () => {
+    setInputMode('manual');
+    setExtractedData({
+      product_description: '',
+      brand_name: '',
+      store_name: '',
+      purchase_location: '',
+      purchase_date: new Date().toISOString().split('T')[0],
+      amount: null,
+      warranty_period: '1 year',
+      extended_warranty: '',
+      model_number: '',
+      country: 'United States'
+    });
+    setShowExtractedForm(true);
   };
 
   return (
@@ -428,10 +441,10 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         {/* Page Title */}
         <div className="text-center mb-8">
           <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
-            Scan Your Receipt
+            Add Your Receipt
           </h1>
           <p className="text-xl text-text-secondary">
-            Capture or upload your receipt and let AI extract the details automatically
+            Capture, upload, or manually enter your receipt details
           </p>
         </div>
 
@@ -472,7 +485,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-card max-w-2xl w-full">
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h2 className="text-xl font-bold text-text-primary">Capture Receipt</h2>
+                <h2 className="text-xl font-bold text-text-primary">
+                  {captureMode === 'panorama' ? 'Panorama Capture' : 'Capture Receipt'}
+                </h2>
                 <button
                   onClick={() => setShowCamera(false)}
                   className="text-text-secondary hover:text-text-primary transition-colors duration-200"
@@ -482,6 +497,32 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
               </div>
               
               <div className="p-6">
+                {/* Capture Mode Toggle */}
+                <div className="flex justify-center mb-4">
+                  <div className="bg-gray-100 rounded-lg p-1 flex">
+                    <button
+                      onClick={() => setCaptureMode('normal')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
+                        captureMode === 'normal'
+                          ? 'bg-white text-primary shadow-sm'
+                          : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      Normal
+                    </button>
+                    <button
+                      onClick={() => setCaptureMode('panorama')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
+                        captureMode === 'panorama'
+                          ? 'bg-white text-primary shadow-sm'
+                          : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      Panorama
+                    </button>
+                  </div>
+                </div>
+
                 <div className="relative">
                   <Webcam
                     ref={webcamRef}
@@ -489,9 +530,19 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                     screenshotFormat="image/jpeg"
                     className="w-full rounded-lg"
                     videoConstraints={{
-                      facingMode: 'environment'
+                      facingMode: 'environment',
+                      width: captureMode === 'panorama' ? 1920 : 1280,
+                      height: captureMode === 'panorama' ? 1080 : 720
                     }}
                   />
+                  
+                  {captureMode === 'panorama' && (
+                    <div className="absolute inset-0 border-2 border-dashed border-primary rounded-lg pointer-events-none">
+                      <div className="absolute top-2 left-2 bg-primary text-white px-2 py-1 rounded text-xs">
+                        Panorama Mode - Move slowly across receipt
+                      </div>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="flex justify-center mt-6">
@@ -508,63 +559,107 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           </div>
         )}
 
-        {/* Main Content Area */}
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Left Column - Image Capture/Upload */}
-          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
-            <h2 className="text-xl font-bold text-text-primary mb-6">1. Capture or Upload Receipt</h2>
-            
-            {!capturedImage ? (
-              <div className="space-y-4">
-                {/* Camera Capture */}
+        {/* Input Method Selection */}
+        {!capturedImage && !showExtractedForm && (
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            {/* Camera Capture */}
+            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
+              <div className="text-center">
+                <div className="bg-gradient-to-br from-primary/10 to-primary/20 rounded-xl p-4 w-fit mx-auto mb-4">
+                  <Camera className="h-8 w-8 text-primary" />
+                </div>
+                <h3 className="text-lg font-bold text-text-primary mb-2">Take Photo</h3>
+                <p className="text-text-secondary text-sm mb-4">
+                  Use your camera to capture the receipt
+                </p>
                 <button
-                  onClick={() => setShowCamera(true)}
-                  className="w-full bg-gradient-to-r from-primary to-secondary text-white p-6 rounded-xl font-medium hover:from-primary/90 hover:to-secondary/90 transition-all duration-200 flex items-center justify-center space-x-3"
+                  onClick={() => {
+                    setInputMode('capture');
+                    setShowCamera(true);
+                  }}
+                  className="w-full bg-primary text-white py-3 px-4 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
                 >
-                  <Camera className="h-6 w-6" />
-                  <span>Take Photo</span>
+                  Open Camera
                 </button>
-
-                {/* File Upload */}
-                <div className="relative">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full border-2 border-dashed border-gray-300 hover:border-primary p-6 rounded-xl transition-colors duration-200 flex items-center justify-center space-x-3 text-text-secondary hover:text-primary"
-                  >
-                    <Upload className="h-6 w-6" />
-                    <span>Upload Image</span>
-                  </button>
-                </div>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Image Preview */}
-                <div className="relative">
-                  <img
-                    src={capturedImage}
-                    alt="Receipt"
-                    className="w-full rounded-lg shadow-md"
-                  />
-                  <button
-                    onClick={resetForm}
-                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors duration-200"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
+            </div>
 
-                {/* Process Button */}
+            {/* File Upload */}
+            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
+              <div className="text-center">
+                <div className="bg-gradient-to-br from-secondary/10 to-secondary/20 rounded-xl p-4 w-fit mx-auto mb-4">
+                  <Upload className="h-8 w-8 text-secondary" />
+                </div>
+                <h3 className="text-lg font-bold text-text-primary mb-2">Upload Image</h3>
+                <p className="text-text-secondary text-sm mb-4">
+                  Select an image file from your device
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => {
+                    setInputMode('upload');
+                    fileInputRef.current?.click();
+                  }}
+                  className="w-full bg-secondary text-white py-3 px-4 rounded-lg font-medium hover:bg-secondary/90 transition-colors duration-200"
+                >
+                  Choose File
+                </button>
+              </div>
+            </div>
+
+            {/* Manual Entry */}
+            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
+              <div className="text-center">
+                <div className="bg-gradient-to-br from-accent-yellow/10 to-accent-yellow/20 rounded-xl p-4 w-fit mx-auto mb-4">
+                  <Edit3 className="h-8 w-8 text-accent-yellow" />
+                </div>
+                <h3 className="text-lg font-bold text-text-primary mb-2">Manual Entry</h3>
+                <p className="text-text-secondary text-sm mb-4">
+                  Enter receipt details manually
+                </p>
+                <button
+                  onClick={startManualEntry}
+                  className="w-full bg-accent-yellow text-white py-3 px-4 rounded-lg font-medium hover:bg-accent-yellow/90 transition-colors duration-200"
+                >
+                  Enter Manually
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Image Preview and Processing */}
+        {capturedImage && !showExtractedForm && (
+          <div className="grid lg:grid-cols-2 gap-8 mb-8">
+            {/* Left Column - Image Preview */}
+            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
+              <h2 className="text-xl font-bold text-text-primary mb-6">Receipt Image</h2>
+              
+              <div className="relative mb-6">
+                <img
+                  src={capturedImage}
+                  alt="Receipt"
+                  className="w-full rounded-lg shadow-md"
+                />
+                <button
+                  onClick={resetForm}
+                  className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors duration-200"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="flex space-x-3">
                 <button
                   onClick={processReceipt}
                   disabled={isProcessing}
-                  className="w-full bg-primary text-white p-4 rounded-xl font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                  className="flex-1 bg-primary text-white p-4 rounded-xl font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
                   {isProcessing ? (
                     <>
@@ -578,89 +673,113 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                     </>
                   )}
                 </button>
-              </div>
-            )}
-          </div>
-
-          {/* Right Column - Processing Status & Results */}
-          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
-            <h2 className="text-xl font-bold text-text-primary mb-6">2. Processing Status</h2>
-            
-            {isProcessing && (
-              <div className="space-y-4">
-                {/* Progress Bar */}
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-primary h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${ocrProgress}%` }}
-                  ></div>
-                </div>
                 
-                {/* Current Step */}
-                <div className="flex items-center space-x-2">
-                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  <span className="text-text-secondary">{processingStep}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Processing Steps */}
-            <div className="space-y-3">
-              <div className={`flex items-center space-x-3 p-3 rounded-lg ${extractedText ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
-                <div className={`rounded-full p-1 ${extractedText ? 'bg-green-500' : 'bg-gray-300'}`}>
-                  {extractedText ? <Check className="h-3 w-3 text-white" /> : <Eye className="h-3 w-3 text-white" />}
-                </div>
-                <span className={`text-sm ${extractedText ? 'text-green-700' : 'text-text-secondary'}`}>
-                  OCR Text Extraction
-                </span>
-              </div>
-
-              <div className={`flex items-center space-x-3 p-3 rounded-lg ${extractedData ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
-                <div className={`rounded-full p-1 ${extractedData ? 'bg-green-500' : 'bg-gray-300'}`}>
-                  {extractedData ? <Check className="h-3 w-3 text-white" /> : <Brain className="h-3 w-3 text-white" />}
-                </div>
-                <span className={`text-sm ${extractedData ? 'text-green-700' : 'text-text-secondary'}`}>
-                  AI Data Structuring
-                </span>
-              </div>
-
-              <div className={`flex items-center space-x-3 p-3 rounded-lg ${success ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
-                <div className={`rounded-full p-1 ${success ? 'bg-green-500' : 'bg-gray-300'}`}>
-                  {success ? <Check className="h-3 w-3 text-white" /> : <Save className="h-3 w-3 text-white" />}
-                </div>
-                <span className={`text-sm ${success ? 'text-green-700' : 'text-text-secondary'}`}>
-                  Save to Database
-                </span>
+                <button
+                  onClick={resetForm}
+                  className="px-4 py-2 border border-gray-300 text-text-secondary rounded-xl hover:bg-gray-50 transition-colors duration-200"
+                >
+                  <RotateCcw className="h-5 w-5" />
+                </button>
               </div>
             </div>
 
-            {/* Extracted Text Preview */}
-            {extractedText && (
-              <div className="mt-6">
-                <h3 className="font-medium text-text-primary mb-2">Extracted Text:</h3>
-                <div className="bg-gray-50 p-3 rounded-lg max-h-32 overflow-y-auto">
-                  <pre className="text-xs text-text-secondary whitespace-pre-wrap">{extractedText}</pre>
+            {/* Right Column - Processing Status */}
+            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
+              <h2 className="text-xl font-bold text-text-primary mb-6">Processing Status</h2>
+              
+              {isProcessing && (
+                <div className="space-y-4 mb-6">
+                  {/* Progress Bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-primary h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${ocrProgress}%` }}
+                    ></div>
+                  </div>
+                  
+                  {/* Current Step */}
+                  <div className="flex items-center space-x-2">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    <span className="text-text-secondary">{processingStep}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Processing Steps */}
+              <div className="space-y-3">
+                <div className={`flex items-center space-x-3 p-3 rounded-lg ${extractedText ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                  <div className={`rounded-full p-1 ${extractedText ? 'bg-green-500' : 'bg-gray-300'}`}>
+                    {extractedText ? <Check className="h-3 w-3 text-white" /> : <Eye className="h-3 w-3 text-white" />}
+                  </div>
+                  <span className={`text-sm ${extractedText ? 'text-green-700' : 'text-text-secondary'}`}>
+                    OCR Text Extraction
+                  </span>
+                </div>
+
+                <div className={`flex items-center space-x-3 p-3 rounded-lg ${extractedData ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                  <div className={`rounded-full p-1 ${extractedData ? 'bg-green-500' : 'bg-gray-300'}`}>
+                    {extractedData ? <Check className="h-3 w-3 text-white" /> : <Brain className="h-3 w-3 text-white" />}
+                  </div>
+                  <span className={`text-sm ${extractedData ? 'text-green-700' : 'text-text-secondary'}`}>
+                    AI Data Structuring
+                  </span>
+                </div>
+
+                <div className={`flex items-center space-x-3 p-3 rounded-lg ${success ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                  <div className={`rounded-full p-1 ${success ? 'bg-green-500' : 'bg-gray-300'}`}>
+                    {success ? <Check className="h-3 w-3 text-white" /> : <Save className="h-3 w-3 text-white" />}
+                  </div>
+                  <span className={`text-sm ${success ? 'text-green-700' : 'text-text-secondary'}`}>
+                    Save to Database
+                  </span>
                 </div>
               </div>
-            )}
+
+              {/* Extracted Text Preview */}
+              {extractedText && (
+                <div className="mt-6">
+                  <h3 className="font-medium text-text-primary mb-2">Extracted Text:</h3>
+                  <div className="bg-gray-50 p-3 rounded-lg max-h-32 overflow-y-auto">
+                    <pre className="text-xs text-text-secondary whitespace-pre-wrap">{extractedText}</pre>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Extracted Data Form */}
-        {extractedData && (
-          <div className="mt-8 bg-white rounded-2xl shadow-card border border-gray-100 p-6">
+        {showExtractedForm && extractedData && (
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-text-primary">3. Review & Edit Details</h2>
+              <h2 className="text-xl font-bold text-text-primary">
+                {inputMode === 'manual' ? 'Enter Receipt Details' : 'Review & Edit Details'}
+              </h2>
               <div className="flex items-center space-x-2">
                 <button
+                  onClick={cancelAndRetry}
+                  className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200 px-3 py-2 border border-gray-300 rounded-lg"
+                >
+                  <X className="h-4 w-4" />
+                  <span>Cancel</span>
+                </button>
+                <button
                   onClick={resetForm}
-                  className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                  className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200 px-3 py-2 border border-gray-300 rounded-lg"
                 >
                   <RefreshCw className="h-4 w-4" />
                   <span>Start Over</span>
                 </button>
               </div>
             </div>
+
+            {inputMode !== 'manual' && (
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-700">
+                  Please review the extracted information below and make any necessary corrections before saving.
+                </p>
+              </div>
+            )}
 
             <div className="grid md:grid-cols-2 gap-6">
               {/* Product Information */}
@@ -795,10 +914,18 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
               </div>
             </div>
 
-            {/* Save Button */}
-            <div className="mt-8 flex justify-end">
+            {/* Action Buttons */}
+            <div className="mt-8 flex justify-end space-x-4">
               <button
-                onClick={saveManualData}
+                onClick={cancelAndRetry}
+                className="px-6 py-3 border border-gray-300 text-text-secondary rounded-lg hover:bg-gray-50 transition-colors duration-200 flex items-center space-x-2"
+              >
+                <X className="h-4 w-4" />
+                <span>Cancel</span>
+              </button>
+              
+              <button
+                onClick={saveReceiptData}
                 disabled={isProcessing || success}
                 className="bg-primary text-white px-8 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >

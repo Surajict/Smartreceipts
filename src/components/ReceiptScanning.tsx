@@ -1,120 +1,80 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { 
-  ArrowLeft, 
   Camera, 
   Upload, 
-  FileText, 
-  Loader2, 
+  ArrowLeft, 
   CheckCircle, 
-  AlertCircle,
+  AlertCircle, 
+  Loader2, 
   X,
   Edit3,
   Save,
-  RefreshCw,
+  FileText,
+  Zap,
+  Brain,
   Eye,
-  EyeOff,
-  Calendar,
-  DollarSign,
-  Tag,
-  Store,
-  MapPin,
-  Shield,
   User,
   LogOut,
-  Bell,
-  RotateCcw,
-  Maximize,
-  ScanLine
+  Bell
 } from 'lucide-react';
 import Webcam from 'react-webcam';
-import Tesseract from 'tesseract.js';
-import { 
-  getCurrentUser, 
-  signOut, 
-  saveReceiptToDatabase, 
-  uploadReceiptImage 
-} from '../lib/supabase';
+import { createWorker } from 'tesseract.js';
+import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage } from '../lib/supabase';
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
 }
 
-interface ExtractedData {
-  product_description?: string;
-  brand_name?: string;
-  store_name?: string;
-  purchase_location?: string;
-  purchase_date?: string;
-  amount?: number;
-  warranty_period?: string;
-  extended_warranty?: string;
-  model_number?: string;
-  country?: string;
+interface ReceiptData {
+  product_description: string;
+  brand_name: string;
+  store_name: string;
+  purchase_location: string;
+  purchase_date: string;
+  amount: number | null;
+  warranty_period: string;
+  extended_warranty: string;
+  model_number: string;
+  country: string;
+  image_url?: string;
   processing_method?: string;
   ocr_confidence?: number;
   extracted_text?: string;
-  image_url?: string;
 }
 
 interface ProcessingStep {
   id: string;
-  name: string;
+  label: string;
   status: 'pending' | 'processing' | 'completed' | 'error';
-  message?: string;
+  details?: string;
 }
 
 const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) => {
   const [user, setUser] = useState<any>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [alertsCount] = useState(3);
-  
-  // Main mode selection
-  const [selectedMode, setSelectedMode] = useState<'scan-upload' | 'manual' | null>(null);
-  
-  // Scanning states
-  const [scanningMode, setScanningMode] = useState<'camera' | 'upload' | 'panoramic' | null>(null);
-  const [showCamera, setShowCamera] = useState(false);
-  const [isPanoramicMode, setIsPanoramicMode] = useState(false);
-  const [panoramicImages, setPanoramicImages] = useState<string[]>([]);
+  const [captureMode, setCaptureMode] = useState<'camera' | 'upload' | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  
-  // Processing states
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
-  const [extractedText, setExtractedText] = useState<string>('');
-  const [structuredData, setStructuredData] = useState<ExtractedData>({});
-  const [showExtractedText, setShowExtractedText] = useState(false);
-  
-  // Form states
-  const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState<ExtractedData>({});
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [extractedData, setExtractedData] = useState<ReceiptData | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedData, setEditedData] = useState<ReceiptData | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   
   const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  React.useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await getCurrentUser();
-        if (!currentUser) {
-          console.error('No authenticated user found');
-          onBackToDashboard();
-          return;
-        }
-        console.log('Loaded user for receipt scanning:', currentUser.id);
-        setUser(currentUser);
-      } catch (error) {
-        console.error('Error loading user:', error);
-        onBackToDashboard();
-      }
-    };
+  useEffect(() => {
     loadUser();
-  }, [onBackToDashboard]);
+  }, []);
+
+  const loadUser = async () => {
+    const currentUser = await getCurrentUser();
+    setUser(currentUser);
+  };
 
   const handleSignOut = async () => {
     try {
@@ -125,128 +85,111 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     }
   };
 
-  const updateProcessingStep = (stepId: string, status: ProcessingStep['status'], message?: string) => {
+  const updateProcessingStep = (stepId: string, status: ProcessingStep['status'], details?: string) => {
     setProcessingSteps(prev => prev.map(step => 
-      step.id === stepId ? { ...step, status, message } : step
+      step.id === stepId ? { ...step, status, details } : step
     ));
   };
 
   const initializeProcessingSteps = () => {
     const steps: ProcessingStep[] = [
-      { id: 'upload', name: 'Uploading image to secure storage', status: 'pending' },
-      { id: 'ocr', name: 'Extracting text from image', status: 'pending' },
-      { id: 'gpt', name: 'Structuring data with AI', status: 'pending' },
-      { id: 'form', name: 'Preparing editable form', status: 'pending' }
+      { id: 'upload', label: 'Uploading image to secure storage', status: 'pending' },
+      { id: 'ocr', label: 'Extracting text using OCR technology', status: 'pending' },
+      { id: 'ai', label: 'Processing with AI to structure data', status: 'pending' },
+      { id: 'validation', label: 'Validating and organizing information', status: 'pending' }
     ];
     setProcessingSteps(steps);
   };
 
-  const processWithTesseract = async (imageSource: string | File) => {
-    updateProcessingStep('ocr', 'processing');
-    
-    try {
-      console.log('Starting Tesseract OCR processing...');
-      const { data: { text, confidence } } = await Tesseract.recognize(
-        imageSource,
-        'eng',
-        {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              updateProcessingStep('ocr', 'processing', `${Math.round(m.progress * 100)}% complete`);
-            }
-          }
-        }
-      );
-      
-      console.log('Extracted text:', text);
-      console.log('OCR confidence:', confidence);
-      
-      setExtractedText(text);
-      setStructuredData(prev => ({ 
-        ...prev, 
-        extracted_text: text, 
-        ocr_confidence: confidence / 100,
-        processing_method: 'ocr'
-      }));
-      
-      updateProcessingStep('ocr', 'completed', `Text extracted with ${Math.round(confidence)}% confidence`);
-      
-      if (text.trim()) {
-        await processWithGPT(text);
-      } else {
-        updateProcessingStep('ocr', 'error', 'No text found in image');
-        generateDynamicForm({ extracted_text: text, processing_method: 'manual' });
-      }
-    } catch (error) {
-      console.error('Tesseract error:', error);
-      updateProcessingStep('ocr', 'error', 'Failed to extract text');
-      generateDynamicForm({ processing_method: 'manual' });
+  const capture = useCallback(() => {
+    const imageSrc = webcamRef.current?.getScreenshot();
+    if (imageSrc) {
+      setCapturedImage(imageSrc);
+      setCaptureMode(null);
+    }
+  }, [webcamRef]);
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setCapturedImage(e.target?.result as string);
+        setCaptureMode(null);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  const processWithGPT = async (text: string) => {
-    updateProcessingStep('gpt', 'processing');
-    
-    // Check if OpenAI API key is available
-    const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
-    
-    if (!openaiApiKey) {
-      console.warn('OpenAI API key not found, using enhanced fallback parsing');
-      updateProcessingStep('gpt', 'completed', 'Using enhanced fallback text parsing');
-      const fallbackData = parseReceiptWithEnhancedFallback(text);
-      generateDynamicForm({ 
-        ...fallbackData, 
-        extracted_text: text, 
-        processing_method: 'fallback_parsing' 
-      });
-      return;
+  const dataURLtoBlob = (dataURL: string): Blob => {
+    const arr = dataURL.split(',');
+    const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
     }
+    return new Blob([u8arr], { type: mime });
+  };
 
+  const performOCR = async (imageData: string): Promise<{ text: string; confidence: number }> => {
     try {
-      // Enhanced GPT prompt with strict formatting requirements
-      const systemPrompt = `You are an expert receipt data extraction AI. Your task is to extract structured information from receipt text and return ONLY a valid JSON object.
+      updateProcessingStep('ocr', 'processing', 'Initializing OCR engine...');
+      
+      const worker = await createWorker('eng');
+      
+      updateProcessingStep('ocr', 'processing', 'Analyzing receipt image...');
+      
+      const { data } = await worker.recognize(imageData);
+      await worker.terminate();
+      
+      const confidence = data.confidence / 100; // Convert to 0-1 scale
+      
+      updateProcessingStep('ocr', 'completed', `Text extracted with ${Math.round(confidence * 100)}% confidence`);
+      
+      return {
+        text: data.text,
+        confidence: confidence
+      };
+    } catch (error) {
+      console.error('OCR Error:', error);
+      updateProcessingStep('ocr', 'error', 'OCR processing failed');
+      throw new Error('Failed to extract text from image');
+    }
+  };
 
-CRITICAL INSTRUCTIONS:
-1. Return ONLY the JSON object - no explanations, no markdown, no additional text
-2. Use these EXACT field names (case-sensitive)
-3. All text fields must be strings, amounts must be numbers
-4. If a field cannot be determined, use empty string "" for text or null for numbers
+  const processWithGPT = async (extractedText: string): Promise<ReceiptData> => {
+    try {
+      updateProcessingStep('ai', 'processing', 'Sending data to AI for structuring...');
+      
+      const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
+      
+      if (!openaiApiKey) {
+        throw new Error('OpenAI API key not configured');
+      }
 
-REQUIRED JSON STRUCTURE:
+      const prompt = `You are a precise AI that extracts structured receipt details from raw text.
+Given the following raw text from a receipt, extract the information and return ONLY valid JSON.
+If a field is missing or unclear, set its value to null or a reasonable default.
+Do not include any explanation or text outside the JSON.
+
+Required JSON structure:
 {
-  "product_description": "main product or service purchased",
-  "brand_name": "brand or manufacturer name", 
-  "store_name": "store or merchant name",
-  "purchase_location": "store address or city",
-  "purchase_date": "date in YYYY-MM-DD format",
-  "amount": number_without_currency_symbols,
-  "warranty_period": "warranty duration like '1 year' or '6 months'",
-  "extended_warranty": "extended warranty details if any",
-  "model_number": "product model/SKU if available",
-  "country": "country where purchased"
+  "product_description": "Main product or service purchased",
+  "brand_name": "Brand or manufacturer name",
+  "store_name": "Store or merchant name",
+  "purchase_location": "Store address or location",
+  "purchase_date": "YYYY-MM-DD format",
+  "amount": numeric value without currency symbol,
+  "warranty_period": "warranty duration (e.g., '1 year', '2 years', '6 months')",
+  "extended_warranty": "extended warranty if mentioned, else null",
+  "model_number": "product model number if mentioned, else null",
+  "country": "country where purchased (default to 'United States' if unclear)"
 }
 
-EXTRACTION RULES:
-- For product_description: Extract the main item purchased, be specific
-- For brand_name: Look for manufacturer/brand names (Apple, Samsung, etc.)
-- For store_name: Extract merchant name (Best Buy, Amazon, etc.)
-- For purchase_location: Extract store address, city, or location
-- For purchase_date: Convert any date format to YYYY-MM-DD
-- For amount: Extract total amount as number only (no $, currency symbols)
-- For warranty_period: Look for warranty terms, default to "1 year" if unclear
-- For model_number: Extract product model, SKU, or part number
-- For country: Default to "United States" if not specified
-
-IMPORTANT:
-- Be precise with amounts - extract the final total paid
-- For dates, ensure YYYY-MM-DD format (e.g., "2024-01-15")
-- For warranty, use common formats: "1 year", "2 years", "6 months"
-- If multiple products, focus on the main/most expensive item
-
-Receipt text to process:
-${text}`;
-
-      console.log('Sending request to OpenAI with enhanced prompt...');
+Raw receipt text:
+${extractedText}`;
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -257,645 +200,440 @@ ${text}`;
         body: JSON.stringify({
           model: 'gpt-3.5-turbo',
           messages: [
-            { 
-              role: 'system', 
-              content: 'You are a precise receipt data extraction expert. Return only valid JSON with the exact structure requested.' 
+            {
+              role: 'system',
+              content: 'You are a helpful assistant that extracts structured data from receipts. Always respond with valid JSON only.'
             },
-            { 
-              role: 'user', 
-              content: systemPrompt 
+            {
+              role: 'user',
+              content: prompt
             }
           ],
           temperature: 0.1,
-          max_tokens: 1000,
-          top_p: 0.9
+          max_tokens: 500
         })
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('OpenAI API error:', response.status, errorText);
-        throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+        const errorData = await response.text();
+        console.error('OpenAI API Error:', errorData);
+        throw new Error(`OpenAI API error: ${response.status}`);
       }
 
-      const result = await response.json();
-      
-      if (!result.choices || !result.choices[0] || !result.choices[0].message) {
-        throw new Error('Invalid response structure from OpenAI');
+      const data = await response.json();
+      const gptResponse = data.choices[0]?.message?.content?.trim();
+
+      if (!gptResponse) {
+        throw new Error('Empty response from GPT');
       }
 
-      const gptResponse = result.choices[0].message.content.trim();
-      console.log('Raw GPT Response:', gptResponse);
-      
-      try {
-        // Enhanced JSON extraction and cleaning
-        const cleanedData = extractAndValidateJSON(gptResponse, text);
-        
-        console.log('Successfully parsed and validated GPT data:', cleanedData);
-        updateProcessingStep('gpt', 'completed', 'Data structured successfully with AI');
-        generateDynamicForm({ 
-          ...cleanedData, 
-          extracted_text: text, 
-          processing_method: 'gpt_structured' 
-        });
-      } catch (parseError) {
-        console.error('Failed to parse GPT response:', parseError);
-        console.log('Raw GPT response that failed to parse:', gptResponse);
-        updateProcessingStep('gpt', 'error', 'AI parsing failed, using fallback');
-        
-        // Use enhanced fallback parsing
-        const fallbackData = parseReceiptWithEnhancedFallback(text);
-        generateDynamicForm({ 
-          ...fallbackData, 
-          extracted_text: text, 
-          processing_method: 'fallback_parsing' 
-        });
-      }
-    } catch (error: any) {
-      console.error('GPT processing error:', error);
-      updateProcessingStep('gpt', 'error', `AI processing failed: ${error.message}`);
-      
-      // Use enhanced fallback parsing
-      const fallbackData = parseReceiptWithEnhancedFallback(text);
-      generateDynamicForm({ 
-        ...fallbackData, 
-        extracted_text: text, 
-        processing_method: 'fallback_parsing' 
-      });
-    }
-  };
+      updateProcessingStep('ai', 'processing', 'Parsing AI response...');
 
-  const extractAndValidateJSON = (gptResponse: string, originalText: string): ExtractedData => {
-    let jsonString = gptResponse.trim();
-    
-    // Remove markdown formatting
-    if (jsonString.includes('```json')) {
-      jsonString = jsonString.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
-    } else if (jsonString.includes('```')) {
-      jsonString = jsonString.replace(/```\s*/g, '').replace(/```\s*$/g, '');
-    }
-    
-    // Find JSON object boundaries
-    const jsonStart = jsonString.indexOf('{');
-    const jsonEnd = jsonString.lastIndexOf('}') + 1;
-    
-    if (jsonStart === -1 || jsonEnd <= jsonStart) {
-      throw new Error('No valid JSON object found in response');
-    }
-    
-    jsonString = jsonString.substring(jsonStart, jsonEnd);
-    
-    // Parse JSON
-    let parsedData;
-    try {
-      parsedData = JSON.parse(jsonString);
-    } catch (e) {
-      // Try to fix common JSON issues
-      jsonString = jsonString
+      // Extract JSON from the response (handle markdown formatting)
+      let jsonStr = gptResponse;
+      
+      // Remove markdown code blocks if present
+      if (jsonStr.includes('```')) {
+        const jsonMatch = jsonStr.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[1];
+        }
+      }
+      
+      // Find JSON boundaries if no markdown
+      if (!jsonStr.trim().startsWith('{')) {
+        const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[0];
+        }
+      }
+
+      // Clean up common JSON issues
+      jsonStr = jsonStr
         .replace(/,\s*}/g, '}')  // Remove trailing commas
         .replace(/,\s*]/g, ']')  // Remove trailing commas in arrays
-        .replace(/([{,]\s*)(\w+):/g, '$1"$2":')  // Quote unquoted keys
-        .replace(/:\s*'([^']*)'/g, ': "$1"');  // Replace single quotes with double quotes
-      
+        .replace(/([{,]\s*)(\w+):/g, '$1"$2":'); // Quote unquoted keys
+
+      let parsedData: any;
       try {
-        parsedData = JSON.parse(jsonString);
-      } catch (e2) {
-        throw new Error(`JSON parsing failed: ${e2.message}`);
+        parsedData = JSON.parse(jsonStr);
+      } catch (parseError) {
+        console.error('JSON Parse Error:', parseError);
+        console.error('Attempted to parse:', jsonStr);
+        throw new Error('Invalid JSON response from AI');
       }
+
+      // Validate and clean the parsed data
+      const receiptData: ReceiptData = {
+        product_description: String(parsedData.product_description || 'Unknown Product').trim(),
+        brand_name: String(parsedData.brand_name || 'Unknown Brand').trim(),
+        store_name: String(parsedData.store_name || '').trim(),
+        purchase_location: String(parsedData.purchase_location || '').trim(),
+        purchase_date: parsedData.purchase_date || new Date().toISOString().split('T')[0],
+        amount: parsedData.amount && !isNaN(Number(parsedData.amount)) ? Number(parsedData.amount) : null,
+        warranty_period: String(parsedData.warranty_period || '1 year').trim(),
+        extended_warranty: parsedData.extended_warranty ? String(parsedData.extended_warranty).trim() : '',
+        model_number: parsedData.model_number ? String(parsedData.model_number).trim() : '',
+        country: String(parsedData.country || 'United States').trim()
+      };
+
+      updateProcessingStep('ai', 'completed', 'Data successfully structured by AI');
+      return receiptData;
+
+    } catch (error: any) {
+      console.error('GPT Processing Error:', error);
+      updateProcessingStep('ai', 'error', `AI processing failed: ${error.message}`);
+      throw error;
     }
-    
-    // Validate and clean the extracted data
-    const cleanedData: ExtractedData = {
-      product_description: validateAndCleanString(parsedData.product_description),
-      brand_name: validateAndCleanString(parsedData.brand_name),
-      store_name: validateAndCleanString(parsedData.store_name),
-      purchase_location: validateAndCleanString(parsedData.purchase_location),
-      purchase_date: validateAndCleanDate(parsedData.purchase_date),
-      amount: validateAndCleanAmount(parsedData.amount),
-      warranty_period: validateAndCleanString(parsedData.warranty_period) || '1 year',
-      extended_warranty: validateAndCleanString(parsedData.extended_warranty),
-      model_number: validateAndCleanString(parsedData.model_number),
-      country: validateAndCleanString(parsedData.country) || 'United States'
-    };
-    
-    // Validate required fields and apply fallbacks if needed
-    if (!cleanedData.product_description) {
-      const fallbackProduct = extractProductFromText(originalText);
-      cleanedData.product_description = fallbackProduct || 'Product';
-    }
-    
-    if (!cleanedData.brand_name) {
-      const fallbackBrand = extractBrandFromText(originalText);
-      cleanedData.brand_name = fallbackBrand || 'Unknown Brand';
-    }
-    
-    if (!cleanedData.purchase_date) {
-      const fallbackDate = extractDateFromText(originalText);
-      cleanedData.purchase_date = fallbackDate || new Date().toISOString().split('T')[0];
-    }
-    
-    return cleanedData;
   };
 
-  const validateAndCleanString = (value: any): string => {
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim();
-    }
-    return '';
-  };
-
-  const validateAndCleanDate = (value: any): string => {
-    if (typeof value === 'string' && value.trim()) {
-      const date = new Date(value.trim());
-      if (!isNaN(date.getTime()) && date.getFullYear() > 2000 && date <= new Date()) {
-        return date.toISOString().split('T')[0];
-      }
-    }
-    return '';
-  };
-
-  const validateAndCleanAmount = (value: any): number | null => {
-    if (typeof value === 'number' && value > 0 && value < 1000000) {
-      return Math.round(value * 100) / 100; // Round to 2 decimal places
-    }
-    if (typeof value === 'string') {
-      const numValue = parseFloat(value.replace(/[^0-9.]/g, ''));
-      if (!isNaN(numValue) && numValue > 0 && numValue < 1000000) {
-        return Math.round(numValue * 100) / 100;
-      }
-    }
-    return null;
-  };
-
-  const parseReceiptWithEnhancedFallback = (text: string): ExtractedData => {
+  const enhancedFallbackParsing = (text: string): ReceiptData => {
     console.log('Using enhanced fallback parsing for text:', text);
     
-    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
-    const data: ExtractedData = {};
-
-    // Enhanced amount extraction with multiple patterns
+    const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    
+    // Enhanced amount detection patterns
     const amountPatterns = [
-      /(?:total|amount|sum|grand\s*total|final)[:\s]*\$?(\d+\.?\d*)/i,
-      /\$(\d+\.\d{2})(?!\d)/g,
-      /(\d+\.\d{2})\s*(?:total|usd|dollars?)/i,
-      /(?:^|\s)(\d{1,4}\.\d{2})(?:\s|$)/g
+      /(?:total|amount|sum|grand total|final total)[\s:]*\$?(\d+\.?\d*)/i,
+      /\$(\d+\.\d{2})\s*(?:total|final|grand)?/i,
+      /(\d+\.\d{2})\s*(?:usd|dollars?|total)?$/i,
+      /(?:^|\s)(\d+\.\d{2})(?:\s|$)/
     ];
     
-    const amounts: number[] = [];
+    let amount: number | null = null;
     for (const pattern of amountPatterns) {
-      const matches = text.matchAll(pattern);
-      for (const match of matches) {
-        const amount = parseFloat(match[1]);
-        if (amount > 0 && amount < 10000) {
-          amounts.push(amount);
-        }
-      }
-    }
-    
-    if (amounts.length > 0) {
-      // Use the largest reasonable amount (likely the total)
-      data.amount = Math.max(...amounts);
-    }
-    
-    // Enhanced date extraction
-    data.purchase_date = extractDateFromText(text);
-    
-    // Enhanced store name extraction
-    data.store_name = extractStoreFromText(lines);
-    
-    // Enhanced product extraction
-    data.product_description = extractProductFromText(text);
-    
-    // Enhanced brand extraction
-    data.brand_name = extractBrandFromText(text);
-    
-    // Extract location information
-    data.purchase_location = extractLocationFromText(text);
-    
-    // Extract model number
-    data.model_number = extractModelFromText(text);
-    
-    // Set defaults for required fields
-    data.country = data.country || 'United States';
-    data.warranty_period = data.warranty_period || '1 year';
-    data.purchase_date = data.purchase_date || new Date().toISOString().split('T')[0];
-    
-    console.log('Enhanced fallback parsing result:', data);
-    return data;
-  };
-
-  const extractDateFromText = (text: string): string => {
-    const datePatterns = [
-      /(\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/,
-      /(\d{1,2}[-\/]\d{1,2}[-\/]\d{4})/,
-      /(\d{1,2}[-\/]\d{1,2}[-\/]\d{2})/,
-      /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{4}/i,
-      /\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4}/i
-    ];
-    
-    for (const pattern of datePatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        const date = new Date(match[1] || match[0]);
-        if (!isNaN(date.getTime()) && date.getFullYear() > 2000 && date <= new Date()) {
-          return date.toISOString().split('T')[0];
-        }
-      }
-    }
-    return '';
-  };
-
-  const extractStoreFromText = (lines: string[]): string => {
-    const storeIndicators = ['store', 'shop', 'market', 'inc', 'llc', 'corp', 'ltd'];
-    const avoidWords = ['receipt', 'invoice', 'total', 'subtotal', 'tax', 'date', 'time', 'thank', 'you'];
-    
-    // Check first few lines for store name
-    for (let i = 0; i < Math.min(5, lines.length); i++) {
-      const line = lines[i];
-      if (line.length > 2 && line.length < 50) {
-        const lowerLine = line.toLowerCase();
-        const hasAvoidWord = avoidWords.some(word => lowerLine.includes(word));
-        const hasStoreIndicator = storeIndicators.some(word => lowerLine.includes(word));
-        
-        if (!hasAvoidWord && (hasStoreIndicator || i < 3)) {
-          if (!/^\d+$/.test(line) && !/^[\d\s\-\(\)]+$/.test(line)) {
-            return line;
+      for (const line of lines) {
+        const match = line.match(pattern);
+        if (match) {
+          const value = parseFloat(match[1]);
+          if (value > 0 && value < 10000) { // Reasonable range
+            amount = value;
+            break;
           }
         }
       }
+      if (amount) break;
     }
-    return '';
-  };
 
-  const extractProductFromText = (text: string): string => {
+    // Enhanced date detection
+    const datePatterns = [
+      /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/,
+      /(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/,
+      /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2}),?\s+(\d{2,4})/i
+    ];
+    
+    let purchaseDate = new Date().toISOString().split('T')[0];
+    for (const pattern of datePatterns) {
+      for (const line of lines) {
+        const match = line.match(pattern);
+        if (match) {
+          try {
+            let date: Date;
+            if (pattern.source.includes('jan|feb')) {
+              // Month name format
+              const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+              const month = monthNames.indexOf(match[1].toLowerCase().substring(0, 3)) + 1;
+              const day = parseInt(match[2]);
+              let year = parseInt(match[3]);
+              if (year < 100) year += 2000;
+              date = new Date(year, month - 1, day);
+            } else if (match[1].length === 4) {
+              // YYYY-MM-DD format
+              date = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+            } else {
+              // MM/DD/YYYY format
+              let year = parseInt(match[3]);
+              if (year < 100) year += 2000;
+              date = new Date(year, parseInt(match[1]) - 1, parseInt(match[2]));
+            }
+            
+            if (date.getTime() > 0 && date <= new Date()) {
+              purchaseDate = date.toISOString().split('T')[0];
+              break;
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+      }
+      if (purchaseDate !== new Date().toISOString().split('T')[0]) break;
+    }
+
+    // Enhanced store name detection
+    let storeName = '';
+    const storePatterns = [
+      /^([A-Z][A-Z\s&]+)(?:\s+(?:STORE|SHOP|MARKET|MALL|CENTER))?$/,
+      /^([A-Z][a-zA-Z\s&]+(?:STORE|SHOP|MARKET|MALL|CENTER))$/i,
+      /^([A-Z][a-zA-Z\s&]{2,20})$/
+    ];
+    
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      const line = lines[i];
+      for (const pattern of storePatterns) {
+        const match = line.match(pattern);
+        if (match && match[1].length > 2 && match[1].length < 30) {
+          storeName = match[1].trim();
+          break;
+        }
+      }
+      if (storeName) break;
+    }
+
+    // Enhanced brand detection with common brands
+    const commonBrands = [
+      'Apple', 'Samsung', 'Sony', 'LG', 'Dell', 'HP', 'Canon', 'Nikon', 'Nike', 'Adidas',
+      'Microsoft', 'Google', 'Amazon', 'Best Buy', 'Target', 'Walmart', 'Costco', 'Home Depot',
+      'Lowe\'s', 'Macy\'s', 'Nordstrom', 'Gap', 'Old Navy', 'H&M', 'Zara', 'Uniqlo'
+    ];
+    
+    let brandName = 'Unknown Brand';
+    const fullText = text.toLowerCase();
+    
+    for (const brand of commonBrands) {
+      if (fullText.includes(brand.toLowerCase())) {
+        brandName = brand;
+        break;
+      }
+    }
+    
+    // If no common brand found, look for patterns
+    if (brandName === 'Unknown Brand') {
+      const brandPatterns = [
+        /(?:brand|make|manufacturer)[\s:]+([A-Za-z]+)/i,
+        /^([A-Z][a-z]+)\s+(?:model|product)/i
+      ];
+      
+      for (const pattern of brandPatterns) {
+        for (const line of lines) {
+          const match = line.match(pattern);
+          if (match && match[1].length > 2) {
+            brandName = match[1];
+            break;
+          }
+        }
+        if (brandName !== 'Unknown Brand') break;
+      }
+    }
+
+    // Enhanced product description
+    let productDescription = 'Unknown Product';
     const productPatterns = [
-      /(?:item|product|description)[:\s]+([^\n\r]+)/i,
-      /^([A-Za-z][A-Za-z0-9\s]{5,30})(?:\s+\$|\s+\d+\.\d{2})/m
+      /(?:item|product|description)[\s:]+(.+)/i,
+      /^([A-Za-z\s]+(?:phone|laptop|computer|camera|tv|monitor|tablet|watch|headphones|speaker))/i,
+      /^([A-Za-z\s]{10,50})$/
     ];
     
     for (const pattern of productPatterns) {
-      const match = text.match(pattern);
-      if (match && match[1]) {
-        return match[1].trim();
+      for (const line of lines) {
+        const match = line.match(pattern);
+        if (match && match[1].length > 5 && match[1].length < 100) {
+          productDescription = match[1].trim();
+          break;
+        }
       }
+      if (productDescription !== 'Unknown Product') break;
     }
-    
-    // Fallback: look for lines that might be products
-    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
-    for (const line of lines) {
-      if (line.length > 5 && line.length < 50 && 
-          /[A-Za-z]/.test(line) && 
-          !line.toLowerCase().includes('total') &&
-          !line.toLowerCase().includes('tax') &&
-          !line.toLowerCase().includes('receipt')) {
-        return line;
-      }
-    }
-    
-    return '';
-  };
 
-  const extractBrandFromText = (text: string): string => {
-    const commonBrands = [
-      'apple', 'samsung', 'google', 'microsoft', 'sony', 'lg', 'hp', 'dell', 'lenovo',
-      'nike', 'adidas', 'amazon', 'walmart', 'target', 'best buy', 'costco', 'home depot',
-      'starbucks', 'mcdonalds', 'subway', 'dominos', 'pizza hut', 'kfc', 'taco bell'
-    ];
-    
-    const lowerText = text.toLowerCase();
-    for (const brand of commonBrands) {
-      if (lowerText.includes(brand)) {
-        return brand.charAt(0).toUpperCase() + brand.slice(1);
-      }
-    }
-    
-    // Look for brand patterns
-    const brandPatterns = [
-      /(?:brand|manufacturer)[:\s]+([^\n\r]+)/i,
-      /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:inc|corp|ltd|llc)/i
-    ];
-    
-    for (const pattern of brandPatterns) {
-      const match = text.match(pattern);
-      if (match && match[1]) {
-        return match[1].trim();
-      }
-    }
-    
-    return '';
-  };
-
-  const extractLocationFromText = (text: string): string => {
+    // Location detection
+    let purchaseLocation = '';
     const locationPatterns = [
-      /(?:address|location)[:\s]+([^\n\r]+)/i,
-      /\d+\s+[A-Za-z\s]+(?:st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive)/i,
-      /([A-Za-z\s]+,\s*[A-Z]{2}\s*\d{5})/
+      /(\d+\s+[A-Za-z\s]+(?:street|st|avenue|ave|road|rd|blvd|boulevard|drive|dr|lane|ln|way|circle|cir|court|ct|place|pl))/i,
+      /([A-Za-z\s]+,\s*[A-Z]{2}\s+\d{5})/,
+      /([A-Za-z\s]+\s+\d{5})/
     ];
     
     for (const pattern of locationPatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        return match[1] ? match[1].trim() : match[0].trim();
+      for (const line of lines) {
+        const match = line.match(pattern);
+        if (match) {
+          purchaseLocation = match[1].trim();
+          break;
+        }
       }
+      if (purchaseLocation) break;
     }
-    return '';
-  };
 
-  const extractModelFromText = (text: string): string => {
+    // Model number detection
+    let modelNumber = '';
     const modelPatterns = [
-      /(?:model|sku|part\s*#|item\s*#)[:\s]+([A-Za-z0-9\-]+)/i,
+      /(?:model|part|item)[\s#:]+([A-Z0-9\-]+)/i,
       /([A-Z]{2,}\d{3,})/,
-      /([A-Za-z]+\d{3,}[A-Za-z]*)/
+      /([A-Z]\d{4,})/
     ];
     
     for (const pattern of modelPatterns) {
-      const match = text.match(pattern);
-      if (match && match[1]) {
-        return match[1].trim();
+      for (const line of lines) {
+        const match = line.match(pattern);
+        if (match && match[1].length > 3 && match[1].length < 20) {
+          modelNumber = match[1];
+          break;
+        }
       }
+      if (modelNumber) break;
     }
-    return '';
-  };
 
-  const generateDynamicForm = (data: ExtractedData) => {
-    updateProcessingStep('form', 'processing');
-    setStructuredData(data);
-    
-    // Ensure we have default values for required fields
-    const formDataWithDefaults = {
-      product_description: data.product_description || '',
-      brand_name: data.brand_name || '',
-      store_name: data.store_name || '',
-      purchase_location: data.purchase_location || '',
-      purchase_date: data.purchase_date || new Date().toISOString().split('T')[0],
-      amount: data.amount || 0,
-      warranty_period: data.warranty_period || '1 year',
-      extended_warranty: data.extended_warranty || '',
-      model_number: data.model_number || '',
-      country: data.country || 'United States',
-      processing_method: data.processing_method || 'manual',
-      ocr_confidence: data.ocr_confidence || null,
-      extracted_text: data.extracted_text || '',
-      image_url: data.image_url || null
+    return {
+      product_description: productDescription,
+      brand_name: brandName,
+      store_name: storeName,
+      purchase_location: purchaseLocation,
+      purchase_date: purchaseDate,
+      amount: amount,
+      warranty_period: '1 year',
+      extended_warranty: '',
+      model_number: modelNumber,
+      country: 'United States'
     };
-    
-    setFormData(formDataWithDefaults);
-    updateProcessingStep('form', 'completed', 'Form ready for review and editing');
-    setShowForm(true);
-    setIsProcessing(false);
   };
 
-  const handleCapture = useCallback(() => {
-    const imageSrc = webcamRef.current?.getScreenshot();
-    if (imageSrc) {
-      if (isPanoramicMode) {
-        setPanoramicImages(prev => [...prev, imageSrc]);
-      } else {
-        setCapturedImage(imageSrc);
-        setShowCamera(false);
-        startProcessing(imageSrc);
-      }
-    }
-  }, [webcamRef, isPanoramicMode]);
+  const processReceipt = async () => {
+    if (!capturedImage || !user) return;
 
-  const handlePanoramicComplete = () => {
-    if (panoramicImages.length > 0) {
-      // For now, use the first image for processing
-      // In a real implementation, you might want to stitch images together
-      setCapturedImage(panoramicImages[0]);
-      setShowCamera(false);
-      setIsPanoramicMode(false);
-      startProcessing(panoramicImages[0]);
-    }
-  };
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        setSaveError('Please select a valid image file');
-        return;
-      }
-      
-      // Validate file size (10MB limit)
-      if (file.size > 10 * 1024 * 1024) {
-        setSaveError('File size must be less than 10MB');
-        return;
-      }
-      
-      setUploadedFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const imageSrc = e.target?.result as string;
-        setCapturedImage(imageSrc);
-        startProcessing(file);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const startProcessing = async (imageSource: string | File) => {
-    console.log('Starting processing with image source:', typeof imageSource);
     setIsProcessing(true);
-    setSaveError(null);
+    setError(null);
     initializeProcessingSteps();
 
-    // First upload the image to Supabase storage
-    if (user) {
-      updateProcessingStep('upload', 'processing');
+    try {
+      // Step 1: Upload image to Supabase storage
+      updateProcessingStep('upload', 'processing', 'Converting image...');
+      
+      const imageBlob = dataURLtoBlob(capturedImage);
+      const { data: uploadData, error: uploadError } = await uploadReceiptImage(imageBlob, user.id);
+      
+      if (uploadError) {
+        updateProcessingStep('upload', 'error', uploadError.message);
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+      
+      updateProcessingStep('upload', 'completed', 'Image uploaded successfully');
+
+      // Step 2: Perform OCR
+      const { text: extractedText, confidence } = await performOCR(capturedImage);
+      
+      if (!extractedText || extractedText.trim().length < 10) {
+        throw new Error('Could not extract sufficient text from image');
+      }
+
+      // Step 3: Process with GPT or fallback
+      let receiptData: ReceiptData;
+      let processingMethod = 'manual';
       
       try {
-        let fileToUpload: File;
-        if (typeof imageSource === 'string') {
-          // Convert base64 to file
-          const response = await fetch(imageSource);
-          const blob = await response.blob();
-          fileToUpload = new File([blob], 'captured-receipt.jpg', { type: 'image/jpeg' });
-        } else {
-          fileToUpload = imageSource;
-        }
-
-        const { data: uploadData, error: uploadError } = await uploadReceiptImage(
-          fileToUpload, 
-          user.id
-        );
-
-        if (uploadError) {
-          console.warn('Image upload failed:', uploadError);
-          updateProcessingStep('upload', 'error', 'Image upload failed, continuing without storage');
-        } else {
-          console.log('Image uploaded successfully:', uploadData);
-          updateProcessingStep('upload', 'completed', 'Image uploaded securely');
-          setStructuredData(prev => ({ ...prev, image_url: uploadData.url }));
-        }
-      } catch (uploadErr) {
-        console.warn('Image upload error:', uploadErr);
-        updateProcessingStep('upload', 'error', 'Image upload failed, continuing without storage');
+        receiptData = await processWithGPT(extractedText);
+        processingMethod = 'gpt_structured';
+        updateProcessingStep('validation', 'processing', 'Validating AI-extracted data...');
+      } catch (gptError) {
+        console.warn('GPT processing failed, using enhanced fallback:', gptError);
+        updateProcessingStep('ai', 'error', 'AI processing failed, using enhanced parsing');
+        
+        receiptData = enhancedFallbackParsing(extractedText);
+        processingMethod = 'fallback_parsing';
+        updateProcessingStep('validation', 'processing', 'Validating parsed data...');
       }
-    }
 
-    // Continue with OCR processing
-    await processWithTesseract(imageSource);
-  };
+      // Add metadata
+      receiptData.image_url = uploadData?.url || '';
+      receiptData.processing_method = processingMethod;
+      receiptData.ocr_confidence = confidence;
+      receiptData.extracted_text = extractedText;
 
-  const startManualEntry = () => {
-    setSelectedMode('manual');
-    generateDynamicForm({ processing_method: 'manual' });
-  };
-
-  const validateForm = (): boolean => {
-    const errors: Record<string, string> = {};
-    
-    if (!formData.product_description?.trim()) {
-      errors.product_description = 'Product description is required';
-    }
-    
-    if (!formData.brand_name?.trim()) {
-      errors.brand_name = 'Brand name is required';
-    }
-    
-    if (!formData.purchase_date) {
-      errors.purchase_date = 'Purchase date is required';
-    } else {
-      // Validate date is not in the future
-      const purchaseDate = new Date(formData.purchase_date);
-      const today = new Date();
-      if (purchaseDate > today) {
-        errors.purchase_date = 'Purchase date cannot be in the future';
+      // Validate required fields
+      if (!receiptData.product_description?.trim()) {
+        receiptData.product_description = 'Receipt Item';
       }
-    }
-    
-    if (!formData.warranty_period?.trim()) {
-      errors.warranty_period = 'Warranty period is required';
-    }
-    
-    if (!formData.country?.trim()) {
-      errors.country = 'Country is required';
-    }
+      if (!receiptData.brand_name?.trim()) {
+        receiptData.brand_name = 'Unknown Brand';
+      }
+      if (!receiptData.country?.trim()) {
+        receiptData.country = 'United States';
+      }
 
-    if (formData.amount && formData.amount < 0) {
-      errors.amount = 'Amount cannot be negative';
-    }
+      updateProcessingStep('validation', 'completed', 'Data validation complete');
 
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+      setExtractedData(receiptData);
+      setEditedData({ ...receiptData });
+
+    } catch (error: any) {
+      console.error('Processing error:', error);
+      setError(error.message || 'Failed to process receipt');
+      
+      // Mark any pending steps as error
+      setProcessingSteps(prev => prev.map(step => 
+        step.status === 'pending' || step.status === 'processing' 
+          ? { ...step, status: 'error', details: 'Processing interrupted' }
+          : step
+      ));
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleFormSubmission = async () => {
-    if (!validateForm() || !user) {
-      console.error('Form validation failed or no user');
-      return;
-    }
+  const handleSaveReceipt = async () => {
+    if (!editedData || !user) return;
 
     setIsSaving(true);
-    setSaveError(null);
+    setError(null);
 
     try {
-      console.log('Starting receipt submission for user:', user.id);
+      const { data, error: saveError } = await saveReceiptToDatabase(editedData, user.id);
       
-      // Save receipt to database using the enhanced function
-      const { data, error } = await saveReceiptToDatabase(formData, user.id);
-
-      if (error) {
-        throw new Error(error.message);
+      if (saveError) {
+        throw new Error(saveError.message);
       }
 
-      console.log('Receipt saved successfully:', data);
       setSaveSuccess(true);
       
-      // Reset form after successful save
+      // Reset after 3 seconds and go back to dashboard
       setTimeout(() => {
-        resetScanning();
-      }, 3000);
+        onBackToDashboard();
+      }, 2000);
 
     } catch (error: any) {
       console.error('Save error:', error);
-      setSaveError(error.message || 'Failed to save receipt. Please try again.');
+      setError(error.message || 'Failed to save receipt');
     } finally {
       setIsSaving(false);
     }
   };
 
   const resetScanning = () => {
-    setSelectedMode(null);
-    setScanningMode(null);
-    setShowCamera(false);
-    setIsPanoramicMode(false);
-    setPanoramicImages([]);
     setCapturedImage(null);
-    setUploadedFile(null);
-    setIsProcessing(false);
+    setExtractedData(null);
+    setEditedData(null);
+    setIsEditing(false);
     setProcessingSteps([]);
-    setExtractedText('');
-    setStructuredData({});
-    setShowForm(false);
-    setFormData({});
-    setFormErrors({});
+    setError(null);
     setSaveSuccess(false);
-    setSaveError(null);
-    setShowExtractedText(false);
   };
 
-  const handleInputChange = (field: keyof ExtractedData, value: string | number) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (formErrors[field]) {
-      setFormErrors(prev => ({ ...prev, [field]: '' }));
-    }
-  };
-
-  const getStepIcon = (status: ProcessingStep['status']) => {
-    switch (status) {
-      case 'completed':
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
-      case 'processing':
-        return <Loader2 className="h-5 w-5 text-primary animate-spin" />;
-      case 'error':
-        return <AlertCircle className="h-5 w-5 text-red-500" />;
-      default:
-        return <div className="h-5 w-5 rounded-full border-2 border-gray-300" />;
-    }
-  };
-
-  // Show loading if no user
-  if (!user) {
+  const getProcessingMethodBadge = (method?: string) => {
+    const badges = {
+      'gpt_structured': { icon: Brain, label: 'AI Structured', color: 'bg-purple-100 text-purple-800' },
+      'fallback_parsing': { icon: Zap, label: 'Smart Parsing', color: 'bg-blue-100 text-blue-800' },
+      'ocr': { icon: Eye, label: 'OCR Only', color: 'bg-green-100 text-green-800' },
+      'manual': { icon: Edit3, label: 'Manual Entry', color: 'bg-gray-100 text-gray-800' }
+    };
+    
+    const badge = badges[method as keyof typeof badges] || badges.manual;
+    const Icon = badge.icon;
+    
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-text-secondary">Loading...</p>
-        </div>
-      </div>
+      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${badge.color}`}>
+        <Icon className="h-3 w-3 mr-1" />
+        {badge.label}
+      </span>
     );
-  }
+  };
 
   if (saveSuccess) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-card p-8 text-center">
-          <div className="bg-green-100 rounded-full p-4 w-16 h-16 mx-auto mb-6">
+        <div className="text-center">
+          <div className="bg-green-100 rounded-full p-4 w-16 h-16 mx-auto mb-4">
             <CheckCircle className="h-8 w-8 text-green-600" />
           </div>
-          <h2 className="text-2xl font-bold text-text-primary mb-4">
-            Receipt Saved Successfully!
-          </h2>
-          <p className="text-text-secondary mb-6">
-            Your receipt has been processed and securely saved to your library with full Supabase integration.
-          </p>
-          <div className="space-y-4">
-            <button
-              onClick={resetScanning}
-              className="w-full bg-primary text-white py-3 px-4 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
-            >
-              Add Another Receipt
-            </button>
-            <button
-              onClick={onBackToDashboard}
-              className="w-full border border-gray-300 text-text-secondary py-3 px-4 rounded-lg font-medium hover:bg-gray-50 transition-colors duration-200"
-            >
-              Back to Dashboard
-            </button>
-          </div>
+          <h2 className="text-2xl font-bold text-text-primary mb-2">Receipt Saved Successfully!</h2>
+          <p className="text-text-secondary">Redirecting to dashboard...</p>
         </div>
       </div>
     );
@@ -964,6 +702,13 @@ ${text}`;
                       <p className="text-xs text-text-secondary">{user?.email}</p>
                     </div>
                     <button
+                      onClick={onBackToDashboard}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      <span>Back to Dashboard</span>
+                    </button>
+                    <button
                       onClick={handleSignOut}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
                     >
@@ -983,107 +728,431 @@ ${text}`;
         {/* Page Title */}
         <div className="text-center mb-8">
           <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
-            Add Your Receipt
+            Scan Your Receipt
           </h1>
           <p className="text-xl text-text-secondary">
-            Choose how you'd like to add your receipt data with enhanced AI processing
+            Use AI-powered technology to instantly digitize and organize your receipts
           </p>
         </div>
 
-        {/* Error Message */}
-        {saveError && (
+        {/* Error Display */}
+        {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-center">
               <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
-              <p className="text-sm text-red-700">{saveError}</p>
+              <p className="text-sm text-red-700">{error}</p>
             </div>
           </div>
         )}
 
-        {/* Main Mode Selection */}
-        {!selectedMode && !showForm && (
-          <div className="grid md:grid-cols-2 gap-8 mb-8">
-            {/* Scan & Upload Section */}
-            <div className="bg-white rounded-2xl shadow-card p-8 border border-gray-100">
-              <div className="text-center mb-6">
-                <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-full p-6 w-fit mx-auto mb-4">
-                  <ScanLine className="h-12 w-12 text-primary" />
+        {/* Capture Options */}
+        {!capturedImage && !captureMode && (
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
+            <button
+              onClick={() => setCaptureMode('camera')}
+              className="group bg-white p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 border border-gray-100"
+            >
+              <div className="text-center">
+                <div className="bg-gradient-to-br from-primary/10 to-primary/20 rounded-full p-6 w-fit mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+                  <Camera className="h-12 w-12 text-primary" />
                 </div>
-                <h3 className="text-2xl font-bold text-text-primary mb-2">
-                  Scan & Upload
+                <h3 className="text-xl font-bold text-text-primary mb-2 group-hover:text-primary transition-colors duration-300">
+                  Take Photo
                 </h3>
                 <p className="text-text-secondary">
-                  Capture or upload receipt images for automatic data extraction with enhanced AI
+                  Use your camera to capture a receipt photo
                 </p>
               </div>
+            </button>
 
-              <div className="space-y-4">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="group bg-white p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 border border-gray-100"
+            >
+              <div className="text-center">
+                <div className="bg-gradient-to-br from-secondary/10 to-secondary/20 rounded-full p-6 w-fit mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+                  <Upload className="h-12 w-12 text-secondary" />
+                </div>
+                <h3 className="text-xl font-bold text-text-primary mb-2 group-hover:text-secondary transition-colors duration-300">
+                  Upload File
+                </h3>
+                <p className="text-text-secondary">
+                  Select an image file from your device
+                </p>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* Camera View */}
+        {captureMode === 'camera' && (
+          <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
+            <div className="text-center mb-4">
+              <h3 className="text-xl font-bold text-text-primary mb-2">Position Your Receipt</h3>
+              <p className="text-text-secondary">Make sure the receipt is clearly visible and well-lit</p>
+            </div>
+            
+            <div className="relative max-w-md mx-auto">
+              <Webcam
+                ref={webcamRef}
+                audio={false}
+                screenshotFormat="image/jpeg"
+                className="w-full rounded-lg"
+                videoConstraints={{
+                  facingMode: { ideal: "environment" }
+                }}
+              />
+              
+              <div className="flex justify-center space-x-4 mt-6">
                 <button
-                  onClick={() => {
-                    setSelectedMode('scan-upload');
-                    setScanningMode('camera');
-                    setShowCamera(true);
-                  }}
-                  className="w-full flex items-center justify-center space-x-3 bg-primary text-white py-4 px-6 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
+                  onClick={() => setCaptureMode(null)}
+                  className="flex items-center space-x-2 bg-gray-100 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors duration-200"
                 >
-                  <Camera className="h-5 w-5" />
-                  <span>Take Photo</span>
+                  <X className="h-4 w-4" />
+                  <span>Cancel</span>
                 </button>
-
                 <button
-                  onClick={() => {
-                    setSelectedMode('scan-upload');
-                    setScanningMode('panoramic');
-                    setShowCamera(true);
-                    setIsPanoramicMode(true);
-                  }}
-                  className="w-full flex items-center justify-center space-x-3 bg-secondary text-white py-4 px-6 rounded-lg font-medium hover:bg-secondary/90 transition-colors duration-200"
+                  onClick={capture}
+                  className="flex items-center space-x-2 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200"
                 >
-                  <Maximize className="h-5 w-5" />
-                  <span>Panoramic Capture</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setSelectedMode('scan-upload');
-                    setScanningMode('upload');
-                    fileInputRef.current?.click();
-                  }}
-                  className="w-full flex items-center justify-center space-x-3 border-2 border-primary text-primary py-4 px-6 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors duration-200"
-                >
-                  <Upload className="h-5 w-5" />
-                  <span>Upload File</span>
+                  <Camera className="h-4 w-4" />
+                  <span>Capture</span>
                 </button>
               </div>
             </div>
+          </div>
+        )}
 
-            {/* Manual Entry Section */}
-            <div className="bg-white rounded-2xl shadow-card p-8 border border-gray-100">
-              <div className="text-center mb-6">
-                <div className="bg-gradient-to-br from-accent-yellow/10 to-accent-yellow/20 rounded-full p-6 w-fit mx-auto mb-4">
-                  <FileText className="h-12 w-12 text-accent-yellow" />
+        {/* Captured Image Preview */}
+        {capturedImage && !isProcessing && !extractedData && (
+          <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
+            <div className="text-center mb-4">
+              <h3 className="text-xl font-bold text-text-primary mb-2">Receipt Captured</h3>
+              <p className="text-text-secondary">Review your image and process when ready</p>
+            </div>
+            
+            <div className="max-w-md mx-auto">
+              <img
+                src={capturedImage}
+                alt="Captured receipt"
+                className="w-full rounded-lg shadow-md mb-6"
+              />
+              
+              <div className="flex justify-center space-x-4">
+                <button
+                  onClick={resetScanning}
+                  className="flex items-center space-x-2 bg-gray-100 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors duration-200"
+                >
+                  <X className="h-4 w-4" />
+                  <span>Retake</span>
+                </button>
+                <button
+                  onClick={processReceipt}
+                  className="flex items-center space-x-2 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200"
+                >
+                  <Brain className="h-4 w-4" />
+                  <span>Process Receipt</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Processing Steps */}
+        {isProcessing && (
+          <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
+            <div className="text-center mb-6">
+              <h3 className="text-xl font-bold text-text-primary mb-2">Processing Your Receipt</h3>
+              <p className="text-text-secondary">Please wait while we extract and organize the information</p>
+            </div>
+            
+            <div className="space-y-4">
+              {processingSteps.map((step) => (
+                <div key={step.id} className="flex items-center space-x-4">
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                    step.status === 'completed' ? 'bg-green-100' :
+                    step.status === 'processing' ? 'bg-blue-100' :
+                    step.status === 'error' ? 'bg-red-100' :
+                    'bg-gray-100'
+                  }`}>
+                    {step.status === 'completed' && <CheckCircle className="h-5 w-5 text-green-600" />}
+                    {step.status === 'processing' && <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />}
+                    {step.status === 'error' && <AlertCircle className="h-5 w-5 text-red-600" />}
+                    {step.status === 'pending' && <div className="w-3 h-3 bg-gray-400 rounded-full" />}
+                  </div>
+                  
+                  <div className="flex-1">
+                    <div className="font-medium text-text-primary">{step.label}</div>
+                    {step.details && (
+                      <div className="text-sm text-text-secondary">{step.details}</div>
+                    )}
+                  </div>
                 </div>
-                <h3 className="text-2xl font-bold text-text-primary mb-2">
-                  Manual Entry
-                </h3>
-                <p className="text-text-secondary">
-                  Enter receipt details manually using our comprehensive form
-                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Extracted Data Form */}
+        {extractedData && (
+          <div className="bg-white rounded-2xl shadow-card p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-text-primary mb-2">Receipt Information</h3>
+                <div className="flex items-center space-x-2">
+                  <p className="text-text-secondary">Review and edit the extracted information</p>
+                  {getProcessingMethodBadge(extractedData.processing_method)}
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                {!isEditing ? (
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="flex items-center space-x-2 bg-gray-100 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors duration-200"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                    <span>Edit</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    className="flex items-center space-x-2 bg-gray-100 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors duration-200"
+                  >
+                    <Eye className="h-4 w-4" />
+                    <span>Preview</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Form Fields */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">Product Description *</label>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={editedData?.product_description || ''}
+                      onChange={(e) => setEditedData(prev => prev ? { ...prev, product_description: e.target.value } : null)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="Enter product description"
+                    />
+                  ) : (
+                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      {extractedData.product_description}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">Brand Name *</label>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={editedData?.brand_name || ''}
+                      onChange={(e) => setEditedData(prev => prev ? { ...prev, brand_name: e.target.value } : null)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="Enter brand name"
+                    />
+                  ) : (
+                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      {extractedData.brand_name}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">Store Name</label>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={editedData?.store_name || ''}
+                      onChange={(e) => setEditedData(prev => prev ? { ...prev, store_name: e.target.value } : null)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="Enter store name"
+                    />
+                  ) : (
+                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      {extractedData.store_name || 'Not specified'}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">Purchase Date *</label>
+                  {isEditing ? (
+                    <input
+                      type="date"
+                      value={editedData?.purchase_date || ''}
+                      onChange={(e) => setEditedData(prev => prev ? { ...prev, purchase_date: e.target.value } : null)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    />
+                  ) : (
+                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      {new Date(extractedData.purchase_date).toLocaleDateString()}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">Amount</label>
+                  {isEditing ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editedData?.amount || ''}
+                      onChange={(e) => setEditedData(prev => prev ? { ...prev, amount: e.target.value ? parseFloat(e.target.value) : null } : null)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="Enter amount"
+                    />
+                  ) : (
+                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      {extractedData.amount ? `$${extractedData.amount.toFixed(2)}` : 'Not specified'}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">Warranty Period *</label>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={editedData?.warranty_period || ''}
+                      onChange={(e) => setEditedData(prev => prev ? { ...prev, warranty_period: e.target.value } : null)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="e.g., 1 year, 2 years, 6 months"
+                    />
+                  ) : (
+                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      {extractedData.warranty_period}
+                    </div>
+                  )}
+                </div>
               </div>
 
+              {/* Additional Fields */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">Purchase Location</label>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={editedData?.purchase_location || ''}
+                      onChange={(e) => setEditedData(prev => prev ? { ...prev, purchase_location: e.target.value } : null)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="Enter store address or location"
+                    />
+                  ) : (
+                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      {extractedData.purchase_location || 'Not specified'}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">Model Number</label>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={editedData?.model_number || ''}
+                      onChange={(e) => setEditedData(prev => prev ? { ...prev, model_number: e.target.value } : null)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="Enter model number"
+                    />
+                  ) : (
+                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      {extractedData.model_number || 'Not specified'}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">Extended Warranty</label>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={editedData?.extended_warranty || ''}
+                      onChange={(e) => setEditedData(prev => prev ? { ...prev, extended_warranty: e.target.value } : null)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="Enter extended warranty details"
+                    />
+                  ) : (
+                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      {extractedData.extended_warranty || 'None'}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">Country *</label>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={editedData?.country || ''}
+                      onChange={(e) => setEditedData(prev => prev ? { ...prev, country: e.target.value } : null)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="Enter country"
+                    />
+                  ) : (
+                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      {extractedData.country}
+                    </div>
+                  )}
+                </div>
+
+                {/* Processing Info */}
+                {extractedData.ocr_confidence && (
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-2">OCR Confidence</label>
+                    <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      {Math.round(extractedData.ocr_confidence * 100)}%
+                    </div>
+                  </div>
+                )}
+
+                {/* Receipt Image Preview */}
+                {capturedImage && (
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-2">Receipt Image</label>
+                    <img
+                      src={capturedImage}
+                      alt="Receipt"
+                      className="w-full max-w-xs rounded-lg shadow-md"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-center space-x-4 mt-8">
               <button
-                onClick={startManualEntry}
-                className="w-full flex items-center justify-center space-x-3 bg-accent-yellow text-text-primary py-4 px-6 rounded-lg font-medium hover:bg-accent-yellow/90 transition-colors duration-200"
+                onClick={resetScanning}
+                className="flex items-center space-x-2 bg-gray-100 text-text-secondary px-6 py-3 rounded-lg hover:bg-gray-200 transition-colors duration-200"
               >
-                <Edit3 className="h-5 w-5" />
-                <span>Start Manual Entry</span>
+                <X className="h-4 w-4" />
+                <span>Start Over</span>
               </button>
-
-              <div className="mt-4 text-center">
-                <p className="text-sm text-text-secondary">
-                  Perfect for receipts that are hard to scan or when you prefer manual input
-                </p>
-              </div>
+              
+              <button
+                onClick={handleSaveReceipt}
+                disabled={isSaving}
+                className="flex items-center space-x-2 bg-primary text-white px-8 py-3 rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    <span>Save Receipt</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         )}
@@ -1096,398 +1165,6 @@ ${text}`;
           onChange={handleFileUpload}
           className="hidden"
         />
-
-        {/* Camera View */}
-        {showCamera && (
-          <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
-            <div className="text-center mb-4">
-              <h3 className="text-xl font-bold text-text-primary mb-2">
-                {isPanoramicMode ? 'Panoramic Capture Mode' : 'Position Your Receipt'}
-              </h3>
-              <p className="text-text-secondary">
-                {isPanoramicMode 
-                  ? 'Take multiple photos to capture a large receipt. Tap capture for each section.'
-                  : 'Make sure the receipt is clearly visible and well-lit'
-                }
-              </p>
-            </div>
-            
-            <div className="relative max-w-md mx-auto">
-              <Webcam
-                ref={webcamRef}
-                audio={false}
-                screenshotFormat="image/jpeg"
-                className="w-full rounded-lg"
-                videoConstraints={{
-                  facingMode: 'environment'
-                }}
-              />
-              
-              {/* Panoramic Images Preview */}
-              {isPanoramicMode && panoramicImages.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-sm text-text-secondary mb-2">
-                    Captured {panoramicImages.length} image(s)
-                  </p>
-                  <div className="flex space-x-2 overflow-x-auto">
-                    {panoramicImages.map((img, index) => (
-                      <img
-                        key={index}
-                        src={img}
-                        alt={`Panoramic ${index + 1}`}
-                        className="w-16 h-16 object-cover rounded border"
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              <div className="flex justify-center space-x-4 mt-4">
-                <button
-                  onClick={handleCapture}
-                  className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
-                >
-                  <Camera className="h-5 w-5" />
-                  <span>{isPanoramicMode ? 'Capture Section' : 'Capture'}</span>
-                </button>
-                
-                {isPanoramicMode && panoramicImages.length > 0 && (
-                  <button
-                    onClick={handlePanoramicComplete}
-                    className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition-colors duration-200 flex items-center space-x-2"
-                  >
-                    <CheckCircle className="h-5 w-5" />
-                    <span>Complete</span>
-                  </button>
-                )}
-                
-                <button
-                  onClick={() => {
-                    setShowCamera(false);
-                    setSelectedMode(null);
-                    setScanningMode(null);
-                    setIsPanoramicMode(false);
-                    setPanoramicImages([]);
-                  }}
-                  className="border border-gray-300 text-text-secondary px-6 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors duration-200"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Processing Steps */}
-        {isProcessing && (
-          <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
-            <h3 className="text-xl font-bold text-text-primary mb-6">Processing Your Receipt</h3>
-            
-            <div className="space-y-4">
-              {processingSteps.map((step, index) => (
-                <div key={step.id} className="flex items-center space-x-4">
-                  <div className="flex-shrink-0">
-                    {getStepIcon(step.status)}
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-medium text-text-primary">{step.name}</div>
-                    {step.message && (
-                      <div className="text-sm text-text-secondary">{step.message}</div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Captured Image Preview */}
-        {capturedImage && !isProcessing && (
-          <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-text-primary">Captured Receipt</h3>
-              <button
-                onClick={resetScanning}
-                className="text-text-secondary hover:text-text-primary transition-colors duration-200"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            
-            <div className="max-w-md mx-auto">
-              <img
-                src={capturedImage}
-                alt="Captured receipt"
-                className="w-full rounded-lg border border-gray-200"
-              />
-            </div>
-
-            {/* Show Extracted Text Toggle */}
-            {extractedText && (
-              <div className="mt-4 text-center">
-                <button
-                  onClick={() => setShowExtractedText(!showExtractedText)}
-                  className="text-primary hover:text-primary/80 font-medium text-sm flex items-center space-x-2 mx-auto"
-                >
-                  {showExtractedText ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  <span>{showExtractedText ? 'Hide' : 'Show'} Extracted Text</span>
-                </button>
-                
-                {showExtractedText && (
-                  <div className="mt-4 p-4 bg-gray-50 rounded-lg text-left">
-                    <pre className="text-sm text-text-secondary whitespace-pre-wrap font-mono">
-                      {extractedText}
-                    </pre>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Dynamic Form */}
-        {showForm && (
-          <div className="bg-white rounded-2xl shadow-card p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-text-primary">
-                {selectedMode === 'manual' ? 'Manual Receipt Entry' : 'Review & Edit Receipt Details'}
-              </h3>
-              <div className="flex items-center space-x-2">
-                {structuredData.processing_method && (
-                  <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
-                    {structuredData.processing_method.replace('_', ' ')}
-                  </span>
-                )}
-                <button
-                  onClick={resetScanning}
-                  className="text-text-secondary hover:text-text-primary transition-colors duration-200"
-                >
-                  <RefreshCw className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            <form onSubmit={(e) => { e.preventDefault(); handleFormSubmission(); }} className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Product Description */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <FileText className="inline h-4 w-4 mr-1" />
-                    Product Description *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.product_description || ''}
-                    onChange={(e) => handleInputChange('product_description', e.target.value)}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
-                      formErrors.product_description ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
-                    placeholder="Enter product description"
-                  />
-                  {formErrors.product_description && (
-                    <p className="mt-1 text-sm text-red-600">{formErrors.product_description}</p>
-                  )}
-                </div>
-
-                {/* Brand Name */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <Tag className="inline h-4 w-4 mr-1" />
-                    Brand Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.brand_name || ''}
-                    onChange={(e) => handleInputChange('brand_name', e.target.value)}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
-                      formErrors.brand_name ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
-                    placeholder="Enter brand name"
-                  />
-                  {formErrors.brand_name && (
-                    <p className="mt-1 text-sm text-red-600">{formErrors.brand_name}</p>
-                  )}
-                </div>
-
-                {/* Store Name */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <Store className="inline h-4 w-4 mr-1" />
-                    Store Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.store_name || ''}
-                    onChange={(e) => handleInputChange('store_name', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                    placeholder="Enter store name"
-                  />
-                </div>
-
-                {/* Purchase Location */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <MapPin className="inline h-4 w-4 mr-1" />
-                    Purchase Location
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.purchase_location || ''}
-                    onChange={(e) => handleInputChange('purchase_location', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                    placeholder="Enter store location"
-                  />
-                </div>
-
-                {/* Purchase Date */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <Calendar className="inline h-4 w-4 mr-1" />
-                    Purchase Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.purchase_date || ''}
-                    onChange={(e) => handleInputChange('purchase_date', e.target.value)}
-                    max={new Date().toISOString().split('T')[0]}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
-                      formErrors.purchase_date ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
-                  />
-                  {formErrors.purchase_date && (
-                    <p className="mt-1 text-sm text-red-600">{formErrors.purchase_date}</p>
-                  )}
-                </div>
-
-                {/* Amount */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    <DollarSign className="inline h-4 w-4 mr-1" />
-                    Amount
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.amount || ''}
-                    onChange={(e) => handleInputChange('amount', parseFloat(e.target.value) || 0)}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
-                      formErrors.amount ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
-                    placeholder="0.00"
-                  />
-                  {formErrors.amount && (
-                    <p className="mt-1 text-sm text-red-600">{formErrors.amount}</p>
-                  )}
-                </div>
-
-                {/* Model Number */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    Model Number
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.model_number || ''}
-                    onChange={(e) => handleInputChange('model_number', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                    placeholder="Enter model number"
-                  />
-                </div>
-
-                {/* Country */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    Country *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.country || ''}
-                    onChange={(e) => handleInputChange('country', e.target.value)}
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
-                      formErrors.country ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
-                    placeholder="Enter country"
-                  />
-                  {formErrors.country && (
-                    <p className="mt-1 text-sm text-red-600">{formErrors.country}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Warranty Fields */}
-              <div className="border-t border-gray-200 pt-6">
-                <h4 className="text-lg font-semibold text-text-primary mb-4 flex items-center">
-                  <Shield className="h-5 w-5 mr-2" />
-                  Warranty Information
-                </h4>
-                
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Warranty Period */}
-                  <div>
-                    <label className="block text-sm font-medium text-text-primary mb-2">
-                      Warranty Period *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.warranty_period || ''}
-                      onChange={(e) => handleInputChange('warranty_period', e.target.value)}
-                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
-                        formErrors.warranty_period ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                      }`}
-                      placeholder="e.g., 1 year, 6 months"
-                    />
-                    {formErrors.warranty_period && (
-                      <p className="mt-1 text-sm text-red-600">{formErrors.warranty_period}</p>
-                    )}
-                  </div>
-
-                  {/* Extended Warranty */}
-                  <div>
-                    <label className="block text-sm font-medium text-text-primary mb-2">
-                      Extended Warranty
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.extended_warranty || ''}
-                      onChange={(e) => handleInputChange('extended_warranty', e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                      placeholder="Enter extended warranty details"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={resetScanning}
-                  className="px-6 py-3 border border-gray-300 text-text-secondary rounded-lg font-medium hover:bg-gray-50 transition-colors duration-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      <span>Saving to Supabase...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-5 w-5" />
-                      <span>Save Receipt</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
       </main>
 
       {/* Click outside to close user menu */}

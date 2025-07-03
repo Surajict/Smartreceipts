@@ -742,3 +742,35 @@ export const initializeUserSettings = async (userId: string) => {
     return false
   }
 }
+
+// Test OpenAI API connection
+export const testOpenAIConnection = async () => {
+  try {
+    const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
+    
+    if (!openaiApiKey) {
+      console.warn('OpenAI API key not configured');
+      return false;
+    }
+
+    console.log('Testing OpenAI API connection...');
+    
+    const response = await fetch('https://api.openai.com/v1/models', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`
+      }
+    });
+
+    if (response.ok) {
+      console.log('OpenAI API connection successful');
+      return true;
+    } else {
+      console.error('OpenAI API connection failed:', response.status, response.statusText);
+      return false;
+    }
+  } catch (err) {
+    console.error('OpenAI API connection test error:', err);
+    return false;
+  }
+}

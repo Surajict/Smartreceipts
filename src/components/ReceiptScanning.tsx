@@ -15,11 +15,14 @@ import {
   Eye,
   User,
   LogOut,
-  Bell
+  Bell,
+  Key,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import Webcam from 'react-webcam';
 import { createWorker } from 'tesseract.js';
-import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage } from '../lib/supabase';
+import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testSupabaseConnection, testOpenAIConnection } from '../lib/supabase';
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
@@ -49,6 +52,12 @@ interface ProcessingStep {
   details?: string;
 }
 
+interface ConnectionStatus {
+  supabase: boolean;
+  openai: boolean;
+  checking: boolean;
+}
+
 const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) => {
   const [user, setUser] = useState<any>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -63,17 +72,54 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
+    supabase: false,
+    openai: false,
+    checking: true
+  });
   
   const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadUser();
+    checkConnections();
   }, []);
 
   const loadUser = async () => {
     const currentUser = await getCurrentUser();
     setUser(currentUser);
+  };
+
+  const checkConnections = async () => {
+    setConnectionStatus(prev => ({ ...prev, checking: true }));
+    
+    try {
+      const [supabaseOk, openaiOk] = await Promise.all([
+        testSupabaseConnection(),
+        testOpenAIConnection()
+      ]);
+      
+      setConnectionStatus({
+        supabase: supabaseOk,
+        openai: openaiOk,
+        checking: false
+      });
+
+      if (!supabaseOk) {
+        setError('Database connection failed. Please check your Supabase configuration.');
+      } else if (!openaiOk) {
+        setError('OpenAI API connection failed. AI features will be limited. Please check your API key.');
+      }
+    } catch (err) {
+      console.error('Connection check failed:', err);
+      setConnectionStatus({
+        supabase: false,
+        openai: false,
+        checking: false
+      });
+      setError('Failed to verify API connections. Please check your configuration.');
+    }
   };
 
   const handleSignOut = async () => {
@@ -166,7 +212,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
       
       if (!openaiApiKey) {
-        throw new Error('OpenAI API key not configured');
+        throw new Error('OpenAI API key not configured. Please add VITE_OPENAI_API_KEY to your .env file.');
       }
 
       const prompt = `You are a precise AI that extracts structured receipt details from raw text.
@@ -217,7 +263,14 @@ ${extractedText}`;
       if (!response.ok) {
         const errorData = await response.text();
         console.error('OpenAI API Error:', errorData);
-        throw new Error(`OpenAI API error: ${response.status}`);
+        
+        if (response.status === 401) {
+          throw new Error('Invalid OpenAI API key. Please check your VITE_OPENAI_API_KEY in the .env file.');
+        } else if (response.status === 429) {
+          throw new Error('OpenAI API rate limit exceeded. Please try again later.');
+        } else {
+          throw new Error(`OpenAI API error: ${response.status} - ${response.statusText}`);
+        }
       }
 
       const data = await response.json();
@@ -260,7 +313,7 @@ ${extractedText}`;
       } catch (parseError) {
         console.error('JSON Parse Error:', parseError);
         console.error('Attempted to parse:', jsonStr);
-        throw new Error('Invalid JSON response from AI');
+        throw new Error('Invalid JSON response from AI. The response could not be parsed.');
       }
 
       // Validate and clean the parsed data
@@ -489,6 +542,12 @@ ${extractedText}`;
   const processReceipt = async () => {
     if (!capturedImage || !user) return;
 
+    // Check connections before processing
+    if (!connectionStatus.supabase) {
+      setError('Database connection failed. Please check your Supabase configuration and try again.');
+      return;
+    }
+
     setIsProcessing(true);
     setError(null);
     initializeProcessingSteps();
@@ -518,13 +577,22 @@ ${extractedText}`;
       let receiptData: ReceiptData;
       let processingMethod = 'manual';
       
-      try {
-        receiptData = await processWithGPT(extractedText);
-        processingMethod = 'gpt_structured';
-        updateProcessingStep('validation', 'processing', 'Validating AI-extracted data...');
-      } catch (gptError) {
-        console.warn('GPT processing failed, using enhanced fallback:', gptError);
-        updateProcessingStep('ai', 'error', 'AI processing failed, using enhanced parsing');
+      if (connectionStatus.openai) {
+        try {
+          receiptData = await processWithGPT(extractedText);
+          processingMethod = 'gpt_structured';
+          updateProcessingStep('validation', 'processing', 'Validating AI-extracted data...');
+        } catch (gptError) {
+          console.warn('GPT processing failed, using enhanced fallback:', gptError);
+          updateProcessingStep('ai', 'error', 'AI processing failed, using enhanced parsing');
+          
+          receiptData = enhancedFallbackParsing(extractedText);
+          processingMethod = 'fallback_parsing';
+          updateProcessingStep('validation', 'processing', 'Validating parsed data...');
+        }
+      } else {
+        console.warn('OpenAI not available, using enhanced fallback parsing');
+        updateProcessingStep('ai', 'error', 'AI not available, using enhanced parsing');
         
         receiptData = enhancedFallbackParsing(extractedText);
         processingMethod = 'fallback_parsing';
@@ -659,6 +727,28 @@ ${extractedText}`;
 
             {/* Header Actions */}
             <div className="flex items-center space-x-4">
+              {/* Connection Status */}
+              <div className="flex items-center space-x-2">
+                {connectionStatus.checking ? (
+                  <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
+                ) : (
+                  <>
+                    <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs ${
+                      connectionStatus.supabase ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {connectionStatus.supabase ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+                      <span>DB</span>
+                    </div>
+                    <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs ${
+                      connectionStatus.openai ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {connectionStatus.openai ? <Key className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                      <span>AI</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
               {/* Alerts */}
               <button className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
                 <Bell className="h-6 w-6" />
@@ -734,6 +824,34 @@ ${extractedText}`;
             Use AI-powered technology to instantly digitize and organize your receipts
           </p>
         </div>
+
+        {/* Connection Status Warning */}
+        {!connectionStatus.checking && (!connectionStatus.supabase || !connectionStatus.openai) && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-start">
+              <AlertCircle className="h-5 w-5 text-yellow-600 mr-2 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-yellow-800">Configuration Issues Detected</h3>
+                <div className="mt-1 text-sm text-yellow-700">
+                  {!connectionStatus.supabase && (
+                    <p>• Database connection failed. Please check your Supabase configuration in the .env file.</p>
+                  )}
+                  {!connectionStatus.openai && (
+                    <p>• OpenAI API not available. AI features will be limited. Please add your OpenAI API key to the .env file.</p>
+                  )}
+                </div>
+                <div className="mt-2">
+                  <button
+                    onClick={checkConnections}
+                    className="text-sm text-yellow-800 underline hover:text-yellow-900"
+                  >
+                    Retry Connection Check
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error Display */}
         {error && (
@@ -848,7 +966,8 @@ ${extractedText}`;
                 </button>
                 <button
                   onClick={processReceipt}
-                  className="flex items-center space-x-2 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200"
+                  disabled={!connectionStatus.supabase}
+                  className="flex items-center space-x-2 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Brain className="h-4 w-4" />
                   <span>Process Receipt</span>
@@ -1138,7 +1257,7 @@ ${extractedText}`;
               
               <button
                 onClick={handleSaveReceipt}
-                disabled={isSaving}
+                disabled={isSaving || !connectionStatus.supabase}
                 className="flex items-center space-x-2 bg-primary text-white px-8 py-3 rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSaving ? (

@@ -19,7 +19,8 @@ import {
   Bell,
   Edit3,
   RotateCcw,
-  Plus
+  Plus,
+  Maximize2
 } from 'lucide-react';
 import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
 import { createWorker } from 'tesseract.js';
@@ -41,7 +42,7 @@ interface ExtractedData {
   country: string;
 }
 
-type CaptureMode = 'normal' | 'panorama';
+type CaptureMode = 'normal' | 'long';
 type InputMode = 'capture' | 'upload' | 'manual';
 
 const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) => {
@@ -63,8 +64,16 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [openaiAvailable, setOpenaiAvailable] = useState<boolean | null>(null);
   const [showExtractedForm, setShowExtractedForm] = useState(false);
   
+  // Long receipt capture states
+  const [isCapturingLong, setIsCapturingLong] = useState(false);
+  const [captureProgress, setCaptureProgress] = useState(0);
+  const [capturedFrames, setCapturedFrames] = useState<string[]>([]);
+  const [longCaptureInstructions, setLongCaptureInstructions] = useState('');
+  
   const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const captureIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const frameCountRef = useRef(0);
 
   useEffect(() => {
     loadUser();
@@ -100,6 +109,52 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       setShowCamera(false);
     }
   }, [webcamRef]);
+
+  const startLongCapture = useCallback(() => {
+    if (!webcamRef.current) return;
+    
+    setIsCapturingLong(true);
+    setCaptureProgress(0);
+    setCapturedFrames([]);
+    frameCountRef.current = 0;
+    setLongCaptureInstructions('Hold and slowly move camera across the receipt...');
+    
+    // Capture frames every 200ms while button is held
+    captureIntervalRef.current = setInterval(() => {
+      const imageSrc = webcamRef.current?.getScreenshot();
+      if (imageSrc) {
+        setCapturedFrames(prev => [...prev, imageSrc]);
+        frameCountRef.current += 1;
+        setCaptureProgress(Math.min((frameCountRef.current / 15) * 100, 100)); // Max 15 frames
+        
+        if (frameCountRef.current >= 15) {
+          stopLongCapture();
+        }
+      }
+    }, 200);
+  }, [webcamRef]);
+
+  const stopLongCapture = useCallback(() => {
+    if (captureIntervalRef.current) {
+      clearInterval(captureIntervalRef.current);
+      captureIntervalRef.current = null;
+    }
+    
+    setIsCapturingLong(false);
+    setLongCaptureInstructions('Processing captured frames...');
+    
+    // Combine frames into a single long image (simplified approach)
+    if (capturedFrames.length > 0) {
+      // For now, use the middle frame as the best capture
+      // In a real implementation, you'd stitch the frames together
+      const bestFrame = capturedFrames[Math.floor(capturedFrames.length / 2)];
+      setCapturedImage(bestFrame);
+      setShowCamera(false);
+      setCapturedFrames([]);
+      setCaptureProgress(0);
+      setLongCaptureInstructions('');
+    }
+  }, [capturedFrames]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -261,6 +316,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     setOcrProgress(0);
     setProcessingStep('');
     setShowExtractedForm(false);
+    setCapturedFrames([]);
+    setCaptureProgress(0);
+    setLongCaptureInstructions('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -486,7 +544,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
             <div className="bg-white rounded-2xl shadow-card max-w-2xl w-full">
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <h2 className="text-xl font-bold text-text-primary">
-                  {captureMode === 'panorama' ? 'Panorama Capture' : 'Capture Receipt'}
+                  {captureMode === 'long' ? 'Capture Long Receipt' : 'Capture Receipt'}
                 </h2>
                 <button
                   onClick={() => setShowCamera(false)}
@@ -511,14 +569,14 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                       Normal
                     </button>
                     <button
-                      onClick={() => setCaptureMode('panorama')}
+                      onClick={() => setCaptureMode('long')}
                       className={`px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
-                        captureMode === 'panorama'
+                        captureMode === 'long'
                           ? 'bg-white text-primary shadow-sm'
                           : 'text-text-secondary hover:text-text-primary'
                       }`}
                     >
-                      Panorama
+                      Long Receipt
                     </button>
                   </div>
                 </div>
@@ -531,29 +589,70 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                     className="w-full rounded-lg"
                     videoConstraints={{
                       facingMode: 'environment',
-                      width: captureMode === 'panorama' ? 1920 : 1280,
-                      height: captureMode === 'panorama' ? 1080 : 720
+                      width: captureMode === 'long' ? 1920 : 1280,
+                      height: captureMode === 'long' ? 1080 : 720
                     }}
                   />
                   
-                  {captureMode === 'panorama' && (
+                  {captureMode === 'long' && (
                     <div className="absolute inset-0 border-2 border-dashed border-primary rounded-lg pointer-events-none">
                       <div className="absolute top-2 left-2 bg-primary text-white px-2 py-1 rounded text-xs">
-                        Panorama Mode - Move slowly across receipt
+                        Long Receipt Mode - Hold button and move slowly
                       </div>
+                      {isCapturingLong && (
+                        <div className="absolute bottom-2 left-2 right-2">
+                          <div className="bg-black bg-opacity-50 text-white px-3 py-2 rounded text-sm">
+                            {longCaptureInstructions}
+                          </div>
+                          <div className="w-full bg-gray-300 rounded-full h-2 mt-2">
+                            <div 
+                              className="bg-primary h-2 rounded-full transition-all duration-200"
+                              style={{ width: `${captureProgress}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
                 
                 <div className="flex justify-center mt-6">
-                  <button
-                    onClick={capture}
-                    className="bg-primary text-white px-8 py-4 rounded-full font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
-                  >
-                    <Camera className="h-5 w-5" />
-                    <span>Capture</span>
-                  </button>
+                  {captureMode === 'normal' ? (
+                    <button
+                      onClick={capture}
+                      className="bg-primary text-white px-8 py-4 rounded-full font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <Camera className="h-5 w-5" />
+                      <span>Capture</span>
+                    </button>
+                  ) : (
+                    <button
+                      onMouseDown={startLongCapture}
+                      onMouseUp={stopLongCapture}
+                      onTouchStart={startLongCapture}
+                      onTouchEnd={stopLongCapture}
+                      disabled={isCapturingLong && captureProgress >= 100}
+                      className={`px-8 py-4 rounded-full font-medium transition-colors duration-200 flex items-center space-x-2 ${
+                        isCapturingLong 
+                          ? 'bg-accent-red text-white' 
+                          : 'bg-primary text-white hover:bg-primary/90'
+                      }`}
+                    >
+                      <Maximize2 className="h-5 w-5" />
+                      <span>
+                        {isCapturingLong ? 'Capturing...' : 'Hold to Capture Long Receipt'}
+                      </span>
+                    </button>
+                  )}
                 </div>
+
+                {captureMode === 'long' && (
+                  <div className="mt-4 text-center">
+                    <p className="text-sm text-text-secondary">
+                      Hold the button and slowly move your camera across the entire length of the receipt
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

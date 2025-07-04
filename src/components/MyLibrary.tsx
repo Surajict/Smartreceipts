@@ -1,181 +1,146 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
-  Camera, 
-  Filter, 
-  SortAsc, 
   Search, 
-  Bell, 
-  Calendar,
-  DollarSign,
-  Tag,
-  MapPin,
-  Store,
-  ChevronDown,
-  X,
+  Filter, 
+  Grid, 
+  List, 
+  Calendar, 
+  DollarSign, 
+  Tag, 
+  Eye, 
+  Edit3, 
+  Trash2, 
+  Download,
+  Plus,
   AlertTriangle,
   CheckCircle,
   Clock,
-  Receipt,
-  Edit3,
-  Trash2,
-  Eye,
   User,
   LogOut,
-  Loader2,
-  Image as ImageIcon,
-  FileText,
-  Download,
-  ExternalLink
+  Bell,
+  SortAsc,
+  SortDesc,
+  X,
+  Loader2
 } from 'lucide-react';
-import { 
-  supabase, 
-  getCurrentUser, 
-  signOut, 
-  getUserReceipts, 
-  searchUserReceipts 
-} from '../lib/supabase';
+import { getCurrentUser, signOut, getUserReceipts, deleteReceipt } from '../lib/supabase';
 
 interface MyLibraryProps {
   onBackToDashboard: () => void;
   onShowReceiptScanning: () => void;
 }
 
-interface ReceiptData {
+interface Receipt {
   id: string;
-  user_id: string;
-  purchase_date: string;
-  country: string;
   product_description: string;
   brand_name: string;
-  model_number?: string;
+  store_name: string;
+  purchase_date: string;
+  amount: number;
   warranty_period: string;
-  extended_warranty?: string;
-  amount?: number;
-  image_path?: string;
   image_url?: string;
-  store_name?: string;
-  purchase_location?: string;
-  processing_method?: string;
-  ocr_confidence?: number;
-  extracted_text?: string;
   created_at: string;
-  updated_at: string;
 }
 
-interface SearchResult {
-  id: string;
-  product_description: string;
-  brand_name: string;
-  store_name?: string;
-  purchase_date: string;
-  amount?: number;
-  warranty_period: string;
-  relevance_score: number;
-}
-
-interface FilterState {
-  brands: string[];
-  categories: string[];
-  warrantyStatus: string[];
-  priceRange: { min: number; max: number };
-}
-
-type SortOption = 'value-desc' | 'value-asc' | 'brand-asc' | 'warranty-expiry' | 'date-desc' | 'date-asc';
+type ViewMode = 'grid' | 'list';
+type SortField = 'date' | 'amount' | 'name';
+type SortOrder = 'asc' | 'desc';
 
 const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptScanning }) => {
   const [user, setUser] = useState<any>(null);
-  const [receipts, setReceipts] = useState<ReceiptData[]>([]);
-  const [filteredReceipts, setFilteredReceipts] = useState<ReceiptData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [showSearchResults, setShowSearchResults] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [sortField, setSortField] = useState<SortField>('date');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [selectedReceipt, setSelectedReceipt] = useState<ReceiptData | null>(null);
-  const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [alertsCount] = useState(3);
-  
-  // Filter and sort states
-  const [filters, setFilters] = useState<FilterState>({
-    brands: [],
-    categories: [],
-    warrantyStatus: [],
-    priceRange: { min: 0, max: 10000 }
-  });
-  
-  const [sortBy, setSortBy] = useState<SortOption>('date-desc');
-  
-  // Available filter options
-  const categories = ['Electronics', 'Automobile', 'Home Appliances', 'Fashion', 'Miscellaneous'];
-  const warrantyStatusOptions = [
-    { value: 'expiring-3m', label: 'Expiring in next 3 months' },
-    { value: 'expiring-6m', label: 'Expiring in next 6 months' },
-    { value: 'expired', label: 'Already expired' },
-    { value: 'active', label: 'Active warranties' }
-  ];
-  
-  const sortOptions = [
-    { value: 'value-desc', label: 'By product value (Highest to lowest)' },
-    { value: 'value-asc', label: 'By product value (Lowest to highest)' },
-    { value: 'brand-asc', label: 'By brand (A-Z)' },
-    { value: 'warranty-expiry', label: 'By nearest warranty expiry date' },
-    { value: 'date-desc', label: 'By date added (Newest first)' },
-    { value: 'date-asc', label: 'By date added (Oldest first)' }
-  ];
+  const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   useEffect(() => {
-    loadUserAndReceipts();
+    loadUser();
   }, []);
 
   useEffect(() => {
-    if (!showSearchResults) {
-      applyFiltersAndSort();
+    if (user) {
+      loadReceipts();
     }
-  }, [receipts, filters, sortBy, showSearchResults]);
+  }, [user]);
 
-  const loadUserAndReceipts = async () => {
+  useEffect(() => {
+    filterAndSortReceipts();
+  }, [receipts, searchQuery, sortField, sortOrder]);
+
+  const loadUser = async () => {
+    const currentUser = await getCurrentUser();
+    setUser(currentUser);
+  };
+
+  const loadReceipts = async () => {
+    if (!user) return;
+    
+    setIsLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-      
-      const currentUser = await getCurrentUser();
-      
-      if (!currentUser) {
-        setError('User not authenticated');
-        onBackToDashboard();
-        return;
+      const { data, error } = await getUserReceipts(user.id);
+      if (error) {
+        console.error('Error loading receipts:', error);
+      } else {
+        setReceipts(data || []);
       }
-
-      console.log('Loading receipts for user:', currentUser.id);
-      setUser(currentUser);
-
-      // Load receipts using the enhanced function
-      const { data, error: fetchError } = await getUserReceipts(currentUser.id);
-
-      if (fetchError) {
-        console.error('Error loading receipts:', fetchError);
-        throw new Error(fetchError.message);
-      }
-
-      console.log('Loaded receipts:', data?.length || 0);
-      setReceipts(data || []);
-      
-      if (data && data.length === 0) {
-        console.log('No receipts found for user');
-      }
-
-    } catch (err: any) {
-      console.error('Error loading receipts:', err);
-      setError(err.message || 'Failed to load receipts');
+    } catch (error) {
+      console.error('Error loading receipts:', error);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
+  };
+
+  const filterAndSortReceipts = () => {
+    let filtered = receipts;
+
+    // Apply search filter
+    if (searchQuery) {
+      filtered = receipts.filter(receipt =>
+        receipt.product_description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        receipt.brand_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        receipt.store_name?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let aValue: any, bValue: any;
+      
+      switch (sortField) {
+        case 'date':
+          aValue = new Date(a.purchase_date);
+          bValue = new Date(b.purchase_date);
+          break;
+        case 'amount':
+          aValue = a.amount || 0;
+          bValue = b.amount || 0;
+          break;
+        case 'name':
+          aValue = a.product_description.toLowerCase();
+          bValue = b.product_description.toLowerCase();
+          break;
+        default:
+          aValue = a.created_at;
+          bValue = b.created_at;
+      }
+
+      if (sortOrder === 'asc') {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    });
+
+    setFilteredReceipts(filtered);
   };
 
   const handleSignOut = async () => {
@@ -187,205 +152,26 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     }
   };
 
-  // Enhanced search using the database function
-  const performSearch = async (query: string) => {
-    if (!query.trim() || !user) {
-      setSearchResults([]);
-      setShowSearchResults(false);
-      return;
-    }
+  const handleDeleteReceipt = async (receiptId: string) => {
+    if (!user || !confirm('Are you sure you want to delete this receipt?')) return;
 
-    setIsSearching(true);
-    setSearchError(null);
-
+    setIsDeleting(receiptId);
     try {
-      console.log('Performing search for:', query);
-      
-      const { data, error } = await searchUserReceipts(user.id, query.trim(), 10);
-
+      const { error } = await deleteReceipt(user.id, receiptId);
       if (error) {
-        throw new Error(error.message);
+        console.error('Error deleting receipt:', error);
+        alert('Failed to delete receipt. Please try again.');
+      } else {
+        // Remove from local state
+        setReceipts(prev => prev.filter(r => r.id !== receiptId));
+        setShowReceiptModal(false);
+        setSelectedReceipt(null);
       }
-
-      console.log('Search results:', data);
-      setSearchResults(data || []);
-      setShowSearchResults(true);
-    } catch (err: any) {
-      console.error('Search error:', err);
-      setSearchError(err.message || 'Search failed. Please try again.');
-      
-      // Fallback to local search
-      performLocalSearch(query);
+    } catch (error) {
+      console.error('Error deleting receipt:', error);
+      alert('Failed to delete receipt. Please try again.');
     } finally {
-      setIsSearching(false);
-    }
-  };
-
-  // Fallback local search
-  const performLocalSearch = (query: string) => {
-    const localResults = receipts
-      .filter(receipt => 
-        receipt.product_description.toLowerCase().includes(query.toLowerCase()) ||
-        receipt.brand_name.toLowerCase().includes(query.toLowerCase()) ||
-        receipt.model_number?.toLowerCase().includes(query.toLowerCase()) ||
-        receipt.store_name?.toLowerCase().includes(query.toLowerCase()) ||
-        receipt.purchase_location?.toLowerCase().includes(query.toLowerCase()) ||
-        receipt.extracted_text?.toLowerCase().includes(query.toLowerCase())
-      )
-      .slice(0, 10)
-      .map(receipt => ({
-        id: receipt.id,
-        product_description: receipt.product_description,
-        brand_name: receipt.brand_name,
-        store_name: receipt.store_name,
-        purchase_date: receipt.purchase_date,
-        amount: receipt.amount,
-        warranty_period: receipt.warranty_period,
-        relevance_score: 0.7 // Mock score for local search
-      }));
-
-    setSearchResults(localResults);
-    setShowSearchResults(true);
-  };
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    performSearch(searchQuery);
-  };
-
-  const clearSearch = () => {
-    setSearchQuery('');
-    setSearchResults([]);
-    setShowSearchResults(false);
-    setSearchError(null);
-  };
-
-  const applyFiltersAndSort = () => {
-    let filtered = [...receipts];
-
-    // Apply brand filter
-    if (filters.brands.length > 0) {
-      filtered = filtered.filter(receipt => 
-        filters.brands.includes(receipt.brand_name)
-      );
-    }
-
-    // Apply category filter (simplified - would need category field in database)
-    if (filters.categories.length > 0) {
-      filtered = filtered.filter(receipt => {
-        const description = receipt.product_description.toLowerCase();
-        return filters.categories.some(category => {
-          switch (category) {
-            case 'Electronics':
-              return description.includes('phone') || description.includes('laptop') || 
-                     description.includes('camera') || description.includes('tv') ||
-                     description.includes('computer') || description.includes('tablet');
-            case 'Automobile':
-              return description.includes('car') || description.includes('auto') || 
-                     description.includes('vehicle') || description.includes('tire');
-            case 'Home Appliances':
-              return description.includes('refrigerator') || description.includes('washer') || 
-                     description.includes('dryer') || description.includes('microwave') ||
-                     description.includes('dishwasher') || description.includes('oven');
-            case 'Fashion':
-              return description.includes('shirt') || description.includes('shoes') || 
-                     description.includes('dress') || description.includes('jacket') ||
-                     description.includes('clothing') || description.includes('apparel');
-            default:
-              return true;
-          }
-        });
-      });
-    }
-
-    // Apply warranty status filter
-    if (filters.warrantyStatus.length > 0) {
-      filtered = filtered.filter(receipt => {
-        const warrantyExpiry = calculateWarrantyExpiry(receipt.purchase_date, receipt.warranty_period);
-        const daysUntilExpiry = Math.ceil((warrantyExpiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-        
-        return filters.warrantyStatus.some(status => {
-          switch (status) {
-            case 'expiring-3m':
-              return daysUntilExpiry > 0 && daysUntilExpiry <= 90;
-            case 'expiring-6m':
-              return daysUntilExpiry > 0 && daysUntilExpiry <= 180;
-            case 'expired':
-              return daysUntilExpiry <= 0;
-            case 'active':
-              return daysUntilExpiry > 0;
-            default:
-              return true;
-          }
-        });
-      });
-    }
-
-    // Apply price range filter
-    filtered = filtered.filter(receipt => {
-      const amount = receipt.amount || 0;
-      return amount >= filters.priceRange.min && amount <= filters.priceRange.max;
-    });
-
-    // Apply sorting
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'value-desc':
-          return (b.amount || 0) - (a.amount || 0);
-        case 'value-asc':
-          return (a.amount || 0) - (b.amount || 0);
-        case 'brand-asc':
-          return a.brand_name.localeCompare(b.brand_name);
-        case 'warranty-expiry':
-          const expiryA = calculateWarrantyExpiry(a.purchase_date, a.warranty_period);
-          const expiryB = calculateWarrantyExpiry(b.purchase_date, b.warranty_period);
-          return expiryA.getTime() - expiryB.getTime();
-        case 'date-asc':
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-        case 'date-desc':
-        default:
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      }
-    });
-
-    setFilteredReceipts(filtered);
-  };
-
-  const calculateWarrantyExpiry = (purchaseDate: string, warrantyPeriod: string): Date => {
-    const purchase = new Date(purchaseDate);
-    const period = warrantyPeriod.toLowerCase();
-    
-    if (period.includes('lifetime')) {
-      return new Date('2099-12-31');
-    }
-    
-    const years = period.match(/(\d+)\s*year/);
-    const months = period.match(/(\d+)\s*month/);
-    
-    if (years) {
-      purchase.setFullYear(purchase.getFullYear() + parseInt(years[1]));
-    } else if (months) {
-      purchase.setMonth(purchase.getMonth() + parseInt(months[1]));
-    } else {
-      // Default to 1 year if no specific period found
-      purchase.setFullYear(purchase.getFullYear() + 1);
-    }
-    
-    return purchase;
-  };
-
-  const getWarrantyStatus = (purchaseDate: string, warrantyPeriod: string) => {
-    const expiry = calculateWarrantyExpiry(purchaseDate, warrantyPeriod);
-    const daysUntilExpiry = Math.ceil((expiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (daysUntilExpiry <= 0) {
-      return { status: 'expired', color: 'text-accent-red bg-red-50 border-red-200', icon: AlertTriangle };
-    } else if (daysUntilExpiry <= 30) {
-      return { status: 'expiring-soon', color: 'text-accent-red bg-red-50 border-red-200', icon: AlertTriangle };
-    } else if (daysUntilExpiry <= 90) {
-      return { status: 'expiring-medium', color: 'text-accent-yellow bg-yellow-50 border-yellow-200', icon: Clock };
-    } else {
-      return { status: 'active', color: 'text-green-600 bg-green-50 border-green-200', icon: CheckCircle };
+      setIsDeleting(null);
     }
   };
 
@@ -404,67 +190,30 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     });
   };
 
-  const clearFilters = () => {
-    setFilters({
-      brands: [],
-      categories: [],
-      warrantyStatus: [],
-      priceRange: { min: 0, max: 10000 }
-    });
-  };
-
-  const toggleFilter = (type: keyof FilterState, value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      [type]: prev[type].includes(value) 
-        ? prev[type].filter(item => item !== value)
-        : [...prev[type], value]
-    }));
-  };
-
-  const handleReceiptClick = (receipt: ReceiptData) => {
-    setSelectedReceipt(receipt);
-    setShowReceiptModal(true);
-  };
-
-  const getImageUrl = (receipt: ReceiptData) => {
-    if (receipt.image_url) {
-      return receipt.image_url;
+  const getWarrantyStatus = (purchaseDate: string, warrantyPeriod: string) => {
+    const purchase = new Date(purchaseDate);
+    const period = warrantyPeriod.toLowerCase();
+    
+    let expiryDate = new Date(purchase);
+    if (period.includes('year')) {
+      const years = parseInt(period.match(/(\d+)/)?.[1] || '1');
+      expiryDate.setFullYear(expiryDate.getFullYear() + years);
+    } else if (period.includes('month')) {
+      const months = parseInt(period.match(/(\d+)/)?.[1] || '12');
+      expiryDate.setMonth(expiryDate.getMonth() + months);
+    } else {
+      expiryDate.setFullYear(expiryDate.getFullYear() + 1);
     }
-    if (receipt.image_path) {
-      // Generate public URL from image path
-      const { data } = supabase.storage
-        .from('receipt-images')
-        .getPublicUrl(receipt.image_path);
-      return data.publicUrl;
-    }
-    return null;
+
+    const now = new Date();
+    const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysLeft < 0) return { status: 'expired', color: 'text-red-600', icon: AlertTriangle };
+    if (daysLeft <= 30) return { status: 'expiring', color: 'text-yellow-600', icon: Clock };
+    return { status: 'active', color: 'text-green-600', icon: CheckCircle };
   };
 
-  const downloadImage = async (receipt: ReceiptData) => {
-    const imageUrl = getImageUrl(receipt);
-    if (imageUrl) {
-      try {
-        const response = await fetch(imageUrl);
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `receipt-${receipt.product_description.replace(/[^a-zA-Z0-9]/g, '-')}.jpg`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      } catch (error) {
-        console.error('Error downloading image:', error);
-      }
-    }
-  };
-
-  // Get unique brands from receipts
-  const availableBrands = [...new Set(receipts.map(r => r.brand_name))].sort();
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -474,8 +223,6 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
       </div>
     );
   }
-
-  const displayedReceipts = showSearchResults ? [] : filteredReceipts;
 
   return (
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
@@ -507,60 +254,13 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                 )}
               </button>
 
-              {/* Filter Button */}
+              {/* Back Button */}
               <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                  showFilters 
-                    ? 'bg-primary text-white' 
-                    : 'bg-white text-text-primary border-2 border-gray-300 hover:border-primary'
-                }`}
+                onClick={onBackToDashboard}
+                className="flex items-center space-x-2 bg-white text-text-primary border-2 border-gray-300 hover:border-primary px-4 py-2 rounded-lg font-medium transition-all duration-200"
               >
-                <Filter className="h-4 w-4" />
-                <span className="hidden sm:inline">Filter</span>
-              </button>
-
-              {/* Sort Button */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowSortMenu(!showSortMenu)}
-                  className="flex items-center space-x-2 bg-white text-text-primary border-2 border-gray-300 hover:border-primary px-4 py-2 rounded-lg font-medium transition-all duration-200"
-                >
-                  <SortAsc className="h-4 w-4" />
-                  <span className="hidden sm:inline">Sort</span>
-                  <ChevronDown className="h-4 w-4" />
-                </button>
-
-                {/* Sort Dropdown */}
-                {showSortMenu && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
-                    {sortOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        onClick={() => {
-                          setSortBy(option.value as SortOption);
-                          setShowSortMenu(false);
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm transition-colors duration-200 ${
-                          sortBy === option.value
-                            ? 'bg-primary text-white'
-                            : 'text-text-secondary hover:bg-gray-100 hover:text-text-primary'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Scan New Receipt */}
-              <button
-                onClick={onShowReceiptScanning}
-                className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 flex items-center space-x-2"
-              >
-                <Camera className="h-4 w-4" />
-                <span className="hidden sm:inline leading-none">Scan New Receipt</span>
+                <ArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Back to Dashboard</span>
               </button>
 
               {/* User Menu */}
@@ -610,495 +310,243 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Page Title */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
-            My Receipt Library
-          </h1>
-          <p className="text-xl text-text-secondary">
-            {showSearchResults 
-              ? `${searchResults.length} search results for "${searchQuery}"`
-              : `${filteredReceipts.length} of ${receipts.length} receipts`
-            }
-          </p>
+        {/* Page Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
+          <div>
+            <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-2">
+              My Receipt Library
+            </h1>
+            <p className="text-xl text-text-secondary">
+              {filteredReceipts.length} receipt{filteredReceipts.length !== 1 ? 's' : ''} in your collection
+            </p>
+          </div>
+          
+          <button
+            onClick={onShowReceiptScanning}
+            className="mt-4 sm:mt-0 bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
+          >
+            <Plus className="h-5 w-5" />
+            <span>Add Receipt</span>
+          </button>
         </div>
 
-        {/* Smart Search Bar */}
-        <div className="mb-8">
-          <form onSubmit={handleSearchSubmit} className="relative max-w-2xl mx-auto">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+        {/* Controls */}
+        <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 mb-8">
+          <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
+            {/* Search */}
+            <div className="relative flex-1 max-w-md">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-5 w-5 text-text-secondary" />
               </div>
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="block w-full pl-12 pr-32 py-4 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 text-lg bg-white shadow-sm"
-                placeholder="Search receipts by product, brand, store, or location..."
+                className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                placeholder="Search receipts..."
               />
-              <div className="absolute inset-y-0 right-0 flex items-center space-x-2 pr-3">
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={clearSearch}
-                    className="text-text-secondary hover:text-text-primary transition-colors duration-200 p-1"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-                <button
-                  type="submit"
-                  disabled={isSearching || !searchQuery.trim()}
-                  className="bg-primary text-white px-6 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            </div>
+
+            {/* Sort Controls */}
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-medium text-text-secondary">Sort by:</span>
+                <select
+                  value={sortField}
+                  onChange={(e) => setSortField(e.target.value as SortField)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 >
-                  {isSearching ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="hidden sm:inline">Searching...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Search className="h-4 w-4" />
-                      <span className="hidden sm:inline">Search</span>
-                    </>
-                  )}
+                  <option value="date">Date</option>
+                  <option value="amount">Amount</option>
+                  <option value="name">Name</option>
+                </select>
+                <button
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                >
+                  {sortOrder === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />}
+                </button>
+              </div>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2 rounded-md transition-colors duration-200 ${
+                    viewMode === 'grid' ? 'bg-white text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  <Grid className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-2 rounded-md transition-colors duration-200 ${
+                    viewMode === 'list' ? 'bg-white text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  <List className="h-4 w-4" />
                 </button>
               </div>
             </div>
-          </form>
-
-          {/* Search Error */}
-          {searchError && (
-            <div className="mt-4 max-w-2xl mx-auto p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-700 text-center">{searchError}</p>
-            </div>
-          )}
-
-          {/* Search Results */}
-          {showSearchResults && (
-            <div className="mt-6 max-w-2xl mx-auto">
-              <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-text-primary">
-                      Search Results ({searchResults.length})
-                    </h3>
-                    <button
-                      onClick={clearSearch}
-                      className="text-text-secondary hover:text-text-primary transition-colors duration-200"
-                    >
-                      <X className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-                
-                {searchResults.length === 0 ? (
-                  <div className="px-6 py-8 text-center">
-                    <Search className="h-12 w-12 text-text-secondary mx-auto mb-4" />
-                    <p className="text-text-secondary">No receipts found matching your search.</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {searchResults.map((result, index) => (
-                      <div
-                        key={result.id}
-                        className="px-6 py-4 hover:bg-gray-50 transition-colors duration-200 cursor-pointer"
-                        onClick={() => {
-                          const fullReceipt = receipts.find(r => r.id === result.id);
-                          if (fullReceipt) handleReceiptClick(fullReceipt);
-                        }}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center space-x-3 mb-2">
-                              <h4 className="text-base font-semibold text-text-primary truncate">
-                                {result.product_description}
-                              </h4>
-                              <div className="flex items-center space-x-1 text-xs text-text-secondary bg-gray-100 px-2 py-1 rounded-full">
-                                <span>Relevance:</span>
-                                <span className="font-medium">{Math.round(result.relevance_score * 100)}%</span>
-                              </div>
-                            </div>
-                            
-                            <div className="flex flex-wrap items-center gap-4 text-sm text-text-secondary">
-                              <div className="flex items-center space-x-1">
-                                <Tag className="h-4 w-4" />
-                                <span>{result.brand_name}</span>
-                              </div>
-                              
-                              {result.store_name && (
-                                <div className="flex items-center space-x-1">
-                                  <Store className="h-4 w-4" />
-                                  <span>{result.store_name}</span>
-                                </div>
-                              )}
-                              
-                              <div className="flex items-center space-x-1">
-                                <Calendar className="h-4 w-4" />
-                                <span>{formatDate(result.purchase_date)}</span>
-                              </div>
-                              
-                              {result.amount && (
-                                <div className="flex items-center space-x-1">
-                                  <DollarSign className="h-4 w-4" />
-                                  <span className="font-medium text-text-primary">
-                                    {formatCurrency(result.amount)}
-                                  </span>
-                                </div>
-                              )}
-                              
-                              <div className="flex items-center space-x-1">
-                                <Clock className="h-4 w-4" />
-                                <span>Warranty: {result.warranty_period}</span>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <button className="ml-4 text-primary hover:text-primary/80 transition-colors duration-200">
-                            <Eye className="h-5 w-5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          </div>
         </div>
 
-        {/* Filters Panel */}
-        {showFilters && !showSearchResults && (
-          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 mb-8">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold text-text-primary">Filters</h3>
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={clearFilters}
-                  className="text-text-secondary hover:text-text-primary transition-colors duration-200 text-sm"
-                >
-                  Clear All
-                </button>
-                <button
-                  onClick={() => setShowFilters(false)}
-                  className="text-text-secondary hover:text-text-primary transition-colors duration-200"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {/* Brand Filter */}
-              <div>
-                <h4 className="font-medium text-text-primary mb-3">Brand</h4>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {availableBrands.map((brand) => (
-                    <label key={brand} className="flex items-center space-x-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.brands.includes(brand)}
-                        onChange={() => toggleFilter('brands', brand)}
-                        className="rounded border-gray-300 text-primary focus:ring-primary"
-                      />
-                      <span className="text-sm text-text-secondary">{brand}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Category Filter */}
-              <div>
-                <h4 className="font-medium text-text-primary mb-3">Category</h4>
-                <div className="space-y-2">
-                  {categories.map((category) => (
-                    <label key={category} className="flex items-center space-x-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.categories.includes(category)}
-                        onChange={() => toggleFilter('categories', category)}
-                        className="rounded border-gray-300 text-primary focus:ring-primary"
-                      />
-                      <span className="text-sm text-text-secondary">{category}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Warranty Status Filter */}
-              <div>
-                <h4 className="font-medium text-text-primary mb-3">Warranty Status</h4>
-                <div className="space-y-2">
-                  {warrantyStatusOptions.map((option) => (
-                    <label key={option.value} className="flex items-center space-x-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.warrantyStatus.includes(option.value)}
-                        onChange={() => toggleFilter('warrantyStatus', option.value)}
-                        className="rounded border-gray-300 text-primary focus:ring-primary"
-                      />
-                      <span className="text-sm text-text-secondary">{option.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Price Range Filter */}
-              <div>
-                <h4 className="font-medium text-text-primary mb-3">Price Range</h4>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs text-text-secondary mb-1">Min Price</label>
-                    <input
-                      type="number"
-                      value={filters.priceRange.min}
-                      onChange={(e) => setFilters(prev => ({
-                        ...prev,
-                        priceRange: { ...prev.priceRange, min: Number(e.target.value) }
-                      }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                      placeholder="0"
-                    />
+        {/* Receipts Display */}
+        {filteredReceipts.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-12">
+              {searchQuery ? (
+                <>
+                  <Search className="h-16 w-16 text-text-secondary mx-auto mb-4" />
+                  <h3 className="text-xl font-medium text-text-primary mb-2">No receipts found</h3>
+                  <p className="text-text-secondary mb-6">
+                    No receipts match your search for "{searchQuery}"
+                  </p>
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
+                  >
+                    Clear Search
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="bg-gradient-feature rounded-full p-6 w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                    <Plus className="h-12 w-12 text-primary" />
                   </div>
-                  <div>
-                    <label className="block text-xs text-text-secondary mb-1">Max Price</label>
-                    <input
-                      type="number"
-                      value={filters.priceRange.max}
-                      onChange={(e) => setFilters(prev => ({
-                        ...prev,
-                        priceRange: { ...prev.priceRange, max: Number(e.target.value) }
-                      }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                      placeholder="10000"
-                    />
-                  </div>
-                </div>
-              </div>
+                  <h3 className="text-xl font-medium text-text-primary mb-2">No receipts yet</h3>
+                  <p className="text-text-secondary mb-6">
+                    Start building your receipt library by adding your first receipt
+                  </p>
+                  <button
+                    onClick={onShowReceiptScanning}
+                    className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
+                  >
+                    Add Your First Receipt
+                  </button>
+                </>
+              )}
             </div>
           </div>
-        )}
+        ) : (
+          <div className={viewMode === 'grid' ? 'grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6' : 'space-y-4'}>
+            {filteredReceipts.map((receipt) => {
+              const warrantyStatus = getWarrantyStatus(receipt.purchase_date, receipt.warranty_period);
+              const StatusIcon = warrantyStatus.icon;
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-center">
-              <AlertTriangle className="h-5 w-5 text-red-600 mr-2" />
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Receipt Grid */}
-        {!showSearchResults && (
-          <>
-            {displayedReceipts.length === 0 ? (
-              <div className="text-center py-16">
-                <Receipt className="h-16 w-16 text-text-secondary mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-text-primary mb-2">
-                  {receipts.length === 0 ? 'No receipts yet' : 'No receipts match your filters'}
-                </h3>
-                <p className="text-text-secondary mb-6">
-                  {receipts.length === 0 
-                    ? 'Start by scanning your first receipt to build your digital library.'
-                    : 'Try adjusting your search or filter criteria to find more receipts.'
-                  }
-                </p>
-                <button
-                  onClick={onShowReceiptScanning}
-                  className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2 mx-auto"
-                >
-                  <Camera className="h-5 w-5" />
-                  <span>Scan Your First Receipt</span>
-                </button>
-              </div>
-            ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {displayedReceipts.map((receipt) => {
-                  const warrantyStatus = getWarrantyStatus(receipt.purchase_date, receipt.warranty_period);
-                  const StatusIcon = warrantyStatus.icon;
-                  const imageUrl = getImageUrl(receipt);
-                  
-                  return (
-                    <div
-                      key={receipt.id}
-                      className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-1 group cursor-pointer"
-                      onClick={() => handleReceiptClick(receipt)}
-                    >
-                      {/* Receipt Header */}
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <h3 className="font-bold text-text-primary text-lg mb-1 group-hover:text-primary transition-colors duration-200">
-                            {receipt.product_description}
-                          </h3>
-                          <p className="text-text-secondary text-sm">
-                            {receipt.brand_name}
-                            {receipt.model_number && ` • ${receipt.model_number}`}
-                          </p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {imageUrl && (
-                            <div className="text-primary">
-                              <ImageIcon className="h-4 w-4" />
-                            </div>
-                          )}
-                          {receipt.extracted_text && (
-                            <div className="text-secondary">
-                              <FileText className="h-4 w-4" />
-                            </div>
-                          )}
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleReceiptClick(receipt);
-                            }}
-                            className="text-text-secondary hover:text-primary transition-colors duration-200"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Receipt Image Preview */}
-                      {imageUrl && (
-                        <div className="mb-4">
-                          <img
-                            src={imageUrl}
-                            alt="Receipt"
-                            className="w-full h-32 object-cover rounded-lg border border-gray-200"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
+              if (viewMode === 'grid') {
+                return (
+                  <div
+                    key={receipt.id}
+                    className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-1 cursor-pointer group"
+                    onClick={() => {
+                      setSelectedReceipt(receipt);
+                      setShowReceiptModal(true);
+                    }}
+                  >
+                    {/* Receipt Image or Placeholder */}
+                    <div className="aspect-square bg-gradient-feature rounded-lg mb-4 flex items-center justify-center overflow-hidden">
+                      {receipt.image_url ? (
+                        <img
+                          src={receipt.image_url}
+                          alt={receipt.product_description}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-primary">
+                          <Tag className="h-12 w-12" />
                         </div>
                       )}
+                    </div>
 
-                      {/* Receipt Details */}
-                      <div className="space-y-3 mb-4">
-                        {receipt.store_name && (
-                          <div className="flex items-center space-x-2 text-sm">
-                            <Store className="h-4 w-4 text-text-secondary" />
-                            <span className="text-text-secondary">{receipt.store_name}</span>
-                          </div>
-                        )}
-                        
-                        {receipt.purchase_location && (
-                          <div className="flex items-center space-x-2 text-sm">
-                            <MapPin className="h-4 w-4 text-text-secondary" />
-                            <span className="text-text-secondary">{receipt.purchase_location}</span>
-                          </div>
-                        )}
-                        
-                        <div className="flex items-center space-x-2 text-sm">
-                          <Calendar className="h-4 w-4 text-text-secondary" />
-                          <span className="text-text-secondary">
-                            Purchased: {formatDate(receipt.purchase_date)}
-                          </span>
+                    {/* Receipt Info */}
+                    <div className="space-y-2">
+                      <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 line-clamp-2">
+                        {receipt.product_description}
+                      </h3>
+                      
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-text-secondary">{receipt.brand_name}</span>
+                        <div className={`flex items-center space-x-1 ${warrantyStatus.color}`}>
+                          <StatusIcon className="h-4 w-4" />
                         </div>
-                        
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-text-secondary text-sm">{formatDate(receipt.purchase_date)}</span>
                         {receipt.amount && (
-                          <div className="flex items-center space-x-2 text-sm">
-                            <DollarSign className="h-4 w-4 text-text-secondary" />
-                            <span className="font-medium text-text-primary">
-                              {formatCurrency(receipt.amount)}
-                            </span>
-                          </div>
+                          <span className="font-bold text-text-primary">{formatCurrency(receipt.amount)}</span>
                         )}
-
-                        {/* Processing Method Badge */}
-                        {receipt.processing_method && receipt.processing_method !== 'manual' && (
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
-                              {receipt.processing_method.replace('_', ' ')}
-                            </span>
-                            {receipt.ocr_confidence && (
-                              <span className="text-xs text-text-secondary">
-                                {Math.round(receipt.ocr_confidence * 100)}% confidence
-                              </span>
-                            )}
-                          </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              } else {
+                return (
+                  <div
+                    key={receipt.id}
+                    className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 hover:shadow-card-hover transition-all duration-200 cursor-pointer group"
+                    onClick={() => {
+                      setSelectedReceipt(receipt);
+                      setShowReceiptModal(true);
+                    }}
+                  >
+                    <div className="flex items-center space-x-4">
+                      {/* Receipt Image or Placeholder */}
+                      <div className="w-16 h-16 bg-gradient-feature rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        {receipt.image_url ? (
+                          <img
+                            src={receipt.image_url}
+                            alt={receipt.product_description}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Tag className="h-8 w-8 text-primary" />
                         )}
                       </div>
 
-                      {/* Warranty Status */}
-                      <div className={`flex items-center space-x-2 p-3 rounded-lg border ${warrantyStatus.color} mb-4`}>
-                        <StatusIcon className="h-4 w-4" />
-                        <div className="flex-1">
-                          <div className="text-sm font-medium">
-                            Warranty: {receipt.warranty_period}
-                            {receipt.extended_warranty && ` + ${receipt.extended_warranty}`}
-                          </div>
-                          <div className="text-xs opacity-75">
-                            Expires: {formatDate(calculateWarrantyExpiry(receipt.purchase_date, receipt.warranty_period).toISOString())}
-                          </div>
+                      {/* Receipt Info */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate">
+                          {receipt.product_description}
+                        </h3>
+                        <div className="flex items-center space-x-4 text-sm text-text-secondary mt-1">
+                          <span>{receipt.brand_name}</span>
+                          <span>{formatDate(receipt.purchase_date)}</span>
+                          {receipt.store_name && <span>{receipt.store_name}</span>}
                         </div>
                       </div>
 
-                      {/* Actions */}
-                      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleReceiptClick(receipt);
-                          }}
-                          className="text-primary hover:text-primary/80 font-medium text-sm transition-colors duration-200"
-                        >
-                          View Details
-                        </button>
-                        <div className="flex items-center space-x-2">
-                          {imageUrl && (
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                downloadImage(receipt);
-                              }}
-                              className="text-text-secondary hover:text-primary transition-colors duration-200"
-                              title="Download Image"
-                            >
-                              <Download className="h-4 w-4" />
-                            </button>
-                          )}
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Add edit functionality here
-                            }}
-                            className="text-text-secondary hover:text-primary transition-colors duration-200"
-                            title="Edit Receipt"
-                          >
-                            <Edit3 className="h-4 w-4" />
-                          </button>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Add delete functionality here
-                            }}
-                            className="text-text-secondary hover:text-accent-red transition-colors duration-200"
-                            title="Delete Receipt"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                      {/* Amount and Status */}
+                      <div className="flex items-center space-x-4 flex-shrink-0">
+                        {receipt.amount && (
+                          <span className="font-bold text-text-primary">{formatCurrency(receipt.amount)}</span>
+                        )}
+                        <div className={`flex items-center space-x-1 ${warrantyStatus.color}`}>
+                          <StatusIcon className="h-5 w-5" />
                         </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
+                  </div>
+                );
+              }
+            })}
+          </div>
         )}
       </main>
 
       {/* Receipt Detail Modal */}
       {showReceiptModal && selectedReceipt && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-card max-w-4xl w-full max-h-[90vh] overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-card max-w-2xl w-full max-h-[90vh] overflow-hidden">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-2xl font-bold text-text-primary">Receipt Details</h2>
               <button
-                onClick={() => setShowReceiptModal(false)}
+                onClick={() => {
+                  setShowReceiptModal(false);
+                  setSelectedReceipt(null);
+                }}
                 className="text-text-secondary hover:text-text-primary transition-colors duration-200"
               >
                 <X className="h-6 w-6" />
@@ -1106,168 +554,109 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
             </div>
 
             {/* Modal Content */}
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              <div className="grid lg:grid-cols-2 gap-8">
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+              <div className="grid md:grid-cols-2 gap-6">
                 {/* Receipt Image */}
                 <div>
-                  {getImageUrl(selectedReceipt) ? (
-                    <div className="space-y-4">
+                  <h3 className="font-medium text-text-primary mb-3">Receipt Image</h3>
+                  <div className="aspect-square bg-gradient-feature rounded-lg flex items-center justify-center overflow-hidden">
+                    {selectedReceipt.image_url ? (
                       <img
-                        src={getImageUrl(selectedReceipt)!}
-                        alt="Receipt"
-                        className="w-full rounded-lg border border-gray-200"
+                        src={selectedReceipt.image_url}
+                        alt={selectedReceipt.product_description}
+                        className="w-full h-full object-cover"
                       />
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => downloadImage(selectedReceipt)}
-                          className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200"
-                        >
-                          <Download className="h-4 w-4" />
-                          <span>Download</span>
-                        </button>
-                        <button
-                          onClick={() => window.open(getImageUrl(selectedReceipt)!, '_blank')}
-                          className="flex items-center space-x-2 border border-gray-300 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                          <span>Open in New Tab</span>
-                        </button>
+                    ) : (
+                      <div className="text-center text-text-secondary">
+                        <Tag className="h-16 w-16 mx-auto mb-2" />
+                        <p>No image available</p>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="bg-gray-100 rounded-lg p-8 text-center">
-                      <ImageIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-500">No image available</p>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
 
-                {/* Receipt Information */}
-                <div className="space-y-6">
+                {/* Receipt Details */}
+                <div className="space-y-4">
                   <div>
-                    <h3 className="text-xl font-bold text-text-primary mb-4">Product Information</h3>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-sm font-medium text-text-secondary">Product Description</label>
-                        <p className="text-text-primary font-medium">{selectedReceipt.product_description}</p>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-text-secondary">Brand</label>
-                        <p className="text-text-primary">{selectedReceipt.brand_name}</p>
-                      </div>
-                      {selectedReceipt.model_number && (
-                        <div>
-                          <label className="text-sm font-medium text-text-secondary">Model Number</label>
-                          <p className="text-text-primary">{selectedReceipt.model_number}</p>
-                        </div>
-                      )}
-                    </div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1">Product</label>
+                    <p className="text-text-primary font-medium">{selectedReceipt.product_description}</p>
                   </div>
 
                   <div>
-                    <h3 className="text-xl font-bold text-text-primary mb-4">Purchase Details</h3>
-                    <div className="space-y-3">
-                      {selectedReceipt.store_name && (
-                        <div>
-                          <label className="text-sm font-medium text-text-secondary">Store</label>
-                          <p className="text-text-primary">{selectedReceipt.store_name}</p>
-                        </div>
-                      )}
-                      {selectedReceipt.purchase_location && (
-                        <div>
-                          <label className="text-sm font-medium text-text-secondary">Location</label>
-                          <p className="text-text-primary">{selectedReceipt.purchase_location}</p>
-                        </div>
-                      )}
-                      <div>
-                        <label className="text-sm font-medium text-text-secondary">Purchase Date</label>
-                        <p className="text-text-primary">{formatDate(selectedReceipt.purchase_date)}</p>
-                      </div>
-                      {selectedReceipt.amount && (
-                        <div>
-                          <label className="text-sm font-medium text-text-secondary">Amount</label>
-                          <p className="text-text-primary font-medium">{formatCurrency(selectedReceipt.amount)}</p>
-                        </div>
-                      )}
-                      <div>
-                        <label className="text-sm font-medium text-text-secondary">Country</label>
-                        <p className="text-text-primary">{selectedReceipt.country}</p>
-                      </div>
-                    </div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1">Brand</label>
+                    <p className="text-text-primary">{selectedReceipt.brand_name}</p>
                   </div>
 
-                  <div>
-                    <h3 className="text-xl font-bold text-text-primary mb-4">Warranty Information</h3>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-sm font-medium text-text-secondary">Warranty Period</label>
-                        <p className="text-text-primary">{selectedReceipt.warranty_period}</p>
-                      </div>
-                      {selectedReceipt.extended_warranty && (
-                        <div>
-                          <label className="text-sm font-medium text-text-secondary">Extended Warranty</label>
-                          <p className="text-text-primary">{selectedReceipt.extended_warranty}</p>
-                        </div>
-                      )}
-                      <div>
-                        <label className="text-sm font-medium text-text-secondary">Warranty Expires</label>
-                        <p className="text-text-primary">
-                          {formatDate(calculateWarrantyExpiry(selectedReceipt.purchase_date, selectedReceipt.warranty_period).toISOString())}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Processing Information */}
-                  {selectedReceipt.processing_method && (
+                  {selectedReceipt.store_name && (
                     <div>
-                      <h3 className="text-xl font-bold text-text-primary mb-4">Processing Information</h3>
-                      <div className="space-y-3">
-                        <div>
-                          <label className="text-sm font-medium text-text-secondary">Processing Method</label>
-                          <p className="text-text-primary capitalize">{selectedReceipt.processing_method.replace('_', ' ')}</p>
-                        </div>
-                        {selectedReceipt.ocr_confidence && (
-                          <div>
-                            <label className="text-sm font-medium text-text-secondary">OCR Confidence</label>
-                            <p className="text-text-primary">{Math.round(selectedReceipt.ocr_confidence * 100)}%</p>
-                          </div>
-                        )}
-                        <div>
-                          <label className="text-sm font-medium text-text-secondary">Added</label>
-                          <p className="text-text-primary">{formatDate(selectedReceipt.created_at)}</p>
-                        </div>
-                      </div>
+                      <label className="block text-sm font-medium text-text-secondary mb-1">Store</label>
+                      <p className="text-text-primary">{selectedReceipt.store_name}</p>
                     </div>
                   )}
 
-                  {/* Extracted Text */}
-                  {selectedReceipt.extracted_text && (
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1">Purchase Date</label>
+                    <p className="text-text-primary">{formatDate(selectedReceipt.purchase_date)}</p>
+                  </div>
+
+                  {selectedReceipt.amount && (
                     <div>
-                      <h3 className="text-xl font-bold text-text-primary mb-4">Extracted Text</h3>
-                      <div className="bg-gray-50 rounded-lg p-4 max-h-40 overflow-y-auto">
-                        <pre className="text-sm text-text-secondary whitespace-pre-wrap font-mono">
-                          {selectedReceipt.extracted_text}
-                        </pre>
-                      </div>
+                      <label className="block text-sm font-medium text-text-secondary mb-1">Amount</label>
+                      <p className="text-text-primary font-bold">{formatCurrency(selectedReceipt.amount)}</p>
                     </div>
                   )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Period</label>
+                    <p className="text-text-primary">{selectedReceipt.warranty_period}</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Status</label>
+                    <div className={`flex items-center space-x-2 ${getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).color}`}>
+                      {React.createElement(getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).icon, { className: "h-5 w-5" })}
+                      <span className="font-medium capitalize">{getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).status}</span>
+                    </div>
+                  </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between p-6 border-t border-gray-200">
+              <button
+                onClick={() => handleDeleteReceipt(selectedReceipt.id)}
+                disabled={isDeleting === selectedReceipt.id}
+                className="flex items-center space-x-2 text-red-600 hover:text-red-700 transition-colors duration-200 disabled:opacity-50"
+              >
+                {isDeleting === selectedReceipt.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                <span>Delete Receipt</span>
+              </button>
+
+              <div className="flex items-center space-x-3">
+                <button className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
+                  <Download className="h-4 w-4" />
+                  <span>Download</span>
+                </button>
+                <button className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200">
+                  <Edit3 className="h-4 w-4" />
+                  <span>Edit</span>
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Click outside to close dropdowns */}
-      {(showSortMenu || showFilters || showUserMenu) && (
+      {/* Click outside to close user menu */}
+      {showUserMenu && (
         <div
           className="fixed inset-0 z-40"
-          onClick={() => {
-            setShowSortMenu(false);
-            setShowFilters(false);
-            setShowUserMenu(false);
-          }}
+          onClick={() => setShowUserMenu(false)}
         />
       )}
     </div>

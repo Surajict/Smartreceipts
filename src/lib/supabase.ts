@@ -390,7 +390,7 @@ export const updateReceipt = async (userId: string, receiptId: string, updateDat
   }
 };
 
-// Auth helper functions
+// Auth helper functions with improved error handling
 export const signUp = async (email: string, password: string, fullName: string) => {
   try {
     console.log('Starting signup process for:', email)
@@ -453,8 +453,8 @@ export const signUp = async (email: string, password: string, fullName: string) 
     if (data.user) {
       console.log('Signup successful, user created:', data.user.id)
       
-      // Wait for database triggers to complete
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // Wait a moment for the trigger to complete
+      await new Promise(resolve => setTimeout(resolve, 1000))
       
       // Verify user profile was created
       try {
@@ -467,21 +467,14 @@ export const signUp = async (email: string, password: string, fullName: string) 
         if (profileError && profileError.code !== 'PGRST116') {
           console.warn('Profile verification failed:', profileError)
           // Try to create profile manually if trigger failed
-          await createUserProfile(data.user.id, email, fullName)
+          await createUserProfileManually(data.user.id, email, fullName)
         } else if (profile) {
           console.log('User profile created successfully')
         }
       } catch (profileErr) {
         console.warn('Profile verification error:', profileErr)
         // Try to create profile manually
-        await createUserProfile(data.user.id, email, fullName)
-      }
-      
-      // Ensure user settings are initialized
-      try {
-        await initializeUserSettings(data.user.id)
-      } catch (settingsError) {
-        console.warn('Failed to initialize user settings:', settingsError)
+        await createUserProfileManually(data.user.id, email, fullName)
       }
     }
     
@@ -499,9 +492,12 @@ export const signUp = async (email: string, password: string, fullName: string) 
 }
 
 // Helper function to create user profile manually if trigger fails
-const createUserProfile = async (userId: string, email: string, fullName: string) => {
+const createUserProfileManually = async (userId: string, email: string, fullName: string) => {
   try {
-    const { error } = await supabase
+    console.log('Creating user profile manually for:', userId)
+    
+    // Create user profile
+    const { error: userError } = await supabase
       .from('users')
       .upsert({
         id: userId,
@@ -511,11 +507,49 @@ const createUserProfile = async (userId: string, email: string, fullName: string
         onConflict: 'id'
       })
     
-    if (error) {
-      console.error('Failed to create user profile manually:', error)
+    if (userError) {
+      console.error('Failed to create user profile manually:', userError)
     } else {
       console.log('User profile created manually')
     }
+
+    // Create notification settings
+    const { error: notifError } = await supabase
+      .from('user_notification_settings')
+      .upsert({
+        user_id: userId,
+        warranty_alerts: true,
+        auto_system_update: true,
+        marketing_notifications: false
+      }, {
+        onConflict: 'user_id'
+      })
+    
+    if (notifError) {
+      console.error('Failed to create notification settings manually:', notifError)
+    } else {
+      console.log('Notification settings created manually')
+    }
+
+    // Create privacy settings
+    const { error: privacyError } = await supabase
+      .from('user_privacy_settings')
+      .upsert({
+        user_id: userId,
+        data_collection: true,
+        data_analysis: 'allowed',
+        biometric_login: false,
+        two_factor_auth: false
+      }, {
+        onConflict: 'user_id'
+      })
+    
+    if (privacyError) {
+      console.error('Failed to create privacy settings manually:', privacyError)
+    } else {
+      console.log('Privacy settings created manually')
+    }
+    
   } catch (err) {
     console.error('Error creating user profile manually:', err)
   }

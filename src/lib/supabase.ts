@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder-url.supabase.co'
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-anon-key'
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please check your .env file.')
+if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('placeholder') || supabaseAnonKey.includes('placeholder')) {
+  console.warn('Supabase environment variables not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your deployment environment.')
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -690,6 +690,12 @@ export const onAuthStateChange = (callback: (event: string, session: any) => voi
 // Test Supabase connection
 export const testSupabaseConnection = async () => {
   try {
+    // If using placeholder values, return false
+    if (supabaseUrl.includes('placeholder') || supabaseAnonKey.includes('placeholder')) {
+      console.warn('Using placeholder Supabase credentials')
+      return false
+    }
+    
     console.log('Testing Supabase connection...')
     
     // Test basic connection by checking if we can access the auth endpoint

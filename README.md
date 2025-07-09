@@ -23,7 +23,8 @@ Smart Receipts is an AI-powered web application for scanning, organizing, and tr
 
 ## Features
 - **AI-Powered Receipt Scanning**: Instantly digitize receipts using your camera or file upload.
-- **OCR & GPT-4o Extraction**: Extracts product, brand, store, date, amount, warranty, and more.
+- **Dual OCR Options**: Choose between Tesseract.js (free, offline) or Google Cloud Vision (high accuracy, cloud-based) for text extraction.
+- **GPT-4o Data Extraction**: Intelligently extracts product, brand, store, date, amount, warranty, and more from OCR text.
 - **Warranty Management**: Tracks warranty periods, sends alerts before expiration, and assists with claims.
 - **Receipt Library**: Search, filter, and organize all your receipts in a secure cloud archive.
 - **Profile & Settings**: Manage your profile, notification, and privacy settings.
@@ -36,7 +37,7 @@ Smart Receipts is an AI-powered web application for scanning, organizing, and tr
 ## Tech Stack
 - **Frontend**: React 18, TypeScript, Vite, Tailwind CSS
 - **Backend**: Supabase (PostgreSQL, Auth, Storage, RLS)
-- **AI/ML**: Tesseract.js (OCR), OpenAI GPT-4o (data extraction)
+- **AI/ML**: Tesseract.js (OCR), Google Cloud Vision API (OCR), OpenAI GPT-4o (data extraction)
 - **Icons**: Lucide React
 
 ---
@@ -60,7 +61,17 @@ Create a `.env` file in the project root:
 VITE_SUPABASE_URL=your-supabase-url
 VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
 VITE_OPENAI_API_KEY=your-openai-api-key  # Optional, enables GPT-4o extraction
+VITE_GOOGLE_CLOUD_API_KEY=your-google-cloud-api-key  # Optional, enables Google Cloud Vision OCR
 ```
+
+#### Google Cloud Vision Setup (Optional)
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the Cloud Vision API
+4. Go to APIs & Services > Credentials
+5. Create an API key
+6. Restrict the key to Cloud Vision API for security
+7. Add the API key to your environment variables
 
 ### Supabase Setup
 1. **Create a Supabase project** at [supabase.com](https://supabase.com).
@@ -86,7 +97,8 @@ Visit [http://localhost:5173](http://localhost:5173) to view the app.
 Smartreceipts/
 ├── public/                # Static assets (logos, images)
 ├── src/
-│   ├── components/        # React components (Dashboard, ReceiptScanning, Library, etc.)
+│   ├── components/        # React components (Dashboard, ReceiptScanning, OCRSelector, etc.)
+│   ├── services/          # OCR and other service modules
 │   ├── lib/               # Supabase and utility functions
 │   ├── types/             # TypeScript types
 │   ├── App.tsx            # Main app component

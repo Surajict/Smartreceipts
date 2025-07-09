@@ -20,10 +20,12 @@ import {
   Edit3,
   RotateCcw,
   Plus,
-  Maximize2
+  Maximize2,
+  Settings
 } from 'lucide-react';
 import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
-import { createWorker } from 'tesseract.js';
+import { OCRService, OCREngine } from '../services/ocrService';
+import OCRSelector from './OCRSelector';
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
@@ -63,6 +65,10 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [alertsCount] = useState(3);
   const [openaiAvailable, setOpenaiAvailable] = useState<boolean | null>(null);
   const [showExtractedForm, setShowExtractedForm] = useState(false);
+  
+  // OCR Engine Selection
+  const [selectedOCREngine, setSelectedOCREngine] = useState<OCREngine>('tesseract');
+  const [showOCRSelector, setShowOCRSelector] = useState(false);
   
   // Long receipt capture states
   const [isCapturingLong, setIsCapturingLong] = useState(false);
@@ -181,31 +187,25 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   };
 
   const performOCR = async (imageSource: string | File): Promise<string> => {
-    setProcessingStep('Initializing OCR engine...');
-    setOcrProgress(10);
+    const result = await OCRService.extractText(
+      imageSource,
+      selectedOCREngine,
+      (progress, step) => {
+        setOcrProgress(progress);
+        setProcessingStep(step);
+      }
+    );
 
-    const worker = await createWorker('eng');
-    
-    setProcessingStep('Analyzing receipt image...');
-    setOcrProgress(30);
-
-    try {
-      const { data: { text, confidence } } = await worker.recognize(imageSource);
-      
-      setProcessingStep('Extracting text from receipt...');
-      setOcrProgress(80);
-      
-      console.log('OCR Confidence:', confidence);
-      console.log('Extracted text:', text);
-      
-      await worker.terminate();
-      setOcrProgress(100);
-      
-      return text;
-    } catch (error) {
-      await worker.terminate();
-      throw error;
+    if (result.error) {
+      throw new Error(result.error);
     }
+
+    console.log(`OCR Engine: ${result.engine}`);
+    console.log('OCR Confidence:', result.confidence);
+    console.log('Processing Time:', `${result.processingTime}ms`);
+    console.log('Extracted text:', result.text);
+
+    return result.text;
   };
 
   const fallbackDataExtraction = (text: string): ExtractedData => {
@@ -370,9 +370,10 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       const receiptData = {
         ...extractedData,
         image_url: imageUrl,
-        processing_method: inputMode === 'manual' ? 'manual' : (extractedText ? 'gpt_structured' : 'manual'),
+        processing_method: inputMode === 'manual' ? 'manual' : (extractedText ? `${selectedOCREngine}_gpt_structured` : 'manual'),
         ocr_confidence: extractedText ? 0.85 : null,
-        extracted_text: extractedText || null
+        extracted_text: extractedText || null,
+        ocr_engine: extractedText ? selectedOCREngine : null
       };
 
       const { error: saveError } = await saveReceiptToDatabase(receiptData, user.id);
@@ -730,6 +731,17 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* OCR Engine Selection */}
+        {(capturedImage || inputMode === 'capture' || inputMode === 'upload') && !showExtractedForm && !isProcessing && (
+          <div className="mb-8">
+            <OCRSelector
+              selectedEngine={selectedOCREngine}
+              onEngineChange={setSelectedOCREngine}
+              disabled={isProcessing}
+            />
           </div>
         )}
 

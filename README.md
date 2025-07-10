@@ -1,152 +1,182 @@
-# Smart Receipts
+# Supabase CLI (v1)
 
-Smart Receipts is an AI-powered web application for scanning, organizing, and tracking receipts, with automated warranty management and claim support. Built with React, TypeScript, Vite, Tailwind CSS, and Supabase, it leverages GPT-4o for intelligent data extraction and Tesseract.js for OCR.
+[![Coverage Status](https://coveralls.io/repos/github/supabase/cli/badge.svg?branch=main)](https://coveralls.io/github/supabase/cli?branch=main)
 
----
+[Supabase](https://supabase.io) is an open source Firebase alternative. We're building the features of Firebase using enterprise-grade open source tools.
 
-## Table of Contents
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Screenshots](#screenshots)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Environment Variables](#environment-variables)
-  - [Supabase Setup](#supabase-setup)
-  - [Install & Run](#install--run)
-- [Project Structure](#project-structure)
-- [Usage](#usage)
-- [FAQ](#faq)
-- [Contributing](#contributing)
-- [License](#license)
+This repository contains all the functionality for Supabase CLI.
 
----
+- [x] Running Supabase locally
+- [x] Managing database migrations
+- [x] Creating and deploying Supabase Functions
+- [x] Generating types directly from your database schema
+- [x] Making authenticated HTTP requests to [Management API](https://supabase.com/docs/reference/api/introduction)
 
-## Features
-- **AI-Powered Receipt Scanning**: Instantly digitize receipts using your camera or file upload.
-- **Dual OCR Options**: Choose between Tesseract.js (free, offline) or Google Cloud Vision (high accuracy, cloud-based) for text extraction.
-- **GPT-4o Data Extraction**: Intelligently extracts product, brand, store, date, amount, warranty, and more from OCR text.
-- **Warranty Management**: Tracks warranty periods, sends alerts before expiration, and assists with claims.
-- **Receipt Library**: Search, filter, and organize all your receipts in a secure cloud archive.
-- **Profile & Settings**: Manage your profile, notification, and privacy settings.
-- **Multi-Device Sync**: Access your receipts from any device.
-- **Secure Storage**: End-to-end encryption and SOC 2 certified data centers.
-- **Customer Support**: AI chatbot and human support for warranty claims.
+## Getting started
 
----
+### Install the CLI
 
-## Tech Stack
-- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS
-- **Backend**: Supabase (PostgreSQL, Auth, Storage, RLS)
-- **AI/ML**: Tesseract.js (OCR), Google Cloud Vision API (OCR), OpenAI GPT-4o (data extraction)
-- **Icons**: Lucide React
+Available via [NPM](https://www.npmjs.com) as dev dependency. To install:
 
----
-
-## Screenshots
-> _Add screenshots of the Dashboard, Receipt Scanning, Library, and Profile pages here._
-
----
-
-## Getting Started
-
-### Prerequisites
-- Node.js (v18+ recommended)
-- npm (v9+ recommended)
-- Supabase account ([sign up](https://supabase.com))
-- OpenAI API key (optional, for best AI extraction)
-
-### Environment Variables
-Create a `.env` file in the project root:
-```env
-VITE_SUPABASE_URL=your-supabase-url
-VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
-VITE_OPENAI_API_KEY=your-openai-api-key  # Optional, enables GPT-4o extraction
-VITE_GOOGLE_CLOUD_API_KEY=your-google-cloud-api-key  # Optional, enables Google Cloud Vision OCR
-```
-
-#### Google Cloud Vision Setup (Optional)
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select an existing one
-3. Enable the Cloud Vision API
-4. Go to APIs & Services > Credentials
-5. Create an API key
-6. Restrict the key to Cloud Vision API for security
-7. Add the API key to your environment variables
-
-### Supabase Setup
-1. **Create a Supabase project** at [supabase.com](https://supabase.com).
-2. **Get your project URL and anon key** from Project Settings > API.
-3. **Run all migrations** in `supabase/migrations/` (using Supabase CLI or dashboard):
-   - This sets up tables (`receipts`, `users`, `user_notification_settings`, `user_privacy_settings`), RLS, storage buckets, and all required functions.
-4. **Create storage buckets**:
-   - `receipt-images` (private)
-   - `profile-pictures` (private)
-5. **Enable Row Level Security (RLS)** on all tables.
-
-### Install & Run
 ```bash
-npm install
-npm run dev
-```
-Visit [http://localhost:5173](http://localhost:5173) to view the app.
-
----
-
-## Project Structure
-```
-Smartreceipts/
-├── public/                # Static assets (logos, images)
-├── src/
-│   ├── components/        # React components (Dashboard, ReceiptScanning, OCRSelector, etc.)
-│   ├── services/          # OCR and other service modules
-│   ├── lib/               # Supabase and utility functions
-│   ├── types/             # TypeScript types
-│   ├── App.tsx            # Main app component
-│   └── main.tsx           # Entry point
-├── supabase/
-│   └── migrations/        # Database migrations
-├── tailwind.config.js     # Tailwind CSS config
-├── vite.config.ts         # Vite config
-├── tsconfig.json          # TypeScript config
-├── .env                   # Environment variables (not committed)
-└── package.json           # Project metadata
+npm i supabase --save-dev
 ```
 
----
+To install the beta release channel:
 
-## Usage
-- **Sign Up / Login**: Create an account or log in with email/password.
-- **Scan or Upload Receipts**: Use your camera or upload files. The app uses OCR and GPT-4o to extract data.
-- **Review & Edit**: Confirm or edit extracted details before saving.
-- **Dashboard**: View stats, recent receipts, and warranty alerts.
-- **Library**: Search, filter, and manage all your receipts.
-- **Profile**: Update your info, notification, and privacy settings.
+```bash
+npm i supabase@beta --save-dev
+```
 
----
+When installing with yarn 4, you need to disable experimental fetch with the following nodejs config.
 
-## FAQ
-- **How accurate is the AI scanning?**
-  - 99.5% accuracy for most receipts. Manual entry available if needed.
-- **Is my data secure?**
-  - Yes, with bank-level encryption and RLS.
-- **Can I use it without OpenAI?**
-  - Yes, but AI extraction will be limited to OCR and regex.
-- **What file formats are supported?**
-  - JPEG, PNG, PDF, HEIC.
-- **How do I run migrations?**
-  - Use the Supabase CLI: `supabase db push` or run SQL files manually.
+```
+NODE_OPTIONS=--no-experimental-fetch yarn add supabase
+```
 
----
+> **Note**
+For Bun versions below v1.0.17, you must add `supabase` as a [trusted dependency](https://bun.sh/guides/install/trusted) before running `bun add -D supabase`.
 
-## Contributing
-1. Fork this repo
-2. Create a feature branch
-3. Commit your changes
-4. Open a pull request
+<details>
+  <summary><b>macOS</b></summary>
 
-Please follow the code style and add tests where possible.
+  Available via [Homebrew](https://brew.sh). To install:
 
----
+  ```sh
+  brew install supabase/tap/supabase
+  ```
 
-## License
-MIT
+  To install the beta release channel:
+  
+  ```sh
+  brew install supabase/tap/supabase-beta
+  brew link --overwrite supabase-beta
+  ```
+  
+  To upgrade:
+
+  ```sh
+  brew upgrade supabase
+  ```
+</details>
+
+<details>
+  <summary><b>Windows</b></summary>
+
+  Available via [Scoop](https://scoop.sh). To install:
+
+  ```powershell
+  scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+  scoop install supabase
+  ```
+
+  To upgrade:
+
+  ```powershell
+  scoop update supabase
+  ```
+</details>
+
+<details>
+  <summary><b>Linux</b></summary>
+
+  Available via [Homebrew](https://brew.sh) and Linux packages.
+
+  #### via Homebrew
+
+  To install:
+
+  ```sh
+  brew install supabase/tap/supabase
+  ```
+
+  To upgrade:
+
+  ```sh
+  brew upgrade supabase
+  ```
+
+  #### via Linux packages
+
+  Linux packages are provided in [Releases](https://github.com/supabase/cli/releases). To install, download the `.apk`/`.deb`/`.rpm`/`.pkg.tar.zst` file depending on your package manager and run the respective commands.
+
+  ```sh
+  sudo apk add --allow-untrusted <...>.apk
+  ```
+
+  ```sh
+  sudo dpkg -i <...>.deb
+  ```
+
+  ```sh
+  sudo rpm -i <...>.rpm
+  ```
+
+  ```sh
+  sudo pacman -U <...>.pkg.tar.zst
+  ```
+</details>
+
+<details>
+  <summary><b>Other Platforms</b></summary>
+
+  You can also install the CLI via [go modules](https://go.dev/ref/mod#go-install) without the help of package managers.
+
+  ```sh
+  go install github.com/supabase/cli@latest
+  ```
+
+  Add a symlink to the binary in `$PATH` for easier access:
+
+  ```sh
+  ln -s "$(go env GOPATH)/cli" /usr/bin/supabase
+  ```
+
+  This works on other non-standard Linux distros.
+</details>
+
+<details>
+  <summary><b>Community Maintained Packages</b></summary>
+
+  Available via [pkgx](https://pkgx.sh/). Package script [here](https://github.com/pkgxdev/pantry/blob/main/projects/supabase.com/cli/package.yml).
+  To install in your working directory:
+
+  ```bash
+  pkgx install supabase
+  ```
+
+  Available via [Nixpkgs](https://nixos.org/). Package script [here](https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/tools/supabase-cli/default.nix).
+</details>
+
+### Run the CLI
+
+```bash
+supabase bootstrap
+```
+
+Or using npx:
+
+```bash
+npx supabase bootstrap
+```
+
+The bootstrap command will guide you through the process of setting up a Supabase project using one of the [starter](https://github.com/supabase-community/supabase-samples/blob/main/samples.json) templates.
+
+## Docs
+
+Command & config reference can be found [here](https://supabase.com/docs/reference/cli/about).
+
+## Breaking changes
+
+We follow semantic versioning for changes that directly impact CLI commands, flags, and configurations.
+
+However, due to dependencies on other service images, we cannot guarantee that schema migrations, seed.sql, and generated types will always work for the same CLI major version. If you need such guarantees, we encourage you to pin a specific version of CLI in package.json.
+
+## Developing
+
+To run from source:
+
+```sh
+# Go >= 1.22
+go run . help
+```

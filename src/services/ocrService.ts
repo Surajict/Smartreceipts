@@ -3,7 +3,6 @@ import { createWorker } from 'tesseract.js';
 // OCR Engine types
 export type OCREngine = 'tesseract' | 'google-cloud-vision';
 
-// OCR Result interface
 export interface OCRResult {
   text: string;
   confidence: number;
@@ -12,11 +11,11 @@ export interface OCRResult {
   error?: string;
 }
 
-// OCR Progress callback type
 export type OCRProgressCallback = (progress: number, step: string) => void;
 
 /**
- * Tesseract OCR Implementation
+ * Tesseract OCR Implementation (BACKUP ONLY)
+ * Note: This is kept as a fallback option but completely hidden from users
  */
 export class TesseractOCR {
   static async extractText(
@@ -26,7 +25,7 @@ export class TesseractOCR {
     const startTime = Date.now();
     
     try {
-      onProgress?.(10, 'Initializing Tesseract OCR engine...');
+      onProgress?.(10, 'Initializing text recognition...');
       
       const worker = await createWorker('eng');
       
@@ -38,7 +37,7 @@ export class TesseractOCR {
       
       await worker.terminate();
       
-      onProgress?.(100, 'OCR completed successfully!');
+      onProgress?.(100, 'Text extraction completed!');
       
       const processingTime = Date.now() - startTime;
       
@@ -55,14 +54,15 @@ export class TesseractOCR {
         confidence: 0,
         engine: 'tesseract',
         processingTime,
-        error: error instanceof Error ? error.message : 'Tesseract OCR failed'
+        error: error instanceof Error ? error.message : 'Text extraction failed'
       };
     }
   }
 }
 
 /**
- * Google Cloud Vision OCR Implementation
+ * Google Cloud Vision OCR Implementation (PRIMARY AND ONLY USER-FACING OPTION)
+ * This is the only OCR engine presented to users
  */
 export class GoogleCloudVisionOCR {
   private static readonly API_ENDPOINT = 'https://vision.googleapis.com/v1/images:annotate';
@@ -77,15 +77,15 @@ export class GoogleCloudVisionOCR {
       const apiKey = import.meta.env.VITE_GOOGLE_CLOUD_API_KEY;
       
       if (!apiKey) {
-        throw new Error('Google Cloud Vision API key not configured. Please set VITE_GOOGLE_CLOUD_API_KEY in your environment variables.');
+        throw new Error('Text recognition service not configured. Please contact support.');
       }
       
-      onProgress?.(10, 'Initializing Google Cloud Vision...');
+      onProgress?.(10, 'Initializing text recognition...');
       
       // Convert image to base64
       const base64Image = await this.convertToBase64(imageSource);
       
-      onProgress?.(30, 'Uploading image to Google Cloud Vision...');
+      onProgress?.(30, 'Processing receipt image...');
       
       const requestBody = {
         requests: [
@@ -108,7 +108,7 @@ export class GoogleCloudVisionOCR {
         ]
       };
       
-      onProgress?.(50, 'Processing image with AI...');
+      onProgress?.(50, 'Analyzing text with AI...');
       
       const response = await fetch(`${this.API_ENDPOINT}?key=${apiKey}`, {
         method: 'POST',
@@ -120,7 +120,7 @@ export class GoogleCloudVisionOCR {
       
       if (!response.ok) {
         const errorData = await response.text();
-        throw new Error(`Google Cloud Vision API error: ${response.status} - ${errorData}`);
+        throw new Error(`Text recognition failed: ${response.status} - ${errorData}`);
       }
       
       onProgress?.(80, 'Extracting text from response...');
@@ -128,7 +128,7 @@ export class GoogleCloudVisionOCR {
       const data = await response.json();
       
       if (data.responses[0].error) {
-        throw new Error(`Google Cloud Vision error: ${data.responses[0].error.message}`);
+        throw new Error(`Text recognition error: ${data.responses[0].error.message}`);
       }
       
       const textAnnotation = data.responses[0].textAnnotations?.[0];
@@ -143,7 +143,7 @@ export class GoogleCloudVisionOCR {
         };
       }
       
-      onProgress?.(100, 'OCR completed successfully!');
+      onProgress?.(100, 'Text extraction completed!');
       
       const processingTime = Date.now() - startTime;
       
@@ -161,85 +161,84 @@ export class GoogleCloudVisionOCR {
         confidence: 0,
         engine: 'google-cloud-vision',
         processingTime,
-        error: error instanceof Error ? error.message : 'Google Cloud Vision OCR failed'
+        error: error instanceof Error ? error.message : 'Text recognition failed'
       };
     }
   }
-  
+
   private static async convertToBase64(imageSource: string | File): Promise<string> {
     if (typeof imageSource === 'string') {
-      // If it's a data URL, extract the base64 part
-      if (imageSource.startsWith('data:')) {
-        return imageSource.split(',')[1];
+      // It's a data URL, extract the base64 part
+      const base64Match = imageSource.match(/^data:image\/[a-zA-Z]+;base64,(.+)$/);
+      if (base64Match) {
+        return base64Match[1];
       }
-      
-      // If it's a URL, fetch and convert
-      const response = await fetch(imageSource);
-      const blob = await response.blob();
-      return this.blobToBase64(blob);
+      throw new Error('Invalid image format');
+    } else {
+      // It's a File object, convert to base64
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64Match = result.match(/^data:image\/[a-zA-Z]+;base64,(.+)$/);
+          if (base64Match) {
+            resolve(base64Match[1]);
+          } else {
+            reject(new Error('Failed to convert image to base64'));
+          }
+        };
+        reader.onerror = () => reject(new Error('Failed to read image file'));
+        reader.readAsDataURL(imageSource);
+      });
     }
-    
-    // If it's a File object
-    return this.blobToBase64(imageSource);
-  }
-  
-  private static async blobToBase64(blob: Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        const base64 = dataUrl.split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
   }
 }
 
 /**
- * Main OCR Service that handles both engines
+ * Main OCR Service - Always uses Google Cloud Vision with automatic Tesseract fallback
+ * Users only see one "text recognition" option
  */
 export class OCRService {
   static async extractText(
     imageSource: string | File,
-    engine: OCREngine = 'tesseract',
+    engine: OCREngine = 'google-cloud-vision', // Always default to Google Cloud Vision
     onProgress?: OCRProgressCallback
   ): Promise<OCRResult> {
-    switch (engine) {
-      case 'tesseract':
-        return TesseractOCR.extractText(imageSource, onProgress);
+    // Always try Google Cloud Vision first
+    try {
+      const result = await GoogleCloudVisionOCR.extractText(imageSource, onProgress);
       
-      case 'google-cloud-vision':
-        return GoogleCloudVisionOCR.extractText(imageSource, onProgress);
+      // If Google Cloud Vision succeeds, return the result
+      if (!result.error) {
+        return result;
+      }
       
-      default:
-        throw new Error(`Unsupported OCR engine: ${engine}`);
+      // If Google Cloud Vision fails, try Tesseract as silent fallback
+      console.warn('Google Cloud Vision failed, falling back to Tesseract:', result.error);
+      onProgress?.(0, 'Switching to backup text recognition...');
+      return TesseractOCR.extractText(imageSource, onProgress);
+      
+    } catch (error) {
+      // If Google Cloud Vision fails completely, try Tesseract as silent fallback
+      console.warn('Google Cloud Vision failed completely, falling back to Tesseract:', error);
+      onProgress?.(0, 'Switching to backup text recognition...');
+      return TesseractOCR.extractText(imageSource, onProgress);
     }
   }
   
   /**
-   * Get available OCR engines based on configuration
+   * Get available OCR engines - Only returns Google Cloud Vision for users
+   * No choice is presented to users
    */
   static getAvailableEngines(): { engine: OCREngine; name: string; description: string }[] {
-    const engines = [
+    // Only return Google Cloud Vision - no choices for users
+    return [
       {
-        engine: 'tesseract' as OCREngine,
-        name: 'Tesseract OCR',
-        description: 'Free, offline OCR processing in your browser'
+        engine: 'google-cloud-vision' as OCREngine,
+        name: 'Text Recognition',
+        description: 'AI-powered text extraction from receipt images'
       }
     ];
-    
-    // Check if Google Cloud Vision is configured
-    if (import.meta.env.VITE_GOOGLE_CLOUD_API_KEY) {
-      engines.push({
-        engine: 'google-cloud-vision' as OCREngine,
-        name: 'Google Cloud Vision',
-        description: 'Advanced AI-powered OCR with higher accuracy'
-      });
-    }
-    
-    return engines;
   }
   
   /**
@@ -249,7 +248,7 @@ export class OCRService {
     try {
       switch (engine) {
         case 'tesseract':
-          return true; // Tesseract is always available
+          return true; // Tesseract is always available as silent fallback
         
         case 'google-cloud-vision':
           const apiKey = import.meta.env.VITE_GOOGLE_CLOUD_API_KEY;
@@ -261,5 +260,13 @@ export class OCRService {
     } catch {
       return false;
     }
+  }
+  
+  /**
+   * Get the preferred OCR engine - Always returns Google Cloud Vision
+   */
+  static async getPreferredEngine(): Promise<OCREngine> {
+    // Always return Google Cloud Vision as the only option
+    return 'google-cloud-vision';
   }
 } 

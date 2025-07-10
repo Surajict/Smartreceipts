@@ -108,19 +108,19 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
                   href="https://youtu.be/qWJCuc1kUoI" 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="absolute inset-0 flex items-center justify-center group cursor-pointer"
+                  className="absolute inset-0 flex flex-col items-center justify-center group cursor-pointer"
                 >
+                  <div className="bg-gradient-to-r from-primary to-secondary rounded-full py-3 px-12 flex items-center mb-4 shadow-lg">
+                    <Play className="h-6 w-6 text-white" />
+                  </div>
                   <div className="text-center">
-                    <div className="bg-gradient-to-r from-primary to-secondary rounded-full p-5 transform transition-transform duration-300 group-hover:scale-110 shadow-xl mx-auto mb-4">
-                      <Play className="h-10 w-10 text-white" />
-                    </div>
-                    <h3 className="text-lg font-bold text-white mb-2">
+                    <h3 className="text-lg font-bold text-white mb-1">
                       See Smart Receipts in Action
                     </h3>
-                    <p className="text-white/80 text-sm px-4">
+                    <p className="text-white/80 text-sm">
                       Watch our 8-second demo on YouTube
                     </p>
-                  </div>
+                    </div>
                 </a>
               </div>
               

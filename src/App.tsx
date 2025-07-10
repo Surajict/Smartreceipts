@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import Benefits from './components/Benefits';
@@ -15,10 +16,96 @@ import ProfilePage from './components/ProfilePage';
 import MyLibrary from './components/MyLibrary';
 import { getCurrentUser, onAuthStateChange } from './lib/supabase';
 
-type PageState = 'home' | 'login' | 'signup' | 'dashboard' | 'receipt-scanning' | 'profile' | 'library';
+// Protected Route Component
+const ProtectedRoute = ({ children, user }: { children: React.ReactNode; user: any }) => {
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+};
+
+// Home Page Component
+const HomePage = () => {
+  const navigate = useNavigate();
+  const handleShowLogin = () => navigate('/login');
+  const handleShowSignUp = () => navigate('/signup');
+  return (
+    <div className="min-h-screen font-['Inter',sans-serif]">
+      <Header onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
+      <main>
+        <Hero onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
+        <Benefits onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
+        <HowItWorks onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
+        <Testimonials />
+        <FAQ />
+        <CTA onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
+      </main>
+      <Footer />
+    </div>
+  );
+};
+
+// Login Page Component
+const LoginPage = ({ user }: { user: any }) => {
+  const navigate = useNavigate();
+  const handleBackToHome = () => navigate('/');
+  const handleShowSignUp = () => navigate('/signup');
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <Login onBackToHome={handleBackToHome} onShowSignUp={handleShowSignUp} />;
+};
+
+// SignUp Page Component
+const SignUpPage = ({ user }: { user: any }) => {
+  const navigate = useNavigate();
+  const handleBackToHome = () => navigate('/');
+  const handleShowLogin = () => navigate('/login');
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <SignUp onBackToHome={handleBackToHome} onShowLogin={handleShowLogin} />;
+};
+
+// Dashboard Page Component
+const DashboardPage = ({ user, onSignOut }: { user: any; onSignOut: () => void }) => {
+  const navigate = useNavigate();
+  const handleShowReceiptScanning = () => navigate('/scan');
+  const handleShowProfile = () => navigate('/profile');
+  const handleShowLibrary = () => navigate('/library');
+  return (
+    <Dashboard
+      onSignOut={onSignOut}
+      onShowReceiptScanning={handleShowReceiptScanning}
+      onShowProfile={handleShowProfile}
+      onShowLibrary={handleShowLibrary}
+    />
+  );
+};
+
+// Receipt Scanning Page Component
+const ReceiptScanningPage = () => {
+  const navigate = useNavigate();
+  const handleBackToDashboard = () => navigate('/dashboard');
+  return <ReceiptScanning onBackToDashboard={handleBackToDashboard} />;
+};
+
+// Profile Page Component
+const ProfilePageComponent = () => {
+  const navigate = useNavigate();
+  const handleBackToDashboard = () => navigate('/dashboard');
+  return <ProfilePage onBackToDashboard={handleBackToDashboard} />;
+};
+
+// Library Page Component
+const LibraryPage = () => {
+  const navigate = useNavigate();
+  const handleBackToDashboard = () => navigate('/dashboard');
+  const handleShowReceiptScanning = () => navigate('/scan');
+  return <MyLibrary onBackToDashboard={handleBackToDashboard} onShowReceiptScanning={handleShowReceiptScanning} />;
+};
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<PageState>('home');
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -29,7 +116,6 @@ function App() {
         const currentUser = await getCurrentUser();
         if (currentUser) {
           setUser(currentUser);
-          setCurrentPage('dashboard');
         }
       } catch (error) {
         console.error('Error checking user:', error);
@@ -44,10 +130,8 @@ function App() {
     const { data: { subscription } } = onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         setUser(session.user);
-        setCurrentPage('dashboard');
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
-        setCurrentPage('home');
       }
     });
 
@@ -56,19 +140,10 @@ function App() {
     };
   }, []);
 
-  const handleShowLogin = () => setCurrentPage('login');
-  const handleShowSignUp = () => setCurrentPage('signup');
-  const handleShowHome = () => setCurrentPage('home');
-  const handleShowDashboard = () => setCurrentPage('dashboard');
-  const handleShowReceiptScanning = () => setCurrentPage('receipt-scanning');
-  const handleShowProfile = () => setCurrentPage('profile');
-  const handleShowLibrary = () => setCurrentPage('library');
   const handleSignOut = () => {
     setUser(null);
-    setCurrentPage('home');
   };
 
-  // Show loading spinner while checking authentication
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -80,47 +155,52 @@ function App() {
     );
   }
 
-  // Show profile page
-  if (user && currentPage === 'profile') {
-    return <ProfilePage onBackToDashboard={handleShowDashboard} />;
-  }
-
-  // Show library page
-  if (user && currentPage === 'library') {
-    return <MyLibrary onBackToDashboard={handleShowDashboard} onShowReceiptScanning={handleShowReceiptScanning} />;
-  }
-
-  // Show receipt scanning page
-  if (user && currentPage === 'receipt-scanning') {
-    return <ReceiptScanning onBackToDashboard={handleShowDashboard} />;
-  }
-
-  // Show dashboard if user is authenticated
-  if (user && currentPage === 'dashboard') {
-    return <Dashboard onSignOut={handleSignOut} onShowReceiptScanning={handleShowReceiptScanning} onShowProfile={handleShowProfile} onShowLibrary={handleShowLibrary} />;
-  }
-
-  if (currentPage === 'login') {
-    return <Login onBackToHome={handleShowHome} onShowSignUp={handleShowSignUp} />;
-  }
-
-  if (currentPage === 'signup') {
-    return <SignUp onBackToHome={handleShowHome} onShowLogin={handleShowLogin} />;
-  }
-
   return (
-    <div className="min-h-screen font-['Inter',sans-serif]">
-      <Header onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
-      <main>
-        <Hero onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
-        <Benefits onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
-        <HowItWorks onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
-        <Testimonials />
-        <FAQ />
-        <CTA onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
-      </main>
-      <Footer />
-    </div>
+    <Router>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={<HomePage />} />
+        <Route path="/login" element={<LoginPage user={user} />} />
+        <Route path="/signup" element={<SignUpPage user={user} />} />
+
+        {/* Protected Routes */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute user={user}>
+              <DashboardPage user={user} onSignOut={handleSignOut} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/scan"
+          element={
+            <ProtectedRoute user={user}>
+              <ReceiptScanningPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute user={user}>
+              <ProfilePageComponent />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/library"
+          element={
+            <ProtectedRoute user={user}>
+              <LibraryPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Catch all route - redirect to home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Router>
   );
 }
 

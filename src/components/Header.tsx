@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
-interface HeaderProps {
-  onShowLogin: () => void;
-  onShowSignUp: () => void;
-}
+// Removed unused props
+// interface HeaderProps {
+//   onShowLogin: () => void;
+//   onShowSignUp: () => void;
+// }
 
-const Header: React.FC<HeaderProps> = ({ onShowLogin, onShowSignUp }) => {
+const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const navigate = useNavigate();
 
   const navLinks = [
     { label: 'How It Works', href: '#how-it-works' },
@@ -21,7 +24,7 @@ const Header: React.FC<HeaderProps> = ({ onShowLogin, onShowSignUp }) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <div className="flex items-center space-x-3 group">
+          <Link to="/" className="flex items-center space-x-3 group">
             <img 
               src="/Smart Receipt Logo.png" 
               alt="Smart Receipts Logo" 
@@ -30,7 +33,7 @@ const Header: React.FC<HeaderProps> = ({ onShowLogin, onShowSignUp }) => {
             <span className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
               Smart Receipts
             </span>
-          </div>
+          </Link>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
@@ -44,13 +47,13 @@ const Header: React.FC<HeaderProps> = ({ onShowLogin, onShowSignUp }) => {
               </a>
             ))}
             <button
-              onClick={onShowLogin}
+              onClick={() => navigate('/login')}
               className="text-text-secondary hover:text-text-link transition-colors duration-200 font-medium"
             >
               Sign In
             </button>
             <button 
-              onClick={onShowSignUp}
+              onClick={() => navigate('/signup')}
               className="bg-primary text-white px-6 py-2 rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover"
             >
               Start Free Trial
@@ -61,22 +64,22 @@ const Header: React.FC<HeaderProps> = ({ onShowLogin, onShowSignUp }) => {
           <div className="md:hidden">
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="text-text-secondary hover:text-text-link transition-colors duration-200"
+              className="text-text-secondary hover:text-primary transition-colors duration-200"
             >
-              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
           </div>
         </div>
 
         {/* Mobile Navigation */}
         {isMenuOpen && (
-          <div className="md:hidden py-4 border-t border-gray-200">
-            <div className="flex flex-col space-y-3">
+          <div className="md:hidden">
+            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-200">
               {navLinks.map((link) => (
                 <a
                   key={link.label}
                   href={link.href}
-                  className="text-text-secondary hover:text-text-link transition-colors duration-200 font-medium py-2"
+                  className="block px-3 py-2 text-text-secondary hover:text-primary transition-colors duration-200 font-medium"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   {link.label}
@@ -84,19 +87,19 @@ const Header: React.FC<HeaderProps> = ({ onShowLogin, onShowSignUp }) => {
               ))}
               <button
                 onClick={() => {
-                  onShowLogin();
+                  navigate('/login');
                   setIsMenuOpen(false);
                 }}
-                className="text-text-secondary hover:text-text-link transition-colors duration-200 font-medium py-2 text-left"
+                className="block w-full text-left px-3 py-2 text-text-secondary hover:text-text-link transition-colors duration-200 font-medium"
               >
                 Sign In
               </button>
               <button 
                 onClick={() => {
-                className="bg-primary text-white px-6 py-2 rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-0.5"
+                  navigate('/signup');
                   setIsMenuOpen(false);
                 }}
-                className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 mt-4"
+                className="block w-full text-left px-3 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-all duration-200"
               >
                 Start Free Trial
               </button>

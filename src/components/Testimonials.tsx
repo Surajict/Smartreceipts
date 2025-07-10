@@ -75,11 +75,18 @@ const Testimonials: React.FC = () => {
   };
 
   return (
-    <section className="py-20 bg-white">
+    <section className="py-20 bg-white relative overflow-hidden">
+      {/* Background pattern */}
+      <div className="absolute inset-0 opacity-5 pointer-events-none">
+        <div className="absolute inset-0" style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%236C63FF' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+        }}></div>
+      </div>
+      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Testimonials */}
         <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
+          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4 tracking-tight">
             Trusted by <span className="text-primary">50,000+</span> Happy Users
           </h2>
           <p className="text-xl text-text-secondary max-w-3xl mx-auto">
@@ -93,7 +100,7 @@ const Testimonials: React.FC = () => {
           {testimonials.slice(0, 6).map((testimonial, index) => (
             <div
               key={index}
-              className="bg-white p-6 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 border border-gray-100"
+              className="bg-white p-6 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 border border-gray-100 backdrop-blur-sm"
             >
               {/* Rating */}
               <div className="flex items-center mb-4">
@@ -109,8 +116,8 @@ const Testimonials: React.FC = () => {
               <div className="flex items-center">
                 <img
                   src={testimonial.avatar}
-                  alt={testimonial.name}
-                  className="w-12 h-12 rounded-full object-cover mr-4"
+                  alt={`${testimonial.name} avatar`}
+                  className="w-12 h-12 rounded-full object-cover mr-4 border-2 border-white shadow-sm"
                 />
                 <div>
                   <h4 className="font-bold text-text-primary">{testimonial.name}</h4>
@@ -149,20 +156,20 @@ const Testimonials: React.FC = () => {
 
         {/* Trust Indicators */}
         <div className="mt-16 text-center">
-          <div className="bg-gradient-feature rounded-2xl p-8 border border-gray-100">
+          <div className="bg-gradient-feature rounded-2xl p-8 border border-gray-100 shadow-lg">
             <div className="grid md:grid-cols-3 gap-8">
               <div>
-                <div className="text-3xl font-bold text-primary mb-2">94%</div>
+                <div className="text-3xl font-bold bg-gradient-to-r from-primary to-teal-600 bg-clip-text text-transparent mb-2">94%</div>
                 <div className="text-text-primary font-medium">Claim Success Rate</div>
                 <div className="text-sm text-text-secondary mt-1">Higher than industry average</div>
               </div>
               <div>
-                <div className="text-3xl font-bold text-secondary mb-2">4.9/5</div>
+                <div className="text-3xl font-bold bg-gradient-to-r from-secondary to-purple-600 bg-clip-text text-transparent mb-2">4.9/5</div>
                 <div className="text-text-primary font-medium">Average Rating</div>
                 <div className="text-sm text-text-secondary mt-1">Based on 12,000+ reviews</div>
               </div>
               <div>
-                <div className="text-3xl font-bold text-accent-purple mb-2">24/7</div>
+                <div className="text-3xl font-bold bg-gradient-to-r from-accent-purple to-indigo-600 bg-clip-text text-transparent mb-2">24/7</div>
                 <div className="text-text-primary font-medium">Customer Support</div>
                 <div className="text-sm text-text-secondary mt-1">Always here to help</div>
               </div>

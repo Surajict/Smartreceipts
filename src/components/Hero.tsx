@@ -43,12 +43,12 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
   };
 
   return (
-    <section className="bg-background pt-20 pb-8">
+    <section className="bg-gradient-to-b from-white to-background pt-20 pb-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-12 lg:items-start">
           {/* Left Column - Content */}
-          <div className="text-center lg:text-left">
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-text-primary leading-tight mb-6">
+          <div className="text-center lg:text-left animate-fade-in">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-text-primary leading-tight mb-6 tracking-tight">
               Never Lose a Receipt or{' '}
               <span className="text-primary">Miss a Warranty Claim</span> Again
             </h1>
@@ -61,11 +61,11 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start mb-12">
               <button 
                 onClick={onShowSignUp}
-                className="bg-primary text-white px-8 py-4 rounded-lg font-medium text-lg hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover transform hover:-translate-y-1"
+                className="bg-gradient-primary text-white px-8 py-4 rounded-lg font-medium text-lg hover:opacity-90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-1"
               >
                 Start Free Trial
               </button>
-              <button className="flex items-center justify-center space-x-2 text-text-secondary hover:text-text-link transition-colors duration-200 px-6 py-4 rounded-lg border-2 border-gray-300 hover:border-secondary font-medium bg-white">
+              <button className="flex items-center justify-center space-x-2 text-text-secondary hover:text-secondary transition-colors duration-200 px-6 py-4 rounded-lg border-2 border-gray-300 hover:border-secondary font-medium bg-white/90 backdrop-blur-sm">
                 <Play className="h-5 w-5" />
                 <span>Watch Demo</span>
               </button>

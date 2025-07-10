@@ -1,3 +1,41 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Custom styles for consistent UI */
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #f8f9fa;
+  color: #22223B;
+}
+
+/* Improved focus styles */
+:focus {
+  outline: 2px solid #00C48C;
+  outline-offset: 2px;
+}
+
+/* Smooth transitions */
+button, a, input, select, textarea {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #00C48C;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #008c63;
+}

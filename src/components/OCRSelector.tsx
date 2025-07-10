@@ -64,13 +64,13 @@ const OCRSelector: React.FC<OCRSelectorProps> = ({
     switch (engine) {
       case 'tesseract':
         return {
-          pros: ['Free to use', 'Works offline', 'No API costs', 'Privacy-focused'],
-          cons: ['Lower accuracy', 'Slower processing', 'Limited language support']
+          pros: ['Works offline', 'Privacy-focused', 'No external dependencies', 'Always available'],
+          cons: ['Lower accuracy', 'Slower processing', 'Limited for complex receipts']
         };
       case 'google-cloud-vision':
         return {
-          pros: ['Higher accuracy', 'Fast processing', 'Multiple languages', 'Advanced AI'],
-          cons: ['Requires API key', 'Internet required', 'Usage costs apply']
+          pros: ['Highest accuracy', 'Fast processing', 'Handles complex layouts', 'AI-powered'],
+          cons: ['Requires internet', 'Needs configuration', 'Primary option when available']
         };
       default:
         return { pros: [], cons: [] };
@@ -92,7 +92,7 @@ const OCRSelector: React.FC<OCRSelectorProps> = ({
     <div className="bg-gray-50 border rounded-lg p-4">
       <h3 className="text-lg font-medium text-gray-800 mb-3 flex items-center">
         <Brain className="w-5 h-5 mr-2 text-blue-600" />
-        Choose OCR Engine
+        Text Recognition Options
       </h3>
       
       <div className="space-y-3">
@@ -189,9 +189,7 @@ const OCRSelector: React.FC<OCRSelectorProps> = ({
                   {!isAvailable && engine.engine === 'google-cloud-vision' && (
                     <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
                       <p className="text-sm text-yellow-800">
-                        <strong>Setup Required:</strong> Add your Google Cloud Vision API key as 
-                        <code className="mx-1 px-1 bg-yellow-100 rounded">VITE_GOOGLE_CLOUD_API_KEY</code> 
-                        in your environment variables.
+                        <strong>Setup Required:</strong> Smart text recognition is not configured. Please contact support for assistance.
                       </p>
                     </div>
                   )}
@@ -205,8 +203,8 @@ const OCRSelector: React.FC<OCRSelectorProps> = ({
       {/* Help Text */}
       <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
         <p className="text-sm text-blue-800">
-          <strong>Tip:</strong> Google Cloud Vision typically provides better accuracy for complex receipts, 
-          while Tesseract is great for simple receipts and works offline.
+          <strong>Tip:</strong> Smart text recognition provides the best accuracy for all types of receipts, 
+          while basic recognition works as a reliable backup option.
         </p>
       </div>
     </div>

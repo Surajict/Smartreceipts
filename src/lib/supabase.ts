@@ -55,7 +55,8 @@ export const saveReceiptToDatabase = async (receiptData: any, userId: string) =>
       image_path: receiptData.image_url || null, // For backward compatibility
       processing_method: receiptData.processing_method || 'manual',
       ocr_confidence: receiptData.ocr_confidence || null,
-      extracted_text: receiptData.extracted_text || null
+      extracted_text: receiptData.extracted_text || null,
+      ocr_engine: receiptData.ocr_engine || null
     };
 
     console.log('Prepared insert data:', insertData);

@@ -25,7 +25,6 @@ import {
 } from 'lucide-react';
 import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
 import { OCRService, OCREngine } from '../services/ocrService';
-import OCRSelector from './OCRSelector';
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
@@ -66,9 +65,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [openaiAvailable, setOpenaiAvailable] = useState<boolean | null>(null);
   const [showExtractedForm, setShowExtractedForm] = useState(false);
   
-  // OCR Engine Selection
-  const [selectedOCREngine, setSelectedOCREngine] = useState<OCREngine>('tesseract');
-  const [showOCRSelector, setShowOCRSelector] = useState(false);
+  // OCR Engine - Always uses Google Cloud Vision
+  const selectedOCREngine: OCREngine = 'google-cloud-vision';
   
   // Long receipt capture states
   const [isCapturingLong, setIsCapturingLong] = useState(false);
@@ -84,7 +82,19 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   useEffect(() => {
     loadUser();
     checkOpenAIAvailability();
+    setPreferredOCREngine();
   }, []);
+
+  const setPreferredOCREngine = async () => {
+    try {
+      const preferredEngine = await OCRService.getPreferredEngine();
+      // selectedOCREngine is now a constant, no need to set it
+      console.log('Using OCR engine:', preferredEngine);
+    } catch (error) {
+      console.warn('Failed to check OCR engine:', error);
+      // Always use 'google-cloud-vision'
+    }
+  };
 
   const loadUser = async () => {
     const currentUser = await getCurrentUser();
@@ -370,7 +380,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       const receiptData = {
         ...extractedData,
         image_url: imageUrl,
-        processing_method: inputMode === 'manual' ? 'manual' : (extractedText ? `${selectedOCREngine}_gpt_structured` : 'manual'),
+        processing_method: inputMode === 'manual' ? 'manual' : (extractedText ? 'ai_text_recognition_gpt_structured' : 'manual'),
         ocr_confidence: extractedText ? 0.85 : null,
         extracted_text: extractedText || null,
         ocr_engine: extractedText ? selectedOCREngine : null
@@ -734,16 +744,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           </div>
         )}
 
-        {/* OCR Engine Selection */}
-        {(capturedImage || inputMode === 'capture' || inputMode === 'upload') && !showExtractedForm && !isProcessing && (
-          <div className="mb-8">
-            <OCRSelector
-              selectedEngine={selectedOCREngine}
-              onEngineChange={setSelectedOCREngine}
-              disabled={isProcessing}
-            />
-          </div>
-        )}
+        {/* OCR Engine Selection - Removed since there's only one option */}
 
         {/* Image Preview and Processing */}
         {capturedImage && !showExtractedForm && (

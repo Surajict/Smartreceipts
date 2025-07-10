@@ -72,17 +72,17 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
             </div>
 
             {/* Trust Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mt-8">
               {trustStats.map((stat, index) => (
                 <div
                   key={index}
-                  className="group relative bg-white p-3 lg:p-4 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-gray-100"
+                  className="group relative bg-white p-4 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-gray-100"
                 >
-                  <div className="flex items-center justify-center mb-2">
+                  <div className="flex items-center justify-center mb-3">
                     {getStatIcon(index)}
                   </div>
-                  <div className="text-xl lg:text-2xl font-bold text-text-primary mb-1 break-words">{stat.value}</div>
-                  <div className="text-xs lg:text-sm text-text-secondary font-medium leading-tight">{stat.label}</div>
+                  <div className="text-2xl font-bold text-text-primary mb-1">{stat.value}</div>
+                  <div className="text-xs text-text-secondary font-medium leading-tight">{stat.label}</div>
                   
                   {/* Tooltip */}
                   <div className="absolute invisible group-hover:visible bg-text-primary text-white text-xs rounded-lg px-3 py-2 -mt-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap z-10">

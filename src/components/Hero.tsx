@@ -72,7 +72,34 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
             </div>
 
             {/* Trust Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-6 mt-16 w-full">
+            <div className="mt-16 w-full">
+              <div className="bg-[#141B2D] rounded-3xl p-8 shadow-xl w-full">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
+                  <div className="text-center">
+                    <div className="text-5xl font-bold text-white mb-3">99.5%</div>
+                    <div className="text-gray-300 text-lg">Scanning Accuracy</div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="text-5xl font-bold text-white mb-3">$2.3M+</div>
+                    <div className="text-gray-300 text-lg">Potential Claim Recovery</div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="text-5xl font-bold text-white mb-3">50,000+</div>
+                    <div className="text-gray-300 text-lg">Targeted Active Users</div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="text-5xl font-bold text-white mb-3">94%</div>
+                    <div className="text-gray-300 text-lg">Estimated Claim Success Rate</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Original Trust Stats - Hidden */}
+            <div className="hidden">
               {trustStats.map((stat, index) => (
                 <div
                   key={index}

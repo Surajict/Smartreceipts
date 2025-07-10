@@ -104,20 +104,25 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
               
               {/* Video Placeholder */}
               <div className="relative rounded-lg overflow-hidden aspect-video shadow-lg">
-                <iframe 
-                  src="https://drive.google.com/file/d/1bmRGFGl3sQGjhNVgFCr19B1b2TBsvPp8/preview?embedded=true" 
-                  className="w-full h-full absolute inset-0 border-0"
-                  allow="autoplay; encrypted-media; fullscreen"
-                  allowFullScreen
-                  title="Smart Receipts Demo Video"
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                ></iframe>
+                {/* Using a more reliable embed approach for Google Drive */}
+                <div className="w-full h-full">
+                  <iframe 
+                    src="https://drive.google.com/file/d/1bmRGFGl3sQGjhNVgFCr19B1b2TBsvPp8/preview" 
+                    width="100%" 
+                    height="100%" 
+                    frameBorder="0"
+                    allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                    allowFullScreen
+                    title="Smart Receipts Demo Video"
+                    loading="lazy"
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                  ></iframe>
+                </div>
                 
                 {/* Video Overlay with Play Button (shown before video loads) */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent flex items-center justify-center group">
-                  <div className="bg-primary/90 rounded-full p-4 transform transition-transform duration-300 group-hover:scale-110 shadow-xl">
-                    <Play className="h-8 w-8 text-white" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-black/20 flex items-center justify-center group cursor-pointer">
+                  <div className="bg-primary rounded-full p-5 transform transition-transform duration-300 group-hover:scale-110 shadow-xl">
+                    <Play className="h-10 w-10 text-white" fill="white" />
                   </div>
                 </div>
               </div>

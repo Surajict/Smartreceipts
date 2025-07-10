@@ -103,18 +103,15 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
               </div>
               
               {/* Video Placeholder */}
-              <div className="relative bg-gray-100 rounded-lg aspect-video flex items-center justify-center group cursor-pointer hover:bg-gray-200 transition-colors duration-200">
-                <div className="text-center">
-                  <div className="bg-primary rounded-full p-6 mb-4 group-hover:bg-primary/90 transition-colors duration-200 mx-auto w-fit">
-                    <Play className="h-12 w-12 text-white" />
-                  </div>
-                  <h3 className="text-lg font-bold text-text-primary mb-2">
-                    See Smart Receipts in Action
-                  </h3>
-                  <p className="text-text-secondary text-sm lg:text-base">
-                    Watch our 30-second demo showing receipt scanning, warranty tracking, and claim support
-                  </p>
-                </div>
+              <div className="relative rounded-lg overflow-hidden aspect-video shadow-lg">
+                <iframe 
+                  src="https://drive.google.com/file/d/1bmRGFGl3sQGjhNVgFCr19B1b2TBsvPp8/preview" 
+                  className="w-full h-full absolute inset-0 border-0"
+                  allow="autoplay; encrypted-media"
+                  allowFullScreen
+                  title="Smart Receipts Demo Video"
+                ></iframe>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none"></div>
               </div>
               
               {/* Feature Highlights */}

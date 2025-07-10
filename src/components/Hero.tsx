@@ -103,27 +103,25 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
               </div>
               
               {/* Video Placeholder */}
-              <div className="relative rounded-lg overflow-hidden aspect-video shadow-lg">
-                {/* Using a more reliable embed approach for Google Drive */}
-                <div className="w-full h-full">
-                  <iframe 
-                    width="560" 
-                    height="315" 
-                    src="https://www.youtube.com/embed/qWJCuc1kUoI?rel=0" 
-                    title="Smart Receipts Demo Video" 
-                    frameBorder="0" 
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                    allowFullScreen
-                    className="absolute top-0 left-0 w-full h-full"
-                  ></iframe>
-                </div>
-                
-                {/* Video Overlay with Play Button (shown before video loads) */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-black/30 flex items-center justify-center group cursor-pointer pointer-events-none z-0">
-                  <div className="bg-red-600 rounded-full p-5 transform transition-transform duration-300 group-hover:scale-110 shadow-xl">
-                    <Play className="h-10 w-10 text-white" fill="white" />
+              <div className="relative rounded-lg overflow-hidden aspect-video shadow-lg bg-gradient-to-br from-gray-900 to-gray-800">
+                <a 
+                  href="https://youtu.be/qWJCuc1kUoI" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="absolute inset-0 flex items-center justify-center group cursor-pointer"
+                >
+                  <div className="text-center">
+                    <div className="bg-red-600 rounded-full p-5 transform transition-transform duration-300 group-hover:scale-110 shadow-xl mx-auto mb-4">
+                      <Play className="h-10 w-10 text-white" fill="white" />
+                    </div>
+                    <h3 className="text-lg font-bold text-white mb-2">
+                      See Smart Receipts in Action
+                    </h3>
+                    <p className="text-white/80 text-sm px-4">
+                      Watch our 30-second demo on YouTube
+                    </p>
                   </div>
-                </div>
+                </a>
               </div>
               
               {/* Feature Highlights */}

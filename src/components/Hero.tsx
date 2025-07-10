@@ -111,14 +111,14 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
                   className="absolute inset-0 flex items-center justify-center group cursor-pointer"
                 >
                   <div className="text-center">
-                    <div className="bg-red-600 rounded-full p-5 transform transition-transform duration-300 group-hover:scale-110 shadow-xl mx-auto mb-4">
-                      <Play className="h-10 w-10 text-white" fill="white" />
+                    <div className="bg-gradient-to-r from-primary to-secondary rounded-full p-5 transform transition-transform duration-300 group-hover:scale-110 shadow-xl mx-auto mb-4">
+                      <Play className="h-10 w-10 text-white" />
                     </div>
                     <h3 className="text-lg font-bold text-white mb-2">
                       See Smart Receipts in Action
                     </h3>
                     <p className="text-white/80 text-sm px-4">
-                      Watch our 30-second demo on YouTube
+                      Watch our 8-second demo on YouTube
                     </p>
                   </div>
                 </a>

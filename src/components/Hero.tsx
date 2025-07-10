@@ -72,19 +72,19 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
             </div>
 
             {/* Trust Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mt-12">
+            <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-6 mt-16 w-full">
               {trustStats.map((stat, index) => (
                 <div
                   key={index}
-                  className="group relative bg-white p-5 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-gray-100"
+                  className="group relative bg-white p-6 sm:p-8 rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-gray-100 w-full flex flex-col items-center"
                 >
-                  <div className="flex items-center justify-center mb-2">
-                    <div className="text-secondary">
+                  <div className="flex items-center justify-center mb-4">
+                    <div className="text-secondary bg-secondary/10 p-3 rounded-full">
                       {getStatIcon(index)}
                     </div>
                   </div>
-                  <div className="text-3xl font-bold text-text-primary mb-1">{stat.value}</div>
-                  <div className="text-xs text-text-secondary font-medium leading-tight mt-1">{stat.label}</div>
+                  <div className="text-4xl font-bold text-text-primary mb-2">{stat.value}</div>
+                  <div className="text-sm text-text-secondary font-medium leading-tight text-center">{stat.label}</div>
                   
                   {/* Tooltip */}
                   <div className="absolute invisible group-hover:visible bg-text-primary text-white text-xs rounded-lg px-3 py-2 -mt-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap z-10">

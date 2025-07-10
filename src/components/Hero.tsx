@@ -106,21 +106,20 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
               <div className="relative rounded-lg overflow-hidden aspect-video shadow-lg">
                 {/* Using a more reliable embed approach for Google Drive */}
                 <div className="w-full h-full">
-                  <iframe
-                    src="https://www.youtube.com/embed/qWJCuc1kUoI"
-                    width="100%"
-                    height="100%"
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  <iframe 
+                    width="560" 
+                    height="315" 
+                    src="https://www.youtube.com/embed/qWJCuc1kUoI?rel=0" 
+                    title="Smart Receipts Demo Video" 
+                    frameBorder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                     allowFullScreen
-                    title="Smart Receipts Demo Video"
-                    loading="lazy"
-                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                    className="absolute top-0 left-0 w-full h-full"
                   ></iframe>
                 </div>
                 
                 {/* Video Overlay with Play Button (shown before video loads) */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-black/30 flex items-center justify-center group cursor-pointer pointer-events-none">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-black/30 flex items-center justify-center group cursor-pointer pointer-events-none z-0">
                   <div className="bg-red-600 rounded-full p-5 transform transition-transform duration-300 group-hover:scale-110 shadow-xl">
                     <Play className="h-10 w-10 text-white" fill="white" />
                   </div>

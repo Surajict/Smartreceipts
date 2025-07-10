@@ -1,12 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
-import Hero from './components/Hero';
-import Benefits from './components/Benefits';
-import HowItWorks from './components/HowItWorks';
-import Testimonials from './components/Testimonials';
-import FAQ from './components/FAQ';
-import CTA from './components/CTA';
-import Footer from './components/Footer';
 import Login from './components/Login';
 import SignUp from './components/SignUp';
 import Dashboard from './components/Dashboard';
@@ -109,17 +102,46 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen font-['Inter',sans-serif]">
-      <Header onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
-      <main>
-        <Hero onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
-        <Benefits onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
-        <HowItWorks onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
-        <Testimonials />
-        <FAQ />
-        <CTA onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
-      </main>
-      <Footer />
+    <div className="min-h-screen flex flex-col justify-center items-center bg-background">
+      <div className="text-center p-8 max-w-4xl">
+        <div className="flex items-center justify-center space-x-3 mb-6">
+          <img 
+            src="/Smart Receipt Logo.png" 
+            alt="Smart Receipts Logo" 
+            className="h-16 w-16 object-contain"
+          />
+          <span className="text-4xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+            Smart Receipts
+          </span>
+        </div>
+        
+        <h1 className="text-3xl font-bold mb-6">Redirecting to our homepage...</h1>
+        <p className="text-xl text-text-secondary mb-8">
+          You'll be redirected to our main website in a moment.
+        </p>
+        
+        <div className="flex justify-center gap-4">
+          <button 
+            onClick={handleShowLogin}
+            className="bg-white text-text-primary border-2 border-gray-300 hover:border-primary px-6 py-3 rounded-lg font-medium transition-all duration-200"
+          >
+            Sign In
+          </button>
+          <button 
+            onClick={handleShowSignUp}
+            className="bg-gradient-primary text-white px-6 py-3 rounded-lg font-medium hover:opacity-90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-1"
+          >
+            Sign Up
+          </button>
+        </div>
+      </div>
+      
+      <iframe 
+        src="https://joyful-palmier-0b6567.netlify.app" 
+        className="w-full flex-grow border-t border-gray-200 mt-8"
+        style={{ height: 'calc(100vh - 250px)' }}
+        title="Smart Receipts Homepage"
+      ></iframe>
     </div>
   );
 }

@@ -105,13 +105,21 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
               {/* Video Placeholder */}
               <div className="relative rounded-lg overflow-hidden aspect-video shadow-lg">
                 <iframe 
-                  src="https://drive.google.com/file/d/1bmRGFGl3sQGjhNVgFCr19B1b2TBsvPp8/preview" 
+                  src="https://drive.google.com/file/d/1bmRGFGl3sQGjhNVgFCr19B1b2TBsvPp8/preview?embedded=true" 
                   className="w-full h-full absolute inset-0 border-0"
-                  allow="autoplay; encrypted-media"
+                  allow="autoplay; encrypted-media; fullscreen"
                   allowFullScreen
                   title="Smart Receipts Demo Video"
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
                 ></iframe>
-                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none"></div>
+                
+                {/* Video Overlay with Play Button (shown before video loads) */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent flex items-center justify-center group">
+                  <div className="bg-primary/90 rounded-full p-4 transform transition-transform duration-300 group-hover:scale-110 shadow-xl">
+                    <Play className="h-8 w-8 text-white" />
+                  </div>
+                </div>
               </div>
               
               {/* Feature Highlights */}

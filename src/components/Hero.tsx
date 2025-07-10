@@ -106,12 +106,12 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
               <div className="relative rounded-lg overflow-hidden aspect-video shadow-lg">
                 {/* Using a more reliable embed approach for Google Drive */}
                 <div className="w-full h-full">
-                  <iframe 
-                    src="https://drive.google.com/file/d/1bmRGFGl3sQGjhNVgFCr19B1b2TBsvPp8/preview" 
-                    width="100%" 
-                    height="100%" 
+                  <iframe
+                    src="https://www.youtube.com/embed/qWJCuc1kUoI"
+                    width="100%"
+                    height="100%"
                     frameBorder="0"
-                    allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                     allowFullScreen
                     title="Smart Receipts Demo Video"
                     loading="lazy"
@@ -120,8 +120,8 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
                 </div>
                 
                 {/* Video Overlay with Play Button (shown before video loads) */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-black/20 flex items-center justify-center group cursor-pointer">
-                  <div className="bg-primary rounded-full p-5 transform transition-transform duration-300 group-hover:scale-110 shadow-xl">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-black/30 flex items-center justify-center group cursor-pointer pointer-events-none">
+                  <div className="bg-red-600 rounded-full p-5 transform transition-transform duration-300 group-hover:scale-110 shadow-xl">
                     <Play className="h-10 w-10 text-white" fill="white" />
                   </div>
                 </div>

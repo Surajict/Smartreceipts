@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder-url.supabase.co'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-anon-key'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://napulczxrrnsjtmaixzp.supabase.co'
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'PLACEHOLDER_ANON_KEY'
 
 if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('placeholder') || supabaseAnonKey.includes('placeholder')) {
   console.warn('Supabase environment variables not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your deployment environment.')
@@ -55,7 +55,8 @@ export const saveReceiptToDatabase = async (receiptData: any, userId: string) =>
       image_path: receiptData.image_url || null, // For backward compatibility
       processing_method: receiptData.processing_method || 'manual',
       ocr_confidence: receiptData.ocr_confidence || null,
-      extracted_text: receiptData.extracted_text || null
+      extracted_text: receiptData.extracted_text || null,
+      ocr_engine: receiptData.ocr_engine || null
     };
 
     console.log('Prepared insert data:', insertData);
@@ -853,7 +854,7 @@ Return only valid JSON:`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'system',

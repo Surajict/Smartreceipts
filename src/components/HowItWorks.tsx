@@ -33,10 +33,10 @@ const HowItWorks: React.FC<HowItWorksProps> = ({ onShowLogin, onShowSignUp }) =>
   };
 
   return (
-    <section id="how-it-works" className="py-20 bg-background">
+    <section id="how-it-works" className="py-20 bg-gradient-to-b from-background to-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
+          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4 tracking-tight">
             From Chaos to Organized in{' '}
             <span className="text-primary">3 Simple Steps</span>
           </h2>
@@ -48,19 +48,19 @@ const HowItWorks: React.FC<HowItWorksProps> = ({ onShowLogin, onShowSignUp }) =>
 
         <div className="relative">
           {/* Connection Lines - Desktop */}
-          <div className="hidden lg:block absolute top-1/2 left-1/4 right-1/4 h-0.5 bg-gradient-to-r from-primary to-secondary transform -translate-y-1/2 z-0"></div>
+          <div className="hidden lg:block absolute top-1/2 left-1/4 right-1/4 h-1 bg-gradient-to-r from-primary to-secondary transform -translate-y-1/2 z-0 rounded-full opacity-70"></div>
           
           <div className="grid md:grid-cols-3 gap-8 lg:gap-12 relative z-10">
             {steps.map((step, index) => (
               <div key={step.number} className="text-center group">
                 {/* Step Circle */}
                 <div className="relative mb-8">
-                  <div className="bg-gradient-to-br from-primary to-secondary rounded-full w-20 h-20 flex items-center justify-center mx-auto shadow-card group-hover:shadow-card-hover transition-all duration-300 transform group-hover:scale-110">
+                  <div className="bg-gradient-to-br from-primary to-secondary rounded-full w-20 h-20 flex items-center justify-center mx-auto shadow-lg group-hover:shadow-xl transition-all duration-300 transform group-hover:scale-110">
                     {getIcon(step.number)}
                   </div>
                   
                   {/* Step Number Badge */}
-                  <div className="absolute -bottom-2 -right-2 bg-white border-4 border-primary rounded-full w-8 h-8 flex items-center justify-center text-primary font-bold text-sm shadow-card">
+                  <div className="absolute -bottom-2 -right-2 bg-white border-4 border-primary rounded-full w-8 h-8 flex items-center justify-center text-primary font-bold text-sm shadow-lg">
                     {step.number}
                   </div>
                 </div>
@@ -93,8 +93,8 @@ const HowItWorks: React.FC<HowItWorksProps> = ({ onShowLogin, onShowSignUp }) =>
 
         {/* Bottom Section */}
         <div className="text-center mt-16">
-          <div className="bg-white rounded-2xl p-8 shadow-card border border-gray-100 max-w-4xl mx-auto">
-            <h3 className="text-2xl font-bold text-text-primary mb-4">
+          <div className="bg-white rounded-2xl p-8 shadow-card border border-gray-100 max-w-4xl mx-auto backdrop-blur-sm">
+            <h3 className="text-2xl font-bold text-text-primary mb-4 tracking-tight">
               Ready to Transform Your Receipt Management?
             </h3>
             <p className="text-text-secondary mb-6">
@@ -103,7 +103,7 @@ const HowItWorks: React.FC<HowItWorksProps> = ({ onShowLogin, onShowSignUp }) =>
             </p>
             <button 
               onClick={onShowSignUp}
-              className="bg-gradient-to-r from-primary to-secondary text-white px-8 py-4 rounded-lg font-medium text-lg hover:from-primary/90 hover:to-secondary/90 transition-all duration-200 shadow-card hover:shadow-card-hover transform hover:-translate-y-1"
+              className="bg-gradient-to-r from-primary to-secondary text-white px-8 py-4 rounded-lg font-medium text-lg hover:opacity-90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-1"
             >
               Get Started Today
             </button>

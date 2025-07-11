@@ -20,10 +20,11 @@ import {
   Edit3,
   RotateCcw,
   Plus,
-  Maximize2
+  Maximize2,
+  Settings
 } from 'lucide-react';
 import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
-import { createWorker } from 'tesseract.js';
+import { OCRService, OCREngine } from '../services/ocrService';
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
@@ -64,6 +65,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [openaiAvailable, setOpenaiAvailable] = useState<boolean | null>(null);
   const [showExtractedForm, setShowExtractedForm] = useState(false);
   
+  // OCR Engine - Always uses Google Cloud Vision
+  const selectedOCREngine: OCREngine = 'google-cloud-vision';
+  
   // Long receipt capture states
   const [isCapturingLong, setIsCapturingLong] = useState(false);
   const [captureProgress, setCaptureProgress] = useState(0);
@@ -78,7 +82,19 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   useEffect(() => {
     loadUser();
     checkOpenAIAvailability();
+    setPreferredOCREngine();
   }, []);
+
+  const setPreferredOCREngine = async () => {
+    try {
+      const preferredEngine = await OCRService.getPreferredEngine();
+      // selectedOCREngine is now a constant, no need to set it
+      console.log('Using OCR engine:', preferredEngine);
+    } catch (error) {
+      console.warn('Failed to check OCR engine:', error);
+      // Always use 'google-cloud-vision'
+    }
+  };
 
   const loadUser = async () => {
     const currentUser = await getCurrentUser();
@@ -181,31 +197,25 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   };
 
   const performOCR = async (imageSource: string | File): Promise<string> => {
-    setProcessingStep('Initializing OCR engine...');
-    setOcrProgress(10);
+    const result = await OCRService.extractText(
+      imageSource,
+      selectedOCREngine,
+      (progress, step) => {
+        setOcrProgress(progress);
+        setProcessingStep(step);
+      }
+    );
 
-    const worker = await createWorker('eng');
-    
-    setProcessingStep('Analyzing receipt image...');
-    setOcrProgress(30);
-
-    try {
-      const { data: { text, confidence } } = await worker.recognize(imageSource);
-      
-      setProcessingStep('Extracting text from receipt...');
-      setOcrProgress(80);
-      
-      console.log('OCR Confidence:', confidence);
-      console.log('Extracted text:', text);
-      
-      await worker.terminate();
-      setOcrProgress(100);
-      
-      return text;
-    } catch (error) {
-      await worker.terminate();
-      throw error;
+    if (result.error) {
+      throw new Error(result.error);
     }
+
+    console.log(`OCR Engine: ${result.engine}`);
+    console.log('OCR Confidence:', result.confidence);
+    console.log('Processing Time:', `${result.processingTime}ms`);
+    console.log('Extracted text:', result.text);
+
+    return result.text;
   };
 
   const fallbackDataExtraction = (text: string): ExtractedData => {
@@ -370,9 +380,10 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       const receiptData = {
         ...extractedData,
         image_url: imageUrl,
-        processing_method: inputMode === 'manual' ? 'manual' : (extractedText ? 'gpt_structured' : 'manual'),
+        processing_method: inputMode === 'manual' ? 'manual' : (extractedText ? 'ai_text_recognition_gpt_structured' : 'manual'),
         ocr_confidence: extractedText ? 0.85 : null,
-        extracted_text: extractedText || null
+        extracted_text: extractedText || null,
+        ocr_engine: extractedText ? selectedOCREngine : null
       };
 
       const { error: saveError } = await saveReceiptToDatabase(receiptData, user.id);
@@ -732,6 +743,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
             </div>
           </div>
         )}
+
+        {/* OCR Engine Selection - Removed since there's only one option */}
 
         {/* Image Preview and Processing */}
         {capturedImage && !showExtractedForm && (

@@ -15,7 +15,7 @@ const CTA: React.FC<CTAProps> = ({ onShowLogin, onShowSignUp }) => {
   ];
 
   return (
-    <section className="py-20 bg-gradient-to-br from-primary via-secondary to-accent-purple relative overflow-hidden">
+    <section className="py-20 bg-gradient-to-br from-primary via-secondary to-accent-purple relative overflow-hidden shadow-inner">
       {/* Background Pattern */}
       <div className="absolute inset-0 opacity-10">
         <div className="absolute inset-0" style={{
@@ -25,7 +25,7 @@ const CTA: React.FC<CTAProps> = ({ onShowLogin, onShowSignUp }) => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="text-center mb-12">
-          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6">
+          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6 tracking-tight">
             Ready to Never Lose Another Receipt?
           </h2>
           <p className="text-xl text-white/90 max-w-3xl mx-auto leading-relaxed">
@@ -38,7 +38,7 @@ const CTA: React.FC<CTAProps> = ({ onShowLogin, onShowSignUp }) => {
         <div className="text-center mb-12">
           <button 
             onClick={onShowSignUp}
-            className="bg-white text-primary px-12 py-6 rounded-2xl font-bold text-xl hover:bg-gray-100 transition-all duration-300 shadow-card hover:shadow-card-hover transform hover:-translate-y-2 hover:scale-105"
+            className="bg-white text-primary px-12 py-6 rounded-2xl font-bold text-xl hover:bg-gray-100 transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:-translate-y-2 hover:scale-105"
           >
             Start Free Account – Scan First Receipt
           </button>
@@ -49,9 +49,9 @@ const CTA: React.FC<CTAProps> = ({ onShowLogin, onShowSignUp }) => {
           {trustBadges.map((badge, index) => {
             const Icon = badge.icon;
             return (
-              <div
+              <div 
                 key={index}
-                className="flex items-center justify-center space-x-3 bg-white/10 backdrop-blur-sm rounded-xl p-4 text-white hover:bg-white/20 transition-colors duration-300"
+                className="flex items-center justify-center space-x-3 bg-white/10 backdrop-blur-sm rounded-xl p-4 text-white hover:bg-white/20 transition-colors duration-300 border border-white/10"
               >
                 <Icon className="h-5 w-5 text-white/80" />
                 <span className="font-medium text-sm">{badge.text}</span>
@@ -62,7 +62,7 @@ const CTA: React.FC<CTAProps> = ({ onShowLogin, onShowSignUp }) => {
 
         {/* Urgency Element */}
         <div className="text-center mb-8">
-          <div className="bg-gradient-to-r from-accent-yellow to-accent-red rounded-full px-8 py-3 inline-block">
+          <div className="bg-gradient-to-r from-accent-yellow to-accent-red rounded-full px-8 py-3 inline-block shadow-lg">
             <div className="flex items-center space-x-2">
               <Clock className="h-5 w-5 text-text-primary" />
               <span className="font-bold text-text-primary">Limited Time: Get 3 Months Premium Free</span>
@@ -76,17 +76,17 @@ const CTA: React.FC<CTAProps> = ({ onShowLogin, onShowSignUp }) => {
 
         {/* Additional CTA Options */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-          <button className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-xl font-medium hover:bg-white hover:text-primary transition-all duration-300">
+          <button className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-xl font-medium hover:bg-white hover:text-primary transition-all duration-300 shadow-sm hover:shadow-md">
             Watch 2-Minute Demo
           </button>
-          <button className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-xl font-medium hover:bg-white hover:text-primary transition-all duration-300">
+          <button className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-xl font-medium hover:bg-white hover:text-primary transition-all duration-300 shadow-sm hover:shadow-md">
             Talk to Sales Team
           </button>
         </div>
 
         {/* Privacy Assurance */}
         <div className="text-center">
-          <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-6 max-w-4xl mx-auto border border-white/20">
+          <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-6 max-w-4xl mx-auto border border-white/20 shadow-lg">
             <div className="flex items-center justify-center mb-4">
               <Shield className="h-6 w-6 text-white/80 mr-2" />
               <span className="font-bold text-white">Your Privacy is Protected</span>

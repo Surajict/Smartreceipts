@@ -17,9 +17,14 @@ import {
   CheckCircle,
   Clock,
   X,
-  Loader2
+  Loader2,
+  Database,
+  Brain,
+  Lightbulb
 } from 'lucide-react';
 import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats } from '../lib/supabase';
+import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
+import { RAGService } from '../services/ragService';
 
 interface DashboardProps {
   onSignOut: () => void;
@@ -65,6 +70,12 @@ interface SearchResult {
   relevanceScore: number;
 }
 
+interface RAGResult {
+  answer: string;
+  queryType: 'search' | 'summary' | 'question';
+  error?: string;
+}
+
 const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning, onShowProfile, onShowLibrary }) => {
   const [user, setUser] = useState<any>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
@@ -72,11 +83,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [alertsCount, setAlertsCount] = useState(0);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotificationMenu, setShowNotificationMenu] = useState(false);
-  const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [isGeneratingEmbeddings, setIsGeneratingEmbeddings] = useState(false);
+  const [embeddingStatus, setEmbeddingStatus] = useState<{total: number, withEmbeddings: number, withoutEmbeddings: number} | null>(null);
+  const [ragResult, setRagResult] = useState<RAGResult | null>(null);
   
   const [summaryStats, setSummaryStats] = useState<SummaryStats>({
     receiptsScanned: 0,
@@ -108,6 +121,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       // Load actual data from database
       if (currentUser) {
         await loadDashboardData(currentUser.id);
+        await loadEmbeddingStatus(currentUser.id);
       }
     };
     loadUser();
@@ -202,6 +216,37 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     }
   };
 
+  const loadEmbeddingStatus = async (userId: string) => {
+    try {
+      const status = await checkEmbeddingStatus(userId);
+      setEmbeddingStatus(status);
+    } catch (error) {
+      console.error('Failed to load embedding status:', error);
+    }
+  };
+
+  const handleGenerateEmbeddings = async () => {
+    if (!user) return;
+    
+    setIsGeneratingEmbeddings(true);
+    try {
+      const result = await generateEmbeddingsForAllReceipts(user.id);
+      console.log('Embedding generation result:', result);
+      
+      // Refresh embedding status
+      await loadEmbeddingStatus(user.id);
+      
+      // Show success message
+      alert(`Embedding generation completed!\n${result.message}`);
+      
+    } catch (error) {
+      console.error('Failed to generate embeddings:', error);
+      alert('Failed to generate embeddings. Please try again.');
+    } finally {
+      setIsGeneratingEmbeddings(false);
+    }
+  };
+
   const calculateWarrantyExpiry = (purchaseDate: string, warrantyPeriod: string): Date => {
     const purchase = new Date(purchaseDate);
     const period = warrantyPeriod.toLowerCase();
@@ -225,17 +270,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     return purchase;
   };
 
-  // Smart Search functionality using Supabase Edge Function
+  // Enhanced Smart Search functionality with RAG
   const performSmartSearch = async (query: string) => {
     if (!query.trim() || !user) {
       setSearchResults([]);
+      setRagResult(null);
       return;
     }
 
     setIsSearching(true);
     setSearchError(null);
+    setRagResult(null);
 
     try {
+      // First, perform the vector search to get relevant receipts
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/smart-search`;
       
       const headers = {
@@ -263,7 +311,46 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         throw new Error(data.error);
       }
 
-      setSearchResults(data.results || []);
+      const searchResults = data.results || [];
+      setSearchResults(searchResults);
+
+      // Check if this query would benefit from RAG processing
+      const isRAGQuery = RAGService.isRAGQuery(query);
+      
+      if (isRAGQuery && searchResults.length > 0) {
+        try {
+          // Convert search results to Receipt format for RAG
+          const receiptsForRAG = searchResults.map((result: any) => ({
+            id: result.id,
+            product_description: result.title,
+            brand_name: result.brand,
+            store_name: result.store_name || 'Unknown Store',
+            purchase_location: result.purchase_location || 'Unknown Location',
+            purchase_date: result.purchaseDate,
+            amount: result.amount || 0,
+            warranty_period: result.warrantyPeriod,
+            model_number: result.model || '',
+            country: result.country || 'Unknown Country',
+            relevanceScore: result.relevanceScore
+          }));
+
+          // Process with RAG
+          const ragResponse = await RAGService.processQuery(query, receiptsForRAG, user.id);
+          
+          if (ragResponse.error) {
+            console.warn('RAG processing failed:', ragResponse.error);
+          } else {
+            setRagResult({
+              answer: ragResponse.answer,
+              queryType: ragResponse.queryType,
+            });
+          }
+        } catch (ragError) {
+          console.warn('RAG processing error:', ragError);
+          // Don't fail the search if RAG fails
+        }
+      }
+
     } catch (err: any) {
       console.error('Smart search error:', err);
       setSearchError(err.message || 'Search failed. Please try again.');
@@ -316,6 +403,139 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     setSearchQuery('');
     setSearchResults([]);
     setSearchError(null);
+    setRagResult(null);
+  };
+
+  // Update the search results display section
+  const renderSearchResults = () => {
+    if (searchResults.length === 0 && searchQuery && !isSearching) {
+      return (
+        <div className="text-center py-8">
+          <Search className="h-12 w-12 text-text-secondary mx-auto mb-4" />
+          <p className="text-text-secondary">No receipts found matching your search.</p>
+          <p className="text-sm text-text-secondary mt-1">Try different keywords or check your spelling.</p>
+        </div>
+      );
+    }
+    
+    if (searchResults.length > 0) {
+      return (
+        <>
+          {/* RAG Answer Display */}
+          {ragResult && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-primary/5 to-secondary/5 border border-primary/20 rounded-xl">
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0 mt-1">
+                  {ragResult.queryType === 'summary' ? (
+                    <DollarSign className="h-5 w-5 text-primary" />
+                  ) : ragResult.queryType === 'question' ? (
+                    <Lightbulb className="h-5 w-5 text-primary" />
+                  ) : (
+                    <Brain className="h-5 w-5 text-primary" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <h3 className="text-sm font-semibold text-primary">
+                      {ragResult.queryType === 'summary' ? 'Summary' : 
+                       ragResult.queryType === 'question' ? 'Answer' : 'AI Analysis'}
+                    </h3>
+                    <span className="text-xs text-text-secondary bg-primary/10 px-2 py-1 rounded-full">
+                      AI-Generated
+                    </span>
+                  </div>
+                  <div className="text-sm text-text-primary whitespace-pre-wrap">
+                    {ragResult.answer}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Traditional Search Results */}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-text-primary">
+              {ragResult ? 'Related Receipts' : 'Search Results'}
+            </h3>
+            <span className="text-sm text-text-secondary bg-gray-100 px-3 py-1 rounded-full">
+              {searchResults.length} {searchResults.length === 1 ? 'result' : 'results'}
+            </span>
+          </div>
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {searchResults.map((result, index) => (
+              <div
+                key={result.id}
+                className="flex items-start justify-between p-4 rounded-lg border border-gray-200 hover:border-primary/30 hover:bg-gray-50 transition-all duration-200 cursor-pointer group"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-3 mb-2">
+                    <h4 className="text-base font-semibold text-text-primary group-hover:text-primary transition-colors duration-200 truncate">
+                      {result.title}
+                    </h4>
+                    <div className="flex items-center space-x-1 text-xs text-text-secondary bg-primary/10 px-2 py-1 rounded-full flex-shrink-0">
+                      <span>Match:</span>
+                      <span className="font-medium text-primary">{Math.round(result.relevanceScore * 100)}%</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-4 text-sm text-text-secondary">
+                    <div className="flex items-center space-x-1">
+                      <Tag className="h-4 w-4" />
+                      <span>{result.brand}</span>
+                      {result.model && <span>• {result.model}</span>}
+                    </div>
+                    
+                    <div className="flex items-center space-x-1">
+                      <Calendar className="h-4 w-4" />
+                      <span>{formatDate(result.purchaseDate)}</span>
+                    </div>
+                    
+                    {result.amount && (
+                      <div className="flex items-center space-x-1">
+                        <DollarSign className="h-4 w-4" />
+                        <span className="font-medium text-text-primary">
+                          {formatCurrency(result.amount)}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center space-x-1">
+                      <Shield className="h-4 w-4" />
+                      <span>Warranty: {result.warrantyPeriod}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <button className="ml-4 text-text-secondary group-hover:text-primary transition-colors duration-200">
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      );
+    }
+    
+    if (!searchQuery) {
+      return (
+        <div className="text-center py-8">
+          <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-full p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+            <Search className="h-8 w-8 text-primary" />
+          </div>
+          <h3 className="text-lg font-medium text-text-primary mb-2">Smart Search with AI</h3>
+          <p className="text-text-secondary max-w-md mx-auto mb-4">
+            Ask questions about your receipts in natural language. Try queries like:
+          </p>
+          <div className="text-sm text-text-secondary space-y-1 max-w-sm mx-auto">
+            <p>• "How much did I spend on electronics?"</p>
+            <p>• "Show me all Apple receipts from 2023"</p>
+            <p>• "What warranties expire soon?"</p>
+          </div>
+        </div>
+      );
+    }
+    
+    return null;
   };
 
   const handleSignOut = async () => {
@@ -547,15 +767,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </button>
 
           <button 
-            onClick={() => setShowSearchModal(true)}
+            onClick={onShowProfile}
             className="group bg-gradient-to-br from-accent-yellow to-yellow-500 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
           >
             <div className="flex flex-col items-center text-center">
               <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
-                <Search className="h-8 w-8" />
+                <Settings className="h-8 w-8" />
               </div>
-              <h3 className="text-xl font-bold mb-2">Search</h3>
-              <p className="text-white/90">Find receipts and items quickly</p>
+              <h3 className="text-xl font-bold mb-2">Settings</h3>
+              <p className="text-white/90">Manage your profile and preferences</p>
             </div>
           </button>
         </div>
@@ -609,6 +829,115 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             </div>
             <div className="text-xs sm:text-sm text-text-secondary">Warranties Claimed</div>
           </div>
+        </div>
+
+        {/* Smart Search Section */}
+        <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-text-primary flex items-center space-x-2">
+              <Search className="h-6 w-6 text-primary" />
+              <span>Smart Search</span>
+            </h2>
+            <div className="flex items-center space-x-3">
+              <span className="text-sm text-text-secondary bg-gradient-to-r from-primary/10 to-secondary/10 px-3 py-1 rounded-full">
+                AI-Powered
+              </span>
+              {embeddingStatus && (
+                <span className="text-xs text-text-secondary">
+                  {embeddingStatus.withEmbeddings}/{embeddingStatus.total} indexed
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Smart Search Input */}
+          <div className="mb-6">
+            <form onSubmit={handleSearchSubmit} className="relative">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Search className="h-5 w-5 text-text-secondary" />
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="block w-full pl-12 pr-24 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 bg-gray-50 hover:bg-white focus:bg-white"
+                  placeholder="Ask questions about your receipts: 'How much did I spend on electronics?' or 'Show me Apple receipts'"
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={clearSearch}
+                      className="text-text-secondary hover:text-text-primary transition-colors duration-200 p-1 mr-2"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={isSearching || !searchQuery.trim()}
+                    className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  >
+                    {isSearching ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="hidden sm:inline">Searching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="h-4 w-4" />
+                        <span className="hidden sm:inline">Search</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {/* Search Error */}
+            {searchError && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">{searchError}</p>
+              </div>
+            )}
+
+            {/* Embedding Status and Generate Button */}
+            {embeddingStatus && embeddingStatus.withoutEmbeddings > 0 && (
+              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-yellow-800">
+                      <strong>{embeddingStatus.withoutEmbeddings}</strong> receipts need to be indexed for AI search
+                    </p>
+                    <p className="text-xs text-yellow-700 mt-1">
+                      Generate embeddings to enable smart search functionality
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleGenerateEmbeddings}
+                    disabled={isGeneratingEmbeddings}
+                    className="bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  >
+                    {isGeneratingEmbeddings ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Indexing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Database className="h-4 w-4" />
+                        <span>Index Receipts</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Smart Search Results */}
+          {renderSearchResults()}
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8">
@@ -735,149 +1064,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </div>
         </div>
       </main>
-
-      {/* Smart Search Modal */}
-      {showSearchModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-card max-w-2xl w-full max-h-[80vh] overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h2 className="text-2xl font-bold text-text-primary">Smart Search</h2>
-              <button
-                onClick={() => {
-                  setShowSearchModal(false);
-                  clearSearch();
-                }}
-                className="text-text-secondary hover:text-text-primary transition-colors duration-200"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            {/* Search Form */}
-            <div className="p-6 border-b border-gray-200">
-              <form onSubmit={handleSearchSubmit} className="relative">
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Search className="h-5 w-5 text-text-secondary" />
-                  </div>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="block w-full pl-12 pr-32 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 text-lg bg-white"
-                    placeholder="Search receipts by product, brand, store, or location..."
-                  />
-                  <div className="absolute inset-y-0 right-0 flex items-center space-x-2 pr-3">
-                    {searchQuery && (
-                      <button
-                        type="button"
-                        onClick={clearSearch}
-                        className="text-text-secondary hover:text-text-primary transition-colors duration-200 p-1"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
-                    <button
-                      type="submit"
-                      disabled={isSearching || !searchQuery.trim()}
-                      className="bg-primary text-white px-6 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                    >
-                      {isSearching ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span className="hidden sm:inline">Searching...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Search className="h-4 w-4" />
-                          <span className="hidden sm:inline">Search</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </form>
-
-              {/* Search Error */}
-              {searchError && (
-                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-700">{searchError}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Search Results */}
-            <div className="max-h-96 overflow-y-auto">
-              {searchResults.length === 0 && searchQuery && !isSearching ? (
-                <div className="px-6 py-8 text-center">
-                  <Search className="h-12 w-12 text-text-secondary mx-auto mb-4" />
-                  <p className="text-text-secondary">No receipts found matching your search.</p>
-                </div>
-              ) : searchResults.length > 0 ? (
-                <div className="divide-y divide-gray-100">
-                  {searchResults.map((result, index) => (
-                    <div
-                      key={result.id}
-                      className="px-6 py-4 hover:bg-gray-50 transition-colors duration-200 cursor-pointer"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-3 mb-2">
-                            <h4 className="text-base font-semibold text-text-primary truncate">
-                              {result.title}
-                            </h4>
-                            <div className="flex items-center space-x-1 text-xs text-text-secondary bg-gray-100 px-2 py-1 rounded-full">
-                              <span>Relevance:</span>
-                              <span className="font-medium">{Math.round(result.relevanceScore * 100)}%</span>
-                            </div>
-                          </div>
-                          
-                          <div className="flex flex-wrap items-center gap-4 text-sm text-text-secondary">
-                            <div className="flex items-center space-x-1">
-                              <Tag className="h-4 w-4" />
-                              <span>{result.brand}</span>
-                              {result.model && <span>• {result.model}</span>}
-                            </div>
-                            
-                            <div className="flex items-center space-x-1">
-                              <Calendar className="h-4 w-4" />
-                              <span>{formatDate(result.purchaseDate)}</span>
-                            </div>
-                            
-                            {result.amount && (
-                              <div className="flex items-center space-x-1">
-                                <DollarSign className="h-4 w-4" />
-                                <span className="font-medium text-text-primary">
-                                  {formatCurrency(result.amount)}
-                                </span>
-                              </div>
-                            )}
-                            
-                            <div className="flex items-center space-x-1">
-                              <Clock className="h-4 w-4" />
-                              <span>Warranty: {result.warrantyPeriod}</span>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <button className="ml-4 text-primary hover:text-primary/80 transition-colors duration-200">
-                          <ChevronRight className="h-5 w-5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : searchQuery && !isSearching ? null : (
-                <div className="px-6 py-8 text-center">
-                  <Search className="h-12 w-12 text-text-secondary mx-auto mb-4" />
-                  <p className="text-text-secondary">Enter a search term to find your receipts</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Click outside to close menus */}
       {(showUserMenu || showNotificationMenu) && (

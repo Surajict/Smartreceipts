@@ -43,10 +43,17 @@ const Benefits: React.FC<BenefitsProps> = ({ onShowLogin, onShowSignUp }) => {
   };
 
   return (
-    <section id="features" className="py-20 bg-white">
+    <section id="features" className="py-20 bg-white relative overflow-hidden">
+      {/* Background pattern */}
+      <div className="absolute inset-0 opacity-5 pointer-events-none">
+        <div className="absolute inset-0" style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2300C48C' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+        }}></div>
+      </div>
+      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
+          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4 tracking-tight">
             Everything You Need to Manage Receipts Smartly
           </h2>
           <p className="text-xl text-text-secondary max-w-3xl mx-auto">
@@ -59,9 +66,9 @@ const Benefits: React.FC<BenefitsProps> = ({ onShowLogin, onShowSignUp }) => {
           {benefits.map((benefit, index) => (
             <div
               key={index}
-              className="group bg-white p-8 rounded-2xl shadow-card border border-gray-100 hover:shadow-card-hover hover:border-primary/20 transition-all duration-300 transform hover:-translate-y-2"
+              className="group bg-white p-8 rounded-2xl shadow-card border border-gray-100 hover:shadow-card-hover hover:border-primary/20 transition-all duration-300 transform hover:-translate-y-2 backdrop-blur-sm"
             >
-              <div className="bg-gradient-feature rounded-xl p-4 w-fit mb-6 group-hover:scale-110 transition-transform duration-300">
+              <div className="bg-gradient-feature rounded-xl p-4 w-fit mb-6 group-hover:scale-110 transition-transform duration-300 shadow-sm">
                 {getIcon(benefit.icon)}
               </div>
               
@@ -83,7 +90,7 @@ const Benefits: React.FC<BenefitsProps> = ({ onShowLogin, onShowSignUp }) => {
         <div className="text-center mt-16">
           <button 
             onClick={onShowSignUp}
-            className="bg-primary text-white px-8 py-4 rounded-lg font-medium text-lg hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover transform hover:-translate-y-1"
+            className="bg-gradient-primary text-white px-8 py-4 rounded-lg font-medium text-lg hover:opacity-90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-1"
           >
             Try All Features Free
           </button>

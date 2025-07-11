@@ -45,10 +45,10 @@ const FAQSection: React.FC = () => {
   };
 
   return (
-    <section className="py-20 bg-background">
+    <section className="py-20 bg-gradient-to-b from-white to-background">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
+          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4 tracking-tight">
             Frequently Asked Questions
           </h2>
           <p className="text-xl text-text-secondary">
@@ -60,13 +60,13 @@ const FAQSection: React.FC = () => {
           {faqs.map((faq, index) => (
             <div
               key={index}
-              className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden"
+              className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden backdrop-blur-sm"
             >
               <button
                 onClick={() => toggleFAQ(index)}
-                className="w-full px-6 py-6 text-left flex justify-between items-center hover:bg-gray-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                className="w-full px-6 py-6 text-left flex justify-between items-center hover:bg-gray-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset group"
               >
-                <h3 className="text-lg font-bold text-text-primary pr-4">
+                <h3 className="text-lg font-bold text-text-primary pr-4 group-hover:text-primary transition-colors duration-200">
                   {faq.question}
                 </h3>
                 <div className="flex-shrink-0">
@@ -83,9 +83,9 @@ const FAQSection: React.FC = () => {
                   openIndex === index ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
                 }`}
               >
-                <div className="px-6 pb-6">
-                  <div className="h-px bg-gray-200 mb-4"></div>
-                  <p className="text-text-secondary leading-relaxed">
+                <div className="px-6 pb-6 animate-fade-in">
+                  <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent mb-4"></div>
+                  <p className="text-text-secondary leading-relaxed animate-slide-up">
                     {faq.answer}
                   </p>
                 </div>
@@ -96,18 +96,18 @@ const FAQSection: React.FC = () => {
 
         {/* Contact Support */}
         <div className="text-center mt-12">
-          <div className="bg-gradient-feature rounded-2xl p-8 border border-gray-100">
-            <h3 className="text-xl font-bold text-text-primary mb-4">
+          <div className="bg-gradient-feature rounded-2xl p-8 border border-gray-100 shadow-lg">
+            <h3 className="text-xl font-bold text-text-primary mb-4 tracking-tight">
               Still have questions?
             </h3>
             <p className="text-text-secondary mb-6">
               Our support team is available 24/7 to help you get the most out of Smart Receipt.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200">
+              <button className="bg-gradient-primary text-white px-6 py-3 rounded-lg font-medium hover:opacity-90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-0.5">
                 Contact Support
               </button>
-              <button className="border-2 border-primary text-primary px-6 py-3 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors duration-200">
+              <button className="border-2 border-primary text-primary px-6 py-3 rounded-lg font-medium hover:bg-primary hover:text-white transition-all duration-200 shadow-sm hover:shadow-md">
                 Schedule Demo
               </button>
             </div>

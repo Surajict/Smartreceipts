@@ -62,7 +62,7 @@ const Footer: React.FC = () => {
   ];
 
   return (
-    <footer className="bg-text-primary text-white">
+    <footer className="bg-gradient-to-br from-text-primary to-gray-900 text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Main Footer Content */}
         <div className="py-16">
@@ -72,10 +72,10 @@ const Footer: React.FC = () => {
               <div className="flex items-center space-x-3 mb-6">
                 <img 
                   src="/Smart Receipt Logo.png" 
-                  alt="Smart Receipts Logo" 
-                  className="h-8 w-8 object-contain"
+                  alt="Smart Receipts Logo"
+                  className="h-8 w-8 object-contain filter brightness-150"
                 />
-                <span className="text-xl font-bold bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
+                <span className="text-xl font-bold bg-gradient-to-r from-teal-300 to-blue-400 bg-clip-text text-transparent">
                   Smart Receipts
                 </span>
               </div>
@@ -88,15 +88,15 @@ const Footer: React.FC = () => {
               {/* Contact Info */}
               <div className="space-y-3 mb-8">
                 <div className="flex items-center space-x-3">
-                  <Mail className="h-5 w-5 text-primary" />
+                  <Mail className="h-5 w-5 text-teal-400" />
                   <span className="text-gray-300">support@smartreceipts.com</span>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <Phone className="h-5 w-5 text-primary" />
+                  <Phone className="h-5 w-5 text-teal-400" />
                   <span className="text-gray-300">1-800-RECEIPT</span>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <MapPin className="h-5 w-5 text-primary" />
+                  <MapPin className="h-5 w-5 text-teal-400" />
                   <span className="text-gray-300">Global Presence - 50+ Countries</span>
                 </div>
               </div>
@@ -112,7 +112,7 @@ const Footer: React.FC = () => {
                         key={index}
                         href={social.href}
                         aria-label={social.label}
-                        className="bg-gray-800 p-2 rounded-lg hover:bg-primary transition-colors duration-200"
+                        className="bg-gray-800 p-2 rounded-lg hover:bg-primary transition-all duration-200 transform hover:-translate-y-1"
                       >
                         <Icon className="h-5 w-5" />
                       </a>
@@ -144,10 +144,10 @@ const Footer: React.FC = () => {
 
           {/* Newsletter Signup */}
           <div className="mt-16 pt-16 border-t border-gray-800">
-            <div className="bg-gray-800 rounded-2xl p-8">
+            <div className="bg-gray-800 rounded-2xl p-8 shadow-xl border border-gray-700">
               <div className="grid md:grid-cols-2 gap-8 items-center">
                 <div>
-                  <h3 className="text-2xl font-bold mb-4">Join Our Community</h3>
+                  <h3 className="text-2xl font-bold mb-4 tracking-tight">Join Our Community</h3>
                   <p className="text-gray-300">
                     Get the latest updates, tips, and exclusive offers delivered to your inbox.
                   </p>
@@ -157,9 +157,9 @@ const Footer: React.FC = () => {
                     <input
                       type="email"
                       placeholder="Enter your email address"
-                      className="flex-1 px-4 py-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      className="flex-1 px-4 py-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent shadow-inner"
                     />
-                    <button className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 whitespace-nowrap">
+                    <button className="bg-gradient-primary text-white px-6 py-3 rounded-lg font-medium hover:opacity-90 transition-all duration-200 whitespace-nowrap shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
                       Subscribe
                     </button>
                   </div>

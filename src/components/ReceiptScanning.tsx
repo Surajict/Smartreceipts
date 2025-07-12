@@ -20,7 +20,7 @@ import {
   ShoppingCart,
   Package,
   DollarSign,
-  Hash
+  Hash,
   Edit3,
   RotateCcw,
   Plus,
@@ -300,12 +300,12 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       brand_name: item.brand_name,
       store_name: storeInfo.store_name || '',
       purchase_location: storeInfo.purchase_location || '',
-  const convertItemToFormData = (item: ExtractedItem, storeInfo: StoreInfo) => {
+      purchase_date: storeInfo.purchase_date,
       amount: item.price,
       warranty_period: item.warranty_period_months ? `${item.warranty_period_months} months` : '1 year',
       extended_warranty: item.extended_warranty_months ? `${item.extended_warranty_months} months` : '',
-      warranty_period: AIService.formatWarrantyPeriod(item.warranty_period_months),
-      extended_warranty: item.extended_warranty_months ? AIService.formatWarrantyPeriod(item.extended_warranty_months) : ''
+      model_number: item.model_number || '',
+      country: storeInfo.country
     };
   };
 
@@ -358,8 +358,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           if (gptError) {
             throw new Error(gptError.message);
           }
-      // Use the enhanced AI service for multi-item extraction
-      const gptResult = await AIService.extractMultipleItems(ocrResult.text);
+          
           structuredData = gptData!;
         } else {
           throw new Error('OpenAI not available');
@@ -367,27 +366,19 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       } catch (gptError) {
         console.warn('GPT processing failed, using fallback:', gptError);
         setProcessingStep('Using fallback processing...');
-        console.log('GPT extraction successful:', {
-          itemCount: gptResult.data.items.length,
-          hasMultipleItems: gptResult.data.items.length > 1
-        });
-        
         structuredData = fallbackDataExtraction(text);
       }
 
       setMultiItemData(structuredData);
       
-          console.log('Multiple items detected, showing selection screen');
       // Check if multiple items were found
       if (structuredData.items.length > 1) {
-          console.log('Single item detected, proceeding to form');
         setShowItemSelection(true);
         setProcessingStep(`Found ${structuredData.items.length} items. Please select one to continue.`);
       } else if (structuredData.items.length === 1) {
         // Single item - proceed directly to form
         const singleItemData = convertItemToExtractedData(structuredData.items[0], structuredData.store_info);
         setExtractedData(singleItemData);
-          console.log('No items extracted, falling back to manual entry');
         setSelectedItemIndex(0);
         setShowExtractedForm(true);
         setProcessingStep('Data extracted successfully! Please review and edit as needed.');
@@ -960,9 +951,24 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         {showItemSelection && multiItemData && (
           <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 mb-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-text-primary">
-                Select Item from Receipt
-              </h2>
+              <div className="bg-gradient-to-r from-primary/10 to-secondary/10 rounded-xl p-6 mb-6">
+                <div className="flex items-center justify-center mb-4">
+                  <ShoppingCart className="h-8 w-8 text-primary mr-3" />
+                  <h2 className="text-2xl font-bold text-text-primary">Multiple Items Found</h2>
+                </div>
+                <p className="text-text-secondary text-lg">
+                  We detected <span className="font-semibold text-primary">{multiItemData.items.length} items</span> on this receipt. 
+                  Please select the item you want to save:
+                </p>
+                {multiItemData.store_info?.store_name && (
+                  <p className="text-sm text-text-secondary mt-2">
+                    From: <span className="font-medium">{multiItemData.store_info.store_name}</span>
+                    {multiItemData.store_info.purchase_date && (
+                      <span> • {new Date(multiItemData.store_info.purchase_date).toLocaleDateString()}</span>
+                    )}
+                  </p>
+                )}
+              </div>
               <div className="flex items-center space-x-2">
                 <span className="text-sm text-text-secondary bg-primary/10 px-3 py-1 rounded-full">
                   {multiItemData.items.length} items found
@@ -983,54 +989,97 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {multiItemData.items.map((item, index) => (
                 <div
                   key={index}
-                  className="bg-white border-2 border-gray-200 rounded-xl p-4 hover:border-primary/50 hover:shadow-md transition-all duration-200 cursor-pointer group"
+                  className="bg-white p-6 rounded-2xl border border-gray-200 hover:border-primary hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-1 cursor-pointer group"
                   onClick={() => handleItemSelection(index)}
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 line-clamp-2">
-                        {item.product_description}
-                      </h3>
-                      <p className="text-sm text-text-secondary mt-1">
-                        {item.brand_name}
-                      </p>
+                  {/* Item Header */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-lg p-3 flex-shrink-0">
+                      <Package className="h-6 w-6 text-primary" />
                     </div>
-                    <div className="ml-3 text-right">
+                    <div className="text-right">
+                      <span className="text-xs text-text-secondary bg-gray-100 px-2 py-1 rounded-full">
+                        Item {index + 1}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Product Name */}
+                  <h3 className="font-bold text-text-primary mb-3 group-hover:text-primary transition-colors duration-200 line-clamp-2">
+                    {item.product_description}
+                  </h3>
+
+                  {/* Item Details */}
+                  <div className="space-y-2 mb-4">
+                    {item.brand_name && (
+                      <div className="flex items-center text-sm text-text-secondary">
+                        <span className="font-medium w-16">Brand:</span>
+                        <span className="truncate">{item.brand_name}</span>
+                      </div>
+                    )}
+                    
+                    {item.model_number && (
+                      <div className="flex items-center text-sm text-text-secondary">
+                        <Hash className="h-3 w-3 mr-1" />
+                        <span className="font-medium mr-2">Model:</span>
+                        <span className="truncate">{item.model_number}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-sm">
                       {item.price && (
-                        <div className="font-bold text-text-primary">
-                          ${item.price.toFixed(2)}
+                        <div className="flex items-center text-primary font-semibold">
+                          <DollarSign className="h-4 w-4 mr-1" />
+                          <span>${item.price.toFixed(2)}</span>
                         </div>
                       )}
-                      <div className="text-xs text-text-secondary">
-                        Qty: {item.quantity}
-                      </div>
+                      
+                      {item.quantity && item.quantity > 1 && (
+                        <div className="text-text-secondary">
+                          <span className="font-medium">Qty:</span> {item.quantity}
+                        </div>
+                      )}
                     </div>
-                  </div>
 
-                  <div className="space-y-2 text-sm text-text-secondary">
-                    {item.model_number && (
-                      <div className="flex items-center space-x-2">
-                        <span className="font-medium">Model:</span>
-                        <span>{item.model_number}</span>
-                      </div>
-                    )}
                     {item.warranty_period_months && (
-                      <div className="flex items-center space-x-2">
-                        <span className="font-medium">Warranty:</span>
-                        <span>{item.warranty_period_months} months</span>
+                      <div className="text-sm text-text-secondary">
+                        <span className="font-medium">Warranty:</span> {AIService.formatWarrantyPeriod(item.warranty_period_months)}
                       </div>
                     )}
                   </div>
 
-                  <button className="w-full mt-4 bg-primary text-white py-2 px-4 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 group-hover:bg-primary/90">
+                  {/* Select Button */}
+                  <button className="w-full bg-gradient-to-r from-primary to-secondary text-white py-3 px-4 rounded-lg font-medium hover:from-primary/90 hover:to-secondary/90 transition-all duration-200 shadow-card hover:shadow-card-hover transform group-hover:scale-105">
                     Select This Item
                   </button>
                 </div>
               ))}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-between items-center pt-6 border-t border-gray-200">
+              <button
+                onClick={() => setCurrentStep('upload')}
+                className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Back to Upload</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  // Proceed to manual entry if user doesn't want to select an item
+                  setCurrentStep('form');
+                }}
+                className="flex items-center space-x-2 border border-gray-300 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+              >
+                <FileText className="h-4 w-4" />
+                <span>Enter Manually Instead</span>
+              </button>
             </div>
 
             {/* Store Information */}

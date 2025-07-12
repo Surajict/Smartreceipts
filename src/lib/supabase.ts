@@ -60,7 +60,9 @@ export const saveReceiptToDatabase = async (receiptData: any, userId: string) =>
       converted_amount: receiptData.converted_amount || null,
       converted_currency: receiptData.converted_currency || null,
       exchange_rate: receiptData.exchange_rate || null,
-      conversion_date: receiptData.conversion_date || null
+      conversion_date: receiptData.conversion_date || null,
+      total_items_found: 1,
+      selected_item_index: 0
     };
 
     console.log('Prepared insert data:', insertData);

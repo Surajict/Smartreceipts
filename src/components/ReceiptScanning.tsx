@@ -17,6 +17,10 @@ import {
   User,
   LogOut,
   Bell,
+  ShoppingCart,
+  Package,
+  DollarSign,
+  Hash
   Edit3,
   RotateCcw,
   Plus,
@@ -24,6 +28,7 @@ import {
   Settings
 } from 'lucide-react';
 import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
+import { AIService, ExtractedItem, StoreInfo } from '../services/aiService';
 import { OCRService, OCREngine } from '../services/ocrService';
 
 interface ReceiptScanningProps {
@@ -295,12 +300,12 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       brand_name: item.brand_name,
       store_name: storeInfo.store_name || '',
       purchase_location: storeInfo.purchase_location || '',
-      purchase_date: storeInfo.purchase_date,
+  const convertItemToFormData = (item: ExtractedItem, storeInfo: StoreInfo) => {
       amount: item.price,
       warranty_period: item.warranty_period_months ? `${item.warranty_period_months} months` : '1 year',
       extended_warranty: item.extended_warranty_months ? `${item.extended_warranty_months} months` : '',
-      model_number: item.model_number || '',
-      country: storeInfo.country
+      warranty_period: AIService.formatWarrantyPeriod(item.warranty_period_months),
+      extended_warranty: item.extended_warranty_months ? AIService.formatWarrantyPeriod(item.extended_warranty_months) : ''
     };
   };
 
@@ -353,7 +358,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           if (gptError) {
             throw new Error(gptError.message);
           }
-          
+      // Use the enhanced AI service for multi-item extraction
+      const gptResult = await AIService.extractMultipleItems(ocrResult.text);
           structuredData = gptData!;
         } else {
           throw new Error('OpenAI not available');
@@ -361,19 +367,27 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       } catch (gptError) {
         console.warn('GPT processing failed, using fallback:', gptError);
         setProcessingStep('Using fallback processing...');
+        console.log('GPT extraction successful:', {
+          itemCount: gptResult.data.items.length,
+          hasMultipleItems: gptResult.data.items.length > 1
+        });
+        
         structuredData = fallbackDataExtraction(text);
       }
 
       setMultiItemData(structuredData);
       
+          console.log('Multiple items detected, showing selection screen');
       // Check if multiple items were found
       if (structuredData.items.length > 1) {
+          console.log('Single item detected, proceeding to form');
         setShowItemSelection(true);
         setProcessingStep(`Found ${structuredData.items.length} items. Please select one to continue.`);
       } else if (structuredData.items.length === 1) {
         // Single item - proceed directly to form
         const singleItemData = convertItemToExtractedData(structuredData.items[0], structuredData.store_info);
         setExtractedData(singleItemData);
+          console.log('No items extracted, falling back to manual entry');
         setSelectedItemIndex(0);
         setShowExtractedForm(true);
         setProcessingStep('Data extracted successfully! Please review and edit as needed.');

@@ -830,27 +830,40 @@ export const extractReceiptDataWithGPT = async (extractedText: string) => {
 Given raw text from a receipt, analyze and return a list of each item in the following JSON format.
 If only one item is found, still return it as an array with one element.
 
+IMPORTANT: Extract ALL individual items from the receipt, not just the first one.
+
 Return ONLY valid JSON in this exact format:
 {
   "items": [
     {
-      "product_description": "string - product name",
-      "brand_name": "string - brand or null",
-      "model_number": "string - model or null", 
+      "product_description": "string - full product name",
+      "brand_name": "string - brand name or null",
+      "model_number": "string - model/SKU or null", 
       "price": "number - individual item price or null",
       "quantity": "number - quantity purchased or 1",
-      "warranty_period_months": "number - warranty in months or null",
+      "warranty_period_months": "number - standard warranty in months or null",
       "extended_warranty_months": "number - extended warranty months or null"
     }
   ],
   "store_info": {
     "store_name": "string - store name or null",
-    "purchase_location": "string - store address or null",
+    "purchase_location": "string - store address/location or null",
     "purchase_date": "string - date in YYYY-MM-DD format",
-    "total_amount": "number - receipt total or null",
+    "total_amount": "number - receipt total amount or null",
     "country": "string - country or 'United States'"
   }
 }
+
+Examples of what to extract as separate items:
+- Each product line with different names/descriptions
+- Different models or variants
+- Different categories of products
+
+Do NOT extract:
+- Tax lines
+- Discount lines
+- Payment method lines
+- Store policies or return info
 
 Receipt text:
 ${extractedText}
@@ -868,14 +881,14 @@ Return only valid JSON:`;
         messages: [
           {
             role: 'system',
-            content: 'You are a precise data extraction assistant. Extract individual items from receipts and return only valid JSON with the requested structure.'
+            content: 'You are a precise data extraction assistant specialized in retail receipts. Extract ALL individual items from receipts and return only valid JSON with the requested structure. Focus on actual products, not taxes, discounts, or payment info.'
           },
           {
             role: 'user',
             content: prompt
           }
         ],
-        max_tokens: 800,
+        max_tokens: 1200,
         temperature: 0.1,
       }),
     });
@@ -904,6 +917,8 @@ Return only valid JSON:`;
     // Validate and clean the extracted data
     const items = extractedData.items || [];
     const storeInfo = extractedData.store_info || {};
+    
+    console.log(`GPT extracted ${items.length} items from receipt`);
     
     // Clean and validate items
     const cleanedItems = items.map((item: any, index: number) => ({
@@ -940,7 +955,12 @@ Return only valid JSON:`;
       store_info: cleanedStoreInfo
     };
 
-    console.log('GPT extraction successful:', result);
+    console.log('GPT multi-item extraction successful:', {
+      itemCount: result.items.length,
+      storeName: result.store_info.store_name,
+      totalAmount: result.store_info.total_amount
+    });
+    
     return { data: result, error: null };
 
   } catch (error: any) {

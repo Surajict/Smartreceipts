@@ -28,6 +28,7 @@ import {
   Settings
 } from 'lucide-react';
 import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT, extractMultipleItemsFromReceipt } from '../lib/supabase';
+import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
 import { AIService, ExtractedItem, StoreInfo } from '../services/aiService';
 import { OCRService, OCREngine } from '../services/ocrService';
 
@@ -172,7 +173,11 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       // Try multi-item extraction first
       setProcessingStep('Analyzing receipt for multiple items...');
       try {
-        const multiItemResult = await extractMultipleItemsFromReceipt(ocrResult.text);
+        const { data: multiItemResult, error: multiItemError } = await AIService.extractMultipleItems(ocrResult.text);
+        
+        if (multiItemError) {
+          throw new Error(multiItemError);
+        }
         
         if (multiItemResult && multiItemResult.items && multiItemResult.items.length > 0) {
           setExtractedItems(multiItemResult.items);

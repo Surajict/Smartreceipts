@@ -397,6 +397,304 @@ export const updateReceipt = async (userId: string, receiptId: string, updateDat
   }
 };
 
+// Currency management functions
+export const getUserCurrencySettings = async (userId: string) => {
+  try {
+    console.log('Getting currency settings for user:', userId);
+
+    const { data, error } = await supabase
+      .from('user_privacy_settings')
+      .select('preferred_currency, display_currency_mode')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      console.error('Error getting currency settings:', error);
+      // Return default settings if none exist
+      return { 
+        data: { 
+          preferred_currency: 'USD', 
+          display_currency_mode: 'native' 
+        }, 
+        error: null 
+      };
+    }
+
+    console.log('Currency settings:', data);
+    return { data, error: null };
+
+  } catch (err: any) {
+    console.error('Get currency settings error:', err);
+    return { 
+      data: { 
+        preferred_currency: 'USD', 
+        display_currency_mode: 'native' 
+      }, 
+      error: { message: err.message || 'Failed to get currency settings' } 
+    };
+  }
+};
+
+export const updateUserCurrencySettings = async (userId: string, settings: { preferred_currency?: string; display_currency_mode?: string }) => {
+  try {
+    console.log('Updating currency settings for user:', userId, settings);
+
+    const { data, error } = await supabase
+      .from('user_privacy_settings')
+      .update(settings)
+      .eq('user_id', userId)
+      .select();
+
+    if (error) {
+      console.error('Error updating currency settings:', error);
+      throw error;
+    }
+
+    console.log('Currency settings updated successfully:', data);
+    return { data: data[0], error: null };
+
+  } catch (err: any) {
+    console.error('Update currency settings error:', err);
+    return { 
+      data: null, 
+      error: { message: err.message || 'Failed to update currency settings' } 
+    };
+  }
+};
+
+export const convertCurrencyWithOpenAI = async (amount: number, fromCurrency: string, toCurrency: string) => {
+  try {
+    if (fromCurrency === toCurrency) {
+      return {
+        data: {
+          original_amount: amount,
+          original_currency: fromCurrency,
+          converted_amount: amount,
+          target_currency: toCurrency,
+          exchange_rate: 1,
+          conversion_date: new Date().toISOString().split('T')[0]
+        },
+        error: null
+      };
+    }
+
+    const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
+    
+    if (!openaiApiKey) {
+      throw new Error('OpenAI API key not configured');
+    }
+
+    console.log(`Converting ${amount} ${fromCurrency} to ${toCurrency}`);
+
+    const prompt = `Convert ${amount} ${fromCurrency} to ${toCurrency} using current exchange rates.
+Return ONLY valid JSON in this exact format:
+{
+  "original_amount": ${amount},
+  "original_currency": "${fromCurrency}",
+  "converted_amount": 0.00,
+  "target_currency": "${toCurrency}",
+  "exchange_rate": 0.00,
+  "conversion_date": "2024-12-15"
+}
+
+Use accurate current exchange rates. The exchange_rate should be how many ${toCurrency} equals 1 ${fromCurrency}.`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a currency conversion expert. Use current exchange rates and return only valid JSON with accurate conversions.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_tokens: 300,
+        temperature: 0.1,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+
+    if (!content) {
+      throw new Error('No response from OpenAI');
+    }
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No valid JSON found in response');
+    }
+
+    const conversionData = JSON.parse(jsonMatch[0]);
+    
+    const result = {
+      original_amount: amount,
+      original_currency: fromCurrency,
+      converted_amount: conversionData.converted_amount || amount,
+      target_currency: toCurrency,
+      exchange_rate: conversionData.exchange_rate || 1,
+      conversion_date: new Date().toISOString().split('T')[0]
+    };
+
+    console.log('Currency conversion result:', result);
+    return { data: result, error: null };
+
+  } catch (error: any) {
+    console.error('Currency conversion error:', error);
+    
+    // Fallback conversion rates
+    const fallbackRates: { [key: string]: { [key: string]: number } } = {
+      'USD': { 'AED': 3.67, 'GBP': 0.79, 'EUR': 0.85, 'CAD': 1.35, 'AUD': 1.45 },
+      'AED': { 'USD': 0.27, 'GBP': 0.22, 'EUR': 0.23 },
+      'GBP': { 'USD': 1.27, 'AED': 4.65, 'EUR': 1.08 },
+      'EUR': { 'USD': 1.18, 'AED': 4.33, 'GBP': 0.93 }
+    };
+    
+    const rate = fallbackRates[fromCurrency]?.[toCurrency] || 1;
+    const convertedAmount = amount * rate;
+    
+    return {
+      data: {
+        original_amount: amount,
+        original_currency: fromCurrency,
+        converted_amount: convertedAmount,
+        target_currency: toCurrency,
+        exchange_rate: rate,
+        conversion_date: new Date().toISOString().split('T')[0]
+      },
+      error: null
+    };
+  }
+};
+
+// Enhanced user profile functions
+export const getUserProfile = async (userId: string) => {
+  try {
+    console.log('Getting user profile for:', userId);
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      console.error('Error getting user profile:', error);
+      throw error;
+    }
+
+    console.log('User profile:', data);
+    return { data, error: null };
+
+  } catch (err: any) {
+    console.error('Get user profile error:', err);
+    return { 
+      data: null, 
+      error: { message: err.message || 'Failed to get user profile' } 
+    };
+  }
+};
+
+export const updateUserProfile = async (userId: string, profileData: {
+  full_name?: string;
+  native_country?: string;
+  notification_settings?: any;
+  privacy_settings?: any;
+}) => {
+  try {
+    console.log('Updating user profile for:', userId, profileData);
+
+    // Update users table
+    if (profileData.full_name || profileData.native_country) {
+      const userUpdate: any = {};
+      if (profileData.full_name) userUpdate.full_name = profileData.full_name;
+      if (profileData.native_country) userUpdate.native_country = profileData.native_country;
+
+      const { error: userError } = await supabase
+        .from('users')
+        .update(userUpdate)
+        .eq('id', userId);
+
+      if (userError) {
+        console.error('Error updating users table:', userError);
+        throw userError;
+      }
+    }
+
+    // Update notification settings
+    if (profileData.notification_settings) {
+      const { error: notifError } = await supabase
+        .from('user_notification_settings')
+        .upsert({
+          user_id: userId,
+          ...profileData.notification_settings
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (notifError) {
+        console.error('Error updating notification settings:', notifError);
+        throw notifError;
+      }
+    }
+
+    // Update privacy settings
+    if (profileData.privacy_settings) {
+      const { error: privacyError } = await supabase
+        .from('user_privacy_settings')
+        .upsert({
+          user_id: userId,
+          ...profileData.privacy_settings
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (privacyError) {
+        console.error('Error updating privacy settings:', privacyError);
+        throw privacyError;
+      }
+    }
+
+    // Update auth metadata
+    if (profileData.full_name || profileData.native_country) {
+      const { error: authError } = await supabase.auth.updateUser({
+        data: {
+          full_name: profileData.full_name,
+          native_country: profileData.native_country
+        }
+      });
+
+      if (authError) {
+        console.warn('Failed to update auth metadata:', authError);
+        // Don't fail the entire operation if auth metadata update fails
+      }
+    }
+
+    console.log('User profile updated successfully');
+    return { data: true, error: null };
+
+  } catch (err: any) {
+    console.error('Update user profile error:', err);
+    return { 
+      data: null, 
+      error: { message: err.message || 'Failed to update user profile' } 
+    };
+  }
+};
+
 // Auth helper functions with improved error handling
 export const signUp = async (email: string, password: string, fullName: string, nativeCountry: string) => {
   try {

@@ -12,7 +12,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { getCurrentUser, signOut, updateUserProfile, getUserProfile } from '../lib/supabase';
-import { AIService } from '../services/aiService';
+import { CurrencyService } from '../services/currencyService';
 
 interface ProfilePageProps {
   onBackToDashboard: () => void;
@@ -148,13 +148,14 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   const handleCountryChange = async (country: string) => {
     setProfile(prev => ({ ...prev, native_country: country }));
     
-    // Auto-detect currency using OpenAI
+    // Auto-detect currency using CurrencyService
     try {
-      const currencyInfo = await AIService.getCurrencyForCountry(country);
+      const currencyInfo = await CurrencyService.getCurrencyForCountry(country);
       setPrivacySettings(prev => ({
         ...prev,
         preferred_currency: currencyInfo.currency_code
       }));
+      console.log(`✅ Auto-detected currency for ${country}: ${currencyInfo.currency_code} (${currencyInfo.currency_symbol})`);
     } catch (error) {
       console.warn('Failed to auto-detect currency:', error);
     }

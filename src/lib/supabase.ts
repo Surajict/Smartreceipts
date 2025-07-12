@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { CurrencyService } from '../services/currencyService'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://napulczxrrnsjtmaixzp.supabase.co'
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'PLACEHOLDER_ANON_KEY'
@@ -464,117 +465,21 @@ export const updateUserCurrencySettings = async (userId: string, settings: { pre
 
 export const convertCurrencyWithOpenAI = async (amount: number, fromCurrency: string, toCurrency: string) => {
   try {
-    if (fromCurrency === toCurrency) {
-      return {
-        data: {
-          original_amount: amount,
-          original_currency: fromCurrency,
-          converted_amount: amount,
-          target_currency: toCurrency,
-          exchange_rate: 1,
-          conversion_date: new Date().toISOString().split('T')[0]
-        },
-        error: null
-      };
-    }
-
-    const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
+    console.log(`Converting ${amount} ${fromCurrency} to ${toCurrency} using CurrencyService...`);
     
-    if (!openaiApiKey) {
-      throw new Error('OpenAI API key not configured');
-    }
-
-    console.log(`Converting ${amount} ${fromCurrency} to ${toCurrency}`);
-
-    const prompt = `Convert ${amount} ${fromCurrency} to ${toCurrency} using current exchange rates.
-Return ONLY valid JSON in this exact format:
-{
-  "original_amount": ${amount},
-  "original_currency": "${fromCurrency}",
-  "converted_amount": 0.00,
-  "target_currency": "${toCurrency}",
-  "exchange_rate": 0.00,
-  "conversion_date": "2024-12-15"
-}
-
-Use accurate current exchange rates. The exchange_rate should be how many ${toCurrency} equals 1 ${fromCurrency}.`;
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a currency conversion expert. Use current exchange rates and return only valid JSON with accurate conversions.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 300,
-        temperature: 0.1,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content;
-
-    if (!content) {
-      throw new Error('No response from OpenAI');
-    }
-
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('No valid JSON found in response');
-    }
-
-    const conversionData = JSON.parse(jsonMatch[0]);
+    const result = await CurrencyService.convertCurrency(amount, fromCurrency, toCurrency);
     
-    const result = {
-      original_amount: amount,
-      original_currency: fromCurrency,
-      converted_amount: conversionData.converted_amount || amount,
-      target_currency: toCurrency,
-      exchange_rate: conversionData.exchange_rate || 1,
-      conversion_date: new Date().toISOString().split('T')[0]
-    };
-
-    console.log('Currency conversion result:', result);
+    console.log('✅ Currency conversion result:', result);
     return { data: result, error: null };
 
   } catch (error: any) {
     console.error('Currency conversion error:', error);
     
-    // Fallback conversion rates
-    const fallbackRates: { [key: string]: { [key: string]: number } } = {
-      'USD': { 'AED': 3.67, 'GBP': 0.79, 'EUR': 0.85, 'CAD': 1.35, 'AUD': 1.45 },
-      'AED': { 'USD': 0.27, 'GBP': 0.22, 'EUR': 0.23 },
-      'GBP': { 'USD': 1.27, 'AED': 4.65, 'EUR': 1.08 },
-      'EUR': { 'USD': 1.18, 'AED': 4.33, 'GBP': 0.93 }
-    };
-    
-    const rate = fallbackRates[fromCurrency]?.[toCurrency] || 1;
-    const convertedAmount = amount * rate;
+    // Use fallback conversion from CurrencyService
+    const fallbackResult = await CurrencyService.convertCurrency(amount, fromCurrency, toCurrency);
     
     return {
-      data: {
-        original_amount: amount,
-        original_currency: fromCurrency,
-        converted_amount: convertedAmount,
-        target_currency: toCurrency,
-        exchange_rate: rate,
-        conversion_date: new Date().toISOString().split('T')[0]
-      },
+      data: fallbackResult,
       error: null
     };
   }
@@ -616,6 +521,13 @@ export const updateUserProfile = async (userId: string, profileData: {
 }) => {
   try {
     console.log('Updating user profile for:', userId, profileData);
+
+    // Auto-detect currency when country changes
+    if (profileData.native_country && profileData.privacy_settings) {
+      const currencyInfo = await CurrencyService.getCurrencyForCountry(profileData.native_country);
+      profileData.privacy_settings.preferred_currency = currencyInfo.currency_code;
+      console.log(`✅ Auto-detected currency for ${profileData.native_country}: ${currencyInfo.currency_code} (${currencyInfo.currency_symbol})`);
+    }
 
     // Update users table
     if (profileData.full_name || profileData.native_country) {

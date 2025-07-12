@@ -248,11 +248,17 @@ export class OCRService {
     try {
       switch (engine) {
         case 'tesseract':
-          return true; // Tesseract is always available as silent fallback
+          // Test if Tesseract can be loaded
+          try {
+            const { createWorker } = await import('tesseract.js');
+            return true;
+          } catch {
+            return false;
+          }
         
         case 'google-cloud-vision':
           const apiKey = import.meta.env.VITE_GOOGLE_CLOUD_API_KEY;
-          return !!apiKey;
+          return !!apiKey && !apiKey.includes('placeholder') && apiKey.length > 10;
         
         default:
           return false;

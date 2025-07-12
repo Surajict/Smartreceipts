@@ -696,13 +696,21 @@ export const testSupabaseConnection = async () => {
       console.warn('Using placeholder Supabase credentials')
       return false
     }
+
+    if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.length < 10 || supabaseAnonKey.length < 20) {
+      console.warn('Supabase credentials appear to be missing or invalid');
+      return false;
+    }
     
     console.log('Testing Supabase connection...')
     
-    // Test basic connection by checking if we can access the auth endpoint
-    const { data, error } = await supabase.auth.getSession()
+    // Test basic connection by trying to access a simple endpoint
+    const { data, error } = await supabase
+      .from('receipts')
+      .select('count', { count: 'exact', head: true })
+      .limit(1);
     
-    if (error && error.message !== 'Auth session missing!') {
+    if (error && !error.message.includes('RLS') && !error.message.includes('permission')) {
       console.error('Supabase connection test failed:', error)
       return false
     }
@@ -710,7 +718,7 @@ export const testSupabaseConnection = async () => {
     console.log('Supabase connection successful')
     return true
   } catch (err) {
-    console.error('Supabase connection test error:', err)
+    console.error('Supabase connection test error:', err);
     return false
   }
 }
@@ -789,22 +797,35 @@ export const testOpenAIConnection = async () => {
     const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
     
     if (!openaiApiKey) {
-      console.warn('OpenAI API key not configured');
+      console.warn('OpenAI API key not configured - VITE_OPENAI_API_KEY missing');
+      return false;
+    }
+
+    if (openaiApiKey.includes('placeholder') || openaiApiKey.includes('your_') || openaiApiKey.length < 20) {
+      console.warn('OpenAI API key appears to be placeholder or invalid');
       return false;
     }
 
     console.log('Testing OpenAI API connection...');
     
-    const response = await fetch('https://api.openai.com/v1/models', {
+    // Test with a simple completion request instead of models endpoint
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${openaiApiKey}`
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json'
       }
     });
 
     if (response.ok) {
       console.log('OpenAI API connection successful');
       return true;
+    } else if (response.status === 401) {
+      console.error('OpenAI API key is invalid or expired');
+      return false;
+    } else if (response.status === 429) {
+      console.warn('OpenAI API rate limit exceeded, but key is valid');
+      return true; // Key is valid, just rate limited
     } else {
       console.error('OpenAI API connection failed:', response.status, response.statusText);
       return false;

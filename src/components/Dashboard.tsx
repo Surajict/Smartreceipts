@@ -25,6 +25,7 @@ import {
 import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats } from '../lib/supabase';
 import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
+import APIConnectionTest from './APIConnectionTest';
 
 interface DashboardProps {
   onSignOut: () => void;
@@ -90,6 +91,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [isGeneratingEmbeddings, setIsGeneratingEmbeddings] = useState(false);
   const [embeddingStatus, setEmbeddingStatus] = useState<{total: number, withEmbeddings: number, withoutEmbeddings: number} | null>(null);
   const [ragResult, setRagResult] = useState<RAGResult | null>(null);
+  const [showAPITest, setShowAPITest] = useState(false);
   
   const [summaryStats, setSummaryStats] = useState<SummaryStats>({
     receiptsScanned: 0,
@@ -405,6 +407,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     setSearchError(null);
     setRagResult(null);
   };
+
+  if (showAPITest) {
+    return <APIConnectionTest onBack={() => setShowAPITest(false)} />;
+  }
 
   // Update the search results display section
   const renderSearchResults = () => {
@@ -846,6 +852,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                 <span className="text-xs text-text-secondary">
                   {embeddingStatus.withEmbeddings}/{embeddingStatus.total} indexed
                 </span>
+                <button
+                  onClick={() => setShowAPITest(true)}
+                  className="text-xs text-text-secondary hover:text-primary transition-colors duration-200 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded"
+                >
+                  Check API Status
+                </button>
               )}
             </div>
           </div>

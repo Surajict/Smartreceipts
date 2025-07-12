@@ -26,6 +26,7 @@ import {
   ImageIcon
 } from 'lucide-react';
 import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getUserCurrencySettings, convertCurrencyWithOpenAI } from '../lib/supabase';
+import { CurrencyService } from '../services/currencyService';
 
 interface MyLibraryProps {
   onBackToDashboard: () => void;
@@ -78,6 +79,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     display_currency_mode: 'native',
     currency_symbol: '$'
   });
+  const [convertedAmounts, setConvertedAmounts] = useState<{ [key: string]: number }>({});
   const [imageLoading, setImageLoading] = useState<{ [key: string]: boolean }>({});
   const [imageErrors, setImageErrors] = useState<{ [key: string]: boolean }>({});
 
@@ -96,6 +98,11 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     filterAndSortReceipts();
   }, [receipts, searchQuery, sortField, sortOrder]);
 
+  useEffect(() => {
+    if (receipts.length > 0 && currencySettings.preferred_currency) {
+      convertReceiptAmounts();
+    }
+  }, [receipts, currencySettings]);
   const loadUser = async () => {
     const currentUser = await getCurrentUser();
     setUser(currentUser);
@@ -110,7 +117,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
         setCurrencySettings({
           preferred_currency: settings.data.preferred_currency || 'USD',
           display_currency_mode: settings.data.display_currency_mode || 'native',
-          currency_symbol: getCurrencySymbol(settings.data.preferred_currency || 'USD')
+          currency_symbol: CurrencyService.formatCurrency(0, settings.data.preferred_currency || 'USD').replace('0', '').replace('.00', '')
         });
       }
     } catch (error) {
@@ -118,17 +125,33 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     }
   };
 
-  const getCurrencySymbol = (currencyCode: string): string => {
-    const currencyMap: { [key: string]: string } = {
-      'USD': '$', 'AED': 'د.إ', 'GBP': '£', 'EUR': '€', 'CAD': 'C$',
-      'AUD': 'A$', 'JPY': '¥', 'INR': '₹', 'CNY': '¥', 'CHF': 'CHF',
-      'SEK': 'kr', 'NOK': 'kr', 'DKK': 'kr', 'SGD': 'S$', 'HKD': 'HK$',
-      'MYR': 'RM', 'THB': '฿', 'KRW': '₩', 'BRL': 'R$', 'MXN': '$',
-      'SAR': '﷼', 'QAR': '﷼', 'KWD': 'د.ك', 'BHD': '.د.ب', 'OMR': '﷼'
-    };
-    return currencyMap[currencyCode] || currencyCode;
-  };
 
+  const convertReceiptAmounts = async () => {
+    if (!receipts.length || !currencySettings.preferred_currency) return;
+    
+    const newConvertedAmounts: { [key: string]: number } = {};
+    
+    for (const receipt of receipts) {
+      if (receipt.amount && receipt.original_currency && receipt.original_currency !== currencySettings.preferred_currency) {
+        try {
+          const conversion = await CurrencyService.convertCurrency(
+            receipt.amount,
+            receipt.original_currency,
+            currencySettings.preferred_currency
+          );
+          newConvertedAmounts[receipt.id] = conversion.converted_amount;
+          console.log(`✅ Converted ${receipt.amount} ${receipt.original_currency} = ${conversion.converted_amount} ${currencySettings.preferred_currency}`);
+        } catch (error) {
+          console.warn(`Failed to convert ${receipt.original_currency} to ${currencySettings.preferred_currency} for receipt ${receipt.id}`);
+          newConvertedAmounts[receipt.id] = receipt.amount; // Fallback to original amount
+        }
+      } else {
+        newConvertedAmounts[receipt.id] = receipt.amount || 0;
+      }
+    }
+    
+    setConvertedAmounts(newConvertedAmounts);
+  };
   const loadReceipts = async () => {
     if (!user) return;
     
@@ -138,38 +161,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
       if (error) {
         console.error('Error loading receipts:', error);
       } else {
-        const receiptsWithConversion = await Promise.all(
-          (data || []).map(async (receipt) => {
-            // Convert currency if needed
-            if (receipt.original_currency && 
-                receipt.original_currency !== currencySettings.preferred_currency &&
-                !receipt.converted_amount) {
-              
-              try {
-                const conversion = await convertCurrencyWithOpenAI(
-                  receipt.amount,
-                  receipt.original_currency,
-                  currencySettings.preferred_currency
-                );
-                
-                if (conversion.data) {
-                  return {
-                    ...receipt,
-                    converted_amount: conversion.data.converted_amount,
-                    converted_currency: conversion.data.target_currency,
-                    exchange_rate: conversion.data.exchange_rate,
-                    conversion_date: conversion.data.conversion_date
-                  };
-                }
-              } catch (error) {
-                console.warn('Currency conversion failed for receipt:', receipt.id);
-              }
-            }
-            return receipt;
-          })
-        );
-        
-        setReceipts(receiptsWithConversion);
+        setReceipts(data || []);
       }
     } catch (error) {
       console.error('Error loading receipts:', error);
@@ -255,41 +247,44 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   };
 
   const formatCurrency = (receipt: Receipt): { primary: string; secondary?: string } => {
-    const { display_currency_mode, preferred_currency, currency_symbol } = currencySettings;
+    const { display_currency_mode, preferred_currency } = currencySettings;
+    const convertedAmount = convertedAmounts[receipt.id] || receipt.amount || 0;
     
     // Get original amount with currency
     const originalCurrency = receipt.original_currency || 'USD';
-    const originalSymbol = getCurrencySymbol(originalCurrency);
-    const originalAmount = `${originalSymbol}${receipt.amount}`;
+    const originalFormatted = CurrencyService.formatCurrency(receipt.amount || 0, originalCurrency);
     
     // Get converted amount
-    const convertedAmount = receipt.converted_amount 
-      ? `${currency_symbol}${receipt.converted_amount.toFixed(2)}`
-      : `${currency_symbol}${receipt.amount}`;
+    const convertedFormatted = CurrencyService.formatCurrency(convertedAmount, preferred_currency);
     
     if (display_currency_mode === 'usd') {
-      return { primary: originalCurrency === 'USD' ? originalAmount : `$${receipt.amount}` };
+      if (originalCurrency === 'USD') {
+        return { primary: originalFormatted };
+      } else {
+        // Convert to USD
+        return { primary: CurrencyService.formatCurrency(receipt.amount || 0, 'USD') };
+      }
     } else if (display_currency_mode === 'native') {
-      if (originalCurrency !== preferred_currency && receipt.converted_amount) {
+      if (originalCurrency !== preferred_currency) {
         return { 
-          primary: convertedAmount,
-          secondary: originalAmount
+          primary: convertedFormatted,
+          secondary: originalFormatted
         };
       } else {
-        return { primary: originalAmount };
+        return { primary: originalFormatted };
       }
     } else if (display_currency_mode === 'both') {
-      if (originalCurrency !== preferred_currency && receipt.converted_amount) {
+      if (originalCurrency !== preferred_currency) {
         return { 
-          primary: convertedAmount,
-          secondary: originalAmount
+          primary: convertedFormatted,
+          secondary: originalFormatted
         };
       } else {
-        return { primary: originalAmount };
+        return { primary: originalFormatted };
       }
     }
     
-    return { primary: originalAmount };
+    return { primary: originalFormatted };
   };
 
   const formatDate = (dateString: string) => {

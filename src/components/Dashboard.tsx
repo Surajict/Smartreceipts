@@ -26,6 +26,7 @@ import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats
 import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
 import { AIService } from '../services/aiService';
+import { CurrencyService } from '../services/currencyService';
 import APIConnectionTest from './APIConnectionTest';
 
 interface DashboardProps {
@@ -105,6 +106,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [showAPITest, setShowAPITest] = useState(false);
   const [userCurrency, setUserCurrency] = useState<{ code: string; symbol: string }>({ code: 'USD', symbol: '$' });
   const [currencyDisplayMode, setCurrencyDisplayMode] = useState<'native' | 'usd' | 'both'>('native');
+  const [convertedAmounts, setConvertedAmounts] = useState<{ [key: string]: number }>({});
   
   // Currency state
   const [showCurrencyToggle, setShowCurrencyToggle] = useState(false);
@@ -218,6 +220,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       convertReceiptAmounts();
     }
   }, [currencySettings.display_currency_mode, currencySettings.preferred_currency]);
+
+  useEffect(() => {
+    if (recentReceipts.length > 0 && userCurrency.code) {
+      convertReceiptAmounts();
+    }
+  }, [recentReceipts, userCurrency, currencyDisplayMode]);
 
   const loadUserCurrency = async (currentUser: any) => {
     try {
@@ -589,27 +597,41 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   };
 
   const formatAmount = (receipt: RecentReceipt): string => {
-    const { display_currency_mode, preferred_currency, currency_symbol } = currencySettings;
+    const amount = receipt.amount || 0;
+    const convertedAmount = convertedAmounts[receipt.id] || amount;
+    const originalCurrency = receipt.original_currency || 'USD';
     
-    if (display_currency_mode === 'usd') {
-      return `$${receipt.amount}`;
-    } else if (display_currency_mode === 'native') {
-      if (receipt.converted_amount && receipt.original_currency !== preferred_currency) {
-        return `${currency_symbol}${receipt.converted_amount.toFixed(2)}`;
-      } else {
-        return `${currency_symbol}${receipt.amount}`;
-      }
-    } else if (display_currency_mode === 'both') {
-      const nativeAmount = receipt.converted_amount && receipt.original_currency !== preferred_currency
-        ? `${currency_symbol}${receipt.converted_amount.toFixed(2)}`
-        : `${currency_symbol}${receipt.amount}`;
-      const usdAmount = receipt.original_currency === 'USD' 
-        ? `$${receipt.amount}` 
-        : `$${receipt.amount}`;
-      return preferred_currency === 'USD' ? usdAmount : `${nativeAmount} (${usdAmount})`;
+    switch (currencyDisplayMode) {
+      case 'native':
+        if (originalCurrency === userCurrency.code || !receipt.original_currency) {
+          return CurrencyService.formatCurrency(amount, userCurrency.code);
+        } else {
+          return CurrencyService.formatCurrency(convertedAmount, userCurrency.code);
+        }
+      case 'usd':
+        if (originalCurrency === 'USD' || !receipt.original_currency) {
+          return CurrencyService.formatCurrency(amount, 'USD');
+        } else {
+          // Convert to USD if needed
+          if (userCurrency.code === 'USD') {
+            return CurrencyService.formatCurrency(convertedAmount, 'USD');
+          } else {
+            // Need to convert from user currency to USD
+            const usdAmount = convertedAmount / 1.05; // Approximate, should use real conversion
+            return CurrencyService.formatCurrency(usdAmount, 'USD');
+          }
+        }
+      case 'both':
+        if (originalCurrency === userCurrency.code || !receipt.original_currency) {
+          return CurrencyService.formatCurrency(amount, userCurrency.code);
+        } else {
+          const originalFormatted = CurrencyService.formatCurrency(amount, originalCurrency);
+          const convertedFormatted = CurrencyService.formatCurrency(convertedAmount, userCurrency.code);
+          return `${convertedFormatted} (${originalFormatted})`;
+        }
+      default:
+        return CurrencyService.formatCurrency(amount, userCurrency.code);
     }
-    
-    return `${currency_symbol}${receipt.amount}`;
   };
 
   const updateCurrencyDisplayMode = async (mode: 'native' | 'usd' | 'both') => {

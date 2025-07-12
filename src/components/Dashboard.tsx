@@ -25,6 +25,7 @@ import {
 import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats } from '../lib/supabase';
 import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
+import { AIService } from '../services/aiService';
 import APIConnectionTest from './APIConnectionTest';
 
 interface DashboardProps {
@@ -93,6 +94,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [ragResult, setRagResult] = useState<RAGResult | null>(null);
   const [showAPITest, setShowAPITest] = useState(false);
   
+  // Currency state
+  const [userCurrency, setUserCurrency] = useState<{
+    code: string;
+    symbol: string;
+    name: string;
+  }>({ code: 'USD', symbol: '$', name: 'US Dollar' });
+  
   const [summaryStats, setSummaryStats] = useState<SummaryStats>({
     receiptsScanned: 0,
     totalAmount: 0,
@@ -124,6 +132,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       if (currentUser) {
         await loadDashboardData(currentUser.id);
         await loadEmbeddingStatus(currentUser.id);
+        await loadUserCurrency(currentUser);
       }
     };
     loadUser();
@@ -135,6 +144,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
     return () => clearInterval(timer);
   }, []);
+
+  const loadUserCurrency = async (currentUser: any) => {
+    try {
+      const nativeCountry = currentUser.user_metadata?.native_country;
+      if (nativeCountry) {
+        const currencyInfo = await AIService.getCurrencyForCountry(nativeCountry);
+        setUserCurrency({
+          code: currencyInfo.currency_code,
+          symbol: currencyInfo.currency_symbol,
+          name: currencyInfo.currency_name
+        });
+      }
+    } catch (error) {
+      console.error('Error loading user currency:', error);
+      // Keep default USD
+    }
+  };
 
   const loadDashboardData = async (userId: string) => {
     try {
@@ -164,7 +190,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       } else {
         const summaryStats: SummaryStats = {
           receiptsScanned: stats.total_receipts || 0,
-          totalAmount: stats.total_amount || 0,
+          totalAmount: await convertToUserCurrency(stats.total_amount || 0, 'USD'), // Convert if needed
           itemsCaptured: stats.total_receipts || 0,
           warrantiesClaimed: 0 // This would need a separate tracking mechanism
         };
@@ -172,18 +198,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       }
 
       // Process recent receipts with product name and store name
-      const recentReceiptsData: RecentReceipt[] = (receipts || [])
+      const recentReceiptsData: Promise<RecentReceipt>[] = (receipts || [])
         .slice(0, 4)
-        .map(receipt => ({
+        .map(async receipt => ({
           id: receipt.id,
           productName: receipt.product_description || 'Unknown Product',
           storeName: receipt.store_name || 'Unknown Store',
           brandName: receipt.brand_name || 'Unknown Brand',
           date: receipt.purchase_date,
-          amount: receipt.amount || 0,
+          amount: await convertToUserCurrency(receipt.amount || 0, receipt.currency || 'USD'),
           items: 1 // Assuming 1 item per receipt for now
         }));
-      setRecentReceipts(recentReceiptsData);
+      
+      // Wait for all currency conversions to complete
+      const resolvedReceipts = await Promise.all(recentReceiptsData);
+      setRecentReceipts(resolvedReceipts);
 
       // Calculate warranty alerts
       const alerts: WarrantyAlert[] = (receipts || [])
@@ -215,6 +244,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       console.error('Error loading dashboard data:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const convertToUserCurrency = async (amount: number, fromCurrency: string): Promise<number> => {
+    try {
+      if (fromCurrency === userCurrency.code || !amount) {
+        return amount;
+      }
+      
+      const conversion = await AIService.convertCurrency(amount, fromCurrency, userCurrency.code);
+      return conversion?.converted_amount || amount;
+    } catch (error) {
+      console.error('Currency conversion error:', error);
+      return amount; // Return original amount if conversion fails
     }
   };
 
@@ -581,7 +624,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD'
+      currency: userCurrency.code,
+      currencyDisplay: 'symbol'
     }).format(amount);
   };
 

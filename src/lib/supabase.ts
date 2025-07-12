@@ -56,7 +56,11 @@ export const saveReceiptToDatabase = async (receiptData: any, userId: string) =>
       processing_method: receiptData.processing_method || 'manual',
       ocr_confidence: receiptData.ocr_confidence || null,
       extracted_text: receiptData.extracted_text || null,
-      ocr_engine: receiptData.ocr_engine || null
+      original_currency: receiptData.original_currency || 'USD',
+      converted_amount: receiptData.converted_amount || null,
+      converted_currency: receiptData.converted_currency || null,
+      exchange_rate: receiptData.exchange_rate || null,
+      conversion_date: receiptData.conversion_date || null
     };
 
     console.log('Prepared insert data:', insertData);

@@ -265,7 +265,12 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         image_url: imageUrl,
         processing_method: processingMethod,
         ocr_confidence: ocrConfidence,
-        extracted_text: extractedText
+        extracted_text: extractedText,
+        original_currency: formData.currency || 'USD',
+        converted_amount: formData.amount, // Will be converted in backend if needed
+        converted_currency: userCurrency?.code || 'USD',
+        exchange_rate: 1, // Will be updated if conversion happens
+        conversion_date: new Date().toISOString().split('T')[0]
       };
 
       const saveResult = await saveReceiptToDatabase(receiptData, user.id);

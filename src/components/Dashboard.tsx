@@ -95,6 +95,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [showAPITest, setShowAPITest] = useState(false);
   
   // Currency state
+  const [currencyDisplayMode, setCurrencyDisplayMode] = useState<'native' | 'usd' | 'both'>('native');
+  const [showCurrencyToggle, setShowCurrencyToggle] = useState(false);
   const [userCurrency, setUserCurrency] = useState<{
     code: string;
     symbol: string;
@@ -133,6 +135,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         await loadDashboardData(currentUser.id);
         await loadEmbeddingStatus(currentUser.id);
         await loadUserCurrency(currentUser);
+        await loadCurrencySettings(currentUser.id);
       }
     };
     loadUser();
@@ -162,6 +165,31 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     }
   };
 
+  const loadCurrencySettings = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_privacy_settings')
+        .select('preferred_currency, display_currency_mode')
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        console.warn('Error loading currency settings:', error);
+        return;
+      }
+
+      if (data) {
+        setCurrencyDisplayMode(data.display_currency_mode || 'native');
+        if (data.preferred_currency) {
+          // Update user currency if they have a preference set
+          const currencyInfo = await AIService.getCurrencyForCountry('');
+          // You might want to create a currency lookup function here
+        }
+      }
+    } catch (error) {
+      console.error('Error loading currency settings:', error);
+    }
+  };
   const loadDashboardData = async (userId: string) => {
     try {
       setIsLoading(true);
@@ -622,11 +650,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: userCurrency.code,
-      currencyDisplay: 'symbol'
-    }).format(amount);
+    if (currencyDisplayMode === 'both') {
+      const nativeAmount = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: userCurrency.code,
+        currencyDisplay: 'symbol'
+      }).format(amount);
+      
+      const usdAmount = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        currencyDisplay: 'symbol'
+      }).format(amount);
+      
+      return userCurrency.code === 'USD' ? nativeAmount : `${nativeAmount} (${usdAmount})`;
+    } else if (currencyDisplayMode === 'usd') {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        currencyDisplay: 'symbol'
+      }).format(amount);
+    } else {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: userCurrency.code,
+        currencyDisplay: 'symbol'
+      }).format(amount);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -668,6 +718,65 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
             {/* Header Actions */}
             <div className="flex items-center space-x-4">
+              {/* Currency Toggle */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowCurrencyToggle(!showCurrencyToggle)}
+                  className="flex items-center space-x-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+                >
+                  <DollarSign className="h-4 w-4 text-text-secondary" />
+                  <span className="text-sm font-medium text-text-primary">
+                    {currencyDisplayMode === 'native' ? userCurrency.code : 
+                     currencyDisplayMode === 'usd' ? 'USD' : 'Both'}
+                  </span>
+                </button>
+
+                {/* Currency Dropdown */}
+                {showCurrencyToggle && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-200">
+                      <h3 className="font-medium text-text-primary text-sm">Currency Display</h3>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setCurrencyDisplayMode('native');
+                        setShowCurrencyToggle(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm transition-colors duration-200 flex items-center space-x-2 ${
+                        currencyDisplayMode === 'native' ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-gray-100'
+                      }`}
+                    >
+                      <span>Native Currency ({userCurrency.code})</span>
+                      {currencyDisplayMode === 'native' && <CheckCircle className="h-4 w-4 ml-auto" />}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCurrencyDisplayMode('usd');
+                        setShowCurrencyToggle(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm transition-colors duration-200 flex items-center space-x-2 ${
+                        currencyDisplayMode === 'usd' ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-gray-100'
+                      }`}
+                    >
+                      <span>USD Only</span>
+                      {currencyDisplayMode === 'usd' && <CheckCircle className="h-4 w-4 ml-auto" />}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCurrencyDisplayMode('both');
+                        setShowCurrencyToggle(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm transition-colors duration-200 flex items-center space-x-2 ${
+                        currencyDisplayMode === 'both' ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-gray-100'
+                      }`}
+                    >
+                      <span>Both Currencies</span>
+                      {currencyDisplayMode === 'both' && <CheckCircle className="h-4 w-4 ml-auto" />}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* Notifications */}
               <div className="relative">
                 <button 
@@ -1124,12 +1233,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       </main>
 
       {/* Click outside to close menus */}
-      {(showUserMenu || showNotificationMenu) && (
+      {(showUserMenu || showNotificationMenu || showCurrencyToggle) && (
         <div
           className="fixed inset-0 z-40"
           onClick={() => {
             setShowUserMenu(false);
             setShowNotificationMenu(false);
+            setShowCurrencyToggle(false);
           }}
         />
       )}

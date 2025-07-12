@@ -48,6 +48,8 @@ interface PrivacySettings {
   data_analysis: 'allowed' | 'not_allowed';
   biometric_login: boolean;
   two_factor_auth: boolean;
+  preferred_currency: string;
+  display_currency_mode: 'native' | 'usd' | 'both';
 }
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
@@ -83,7 +85,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
     data_collection: true,
     data_analysis: 'allowed',
     biometric_login: false,
-    two_factor_auth: false
+    two_factor_auth: false,
+    preferred_currency: 'USD',
+    display_currency_mode: 'native'
   });
   
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
@@ -162,7 +166,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
           data_collection: privacyData[0].data_collection,
           data_analysis: privacyData[0].data_analysis,
           biometric_login: privacyData[0].biometric_login,
-          two_factor_auth: privacyData[0].two_factor_auth
+          two_factor_auth: privacyData[0].two_factor_auth,
+          preferred_currency: privacyData[0].preferred_currency || 'USD',
+          display_currency_mode: privacyData[0].display_currency_mode || 'native'
         });
       }
     } catch (error) {
@@ -385,6 +391,40 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
     setNewEmail(user?.email || '');
     setCurrentPassword('');
     setEmailUpdateError(null);
+  };
+
+  const updateUserCountry = async (country: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: {
+          native_country: country
+        }
+      });
+
+      if (error) throw error;
+
+      // Also update the users table
+      const { error: dbError } = await supabase
+        .from('users')
+        .update({ native_country: country })
+        .eq('id', user.id);
+
+      if (dbError) {
+        console.warn('Failed to update users table:', dbError);
+      }
+
+      // Update local state
+      setUser(prev => prev ? { 
+        ...prev, 
+        user_metadata: { ...prev.user_metadata, native_country: country }
+      } : null);
+
+    } catch (error) {
+      console.error('Error updating country:', error);
+      setSettingsError('Failed to update country');
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -922,6 +962,110 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
                       enabled={privacySettings.two_factor_auth}
                       onChange={(enabled) => updatePrivacySettings({ two_factor_auth: enabled })}
                     />
+                  </div>
+
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h3 className="font-medium text-text-primary">Native Country</h3>
+                        <p className="text-sm text-text-secondary">Your country for currency and regional settings</p>
+                      </div>
+                    </div>
+                    <select
+                      value={user?.user_metadata?.native_country || ''}
+                      onChange={(e) => updateUserCountry(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="">Select your country</option>
+                      <option value="United States">United States</option>
+                      <option value="United Arab Emirates">United Arab Emirates</option>
+                      <option value="United Kingdom">United Kingdom</option>
+                      <option value="Canada">Canada</option>
+                      <option value="Australia">Australia</option>
+                      <option value="Germany">Germany</option>
+                      <option value="France">France</option>
+                      <option value="Japan">Japan</option>
+                      <option value="India">India</option>
+                      <option value="China">China</option>
+                      <option value="Brazil">Brazil</option>
+                      <option value="Mexico">Mexico</option>
+                      <option value="South Korea">South Korea</option>
+                      <option value="Singapore">Singapore</option>
+                      <option value="Netherlands">Netherlands</option>
+                      <option value="Switzerland">Switzerland</option>
+                      <option value="Sweden">Sweden</option>
+                      <option value="Norway">Norway</option>
+                      <option value="Denmark">Denmark</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h3 className="font-medium text-text-primary">Preferred Currency</h3>
+                        <p className="text-sm text-text-secondary">Default currency for dashboard display</p>
+                      </div>
+                    </div>
+                    <select
+                      value={privacySettings.preferred_currency}
+                      onChange={(e) => updatePrivacySettings({ preferred_currency: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="USD">USD - US Dollar</option>
+                      <option value="AED">AED - UAE Dirham</option>
+                      <option value="GBP">GBP - British Pound</option>
+                      <option value="EUR">EUR - Euro</option>
+                      <option value="CAD">CAD - Canadian Dollar</option>
+                      <option value="AUD">AUD - Australian Dollar</option>
+                      <option value="JPY">JPY - Japanese Yen</option>
+                      <option value="INR">INR - Indian Rupee</option>
+                      <option value="CNY">CNY - Chinese Yuan</option>
+                    </select>
+                  </div>
+
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h3 className="font-medium text-text-primary">Currency Display Mode</h3>
+                        <p className="text-sm text-text-secondary">How to show amounts on dashboard</p>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="display_currency_mode"
+                          value="native"
+                          checked={privacySettings.display_currency_mode === 'native'}
+                          onChange={(e) => updatePrivacySettings({ display_currency_mode: e.target.value as 'native' | 'usd' | 'both' })}
+                          className="text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-text-secondary">Native Currency Only</span>
+                      </label>
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="display_currency_mode"
+                          value="usd"
+                          checked={privacySettings.display_currency_mode === 'usd'}
+                          onChange={(e) => updatePrivacySettings({ display_currency_mode: e.target.value as 'native' | 'usd' | 'both' })}
+                          className="text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-text-secondary">USD Only</span>
+                      </label>
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="display_currency_mode"
+                          value="both"
+                          checked={privacySettings.display_currency_mode === 'both'}
+                          onChange={(e) => updatePrivacySettings({ display_currency_mode: e.target.value as 'native' | 'usd' | 'both' })}
+                          className="text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-text-secondary">Both Currencies</span>
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>

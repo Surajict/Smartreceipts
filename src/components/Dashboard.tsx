@@ -849,15 +849,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                 AI-Powered
               </span>
               {embeddingStatus && (
-                <span className="text-xs text-text-secondary">
-                  {embeddingStatus.withEmbeddings}/{embeddingStatus.total} indexed
-                </span>
-                <button
-                  onClick={() => setShowAPITest(true)}
-                  className="text-xs text-text-secondary hover:text-primary transition-colors duration-200 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded"
-                >
-                  Check API Status
-                </button>
+                <>
+                  <span className="text-xs text-text-secondary">
+                    {embeddingStatus.withEmbeddings}/{embeddingStatus.total} indexed
+                  </span>
+                  <button
+                    onClick={() => setShowAPITest(true)}
+                    className="text-xs text-text-secondary hover:text-primary transition-colors duration-200 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded"
+                  >
+                    Check API Status
+                  </button>
+                </>
               )}
             </div>
           </div>

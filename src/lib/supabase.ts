@@ -821,49 +821,33 @@ export const extractReceiptDataWithGPT = async (extractedText: string) => {
     const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
     
     if (!openaiApiKey) {
-      throw new Error('OpenAI API key not configured');
+      console.error('OpenAI API key not configured. Please set VITE_OPENAI_API_KEY in your environment variables.');
+      throw new Error('OpenAI API key not configured. Please check your environment variables.');
     }
 
     console.log('Extracting receipt data with GPT...');
 
-    const prompt = `You are an AI assistant that extracts individual items from retail receipts.
+    const prompt = `You are an AI assistant that extracts structured data from retail receipts.
 Given raw text from a receipt, analyze and return a list of each item in the following JSON format.
-If only one item is found, still return it as an array with one element.
 
-IMPORTANT: Extract ALL individual items from the receipt, not just the first one.
+For SINGLE ITEM receipts, return the main product information.
+For MULTIPLE ITEM receipts, extract all individual products.
 
-Return ONLY valid JSON in this exact format:
+Return ONLY valid JSON in this format:
 {
-  "items": [
-    {
-      "product_description": "string - full product name",
-      "brand_name": "string - brand name or null",
-      "model_number": "string - model/SKU or null", 
-      "price": "number - individual item price or null",
-      "quantity": "number - quantity purchased or 1",
-      "warranty_period_months": "number - standard warranty in months or null",
-      "extended_warranty_months": "number - extended warranty months or null"
-    }
-  ],
-  "store_info": {
-    "store_name": "string - store name or null",
-    "purchase_location": "string - store address/location or null",
-    "purchase_date": "string - date in YYYY-MM-DD format",
-    "total_amount": "number - receipt total amount or null",
-    "country": "string - country or 'United States'"
-  }
+  "product_description": "string - main product name",
+  "brand_name": "string - brand name",
+  "model_number": "string - model/SKU or null",
+  "store_name": "string - store name or null",
+  "purchase_location": "string - store address or null",
+  "purchase_date": "string - date in YYYY-MM-DD format",
+  "amount": "number - price or null",
+  "warranty_period": "string - warranty period like '1 year' or '24 months'",
+  "extended_warranty": "string - extended warranty or null",
+  "country": "string - country or 'United States'"
 }
 
-Examples of what to extract as separate items:
-- Each product line with different names/descriptions
-- Different models or variants
-- Different categories of products
-
-Do NOT extract:
-- Tax lines
-- Discount lines
-- Payment method lines
-- Store policies or return info
+Extract the main product from the receipt. If multiple products exist, focus on the primary/most expensive item.
 
 Receipt text:
 ${extractedText}
@@ -881,14 +865,14 @@ Return only valid JSON:`;
         messages: [
           {
             role: 'system',
-            content: 'You are a precise data extraction assistant specialized in retail receipts. Extract ALL individual items from receipts and return only valid JSON with the requested structure. Focus on actual products, not taxes, discounts, or payment info.'
+            content: 'You are a precise data extraction assistant specialized in retail receipts. Extract structured data from receipts and return only valid JSON. Focus on the main product information.'
           },
           {
             role: 'user',
             content: prompt
           }
         ],
-        max_tokens: 1200,
+        max_tokens: 800,
         temperature: 0.1,
       }),
     });
@@ -914,60 +898,40 @@ Return only valid JSON:`;
 
     const extractedData = JSON.parse(jsonMatch[0]);
     
-    // Validate and clean the extracted data
-    const items = extractedData.items || [];
-    const storeInfo = extractedData.store_info || {};
-    
-    console.log(`GPT extracted ${items.length} items from receipt`);
-    
-    // Clean and validate items
-    const cleanedItems = items.map((item: any, index: number) => ({
-      product_description: item.product_description || `Receipt Item ${index + 1}`,
-      brand_name: item.brand_name || 'Unknown Brand',
-      model_number: item.model_number || null,
-      price: typeof item.price === 'number' ? item.price : null,
-      quantity: typeof item.quantity === 'number' ? item.quantity : 1,
-      warranty_period_months: typeof item.warranty_period_months === 'number' ? item.warranty_period_months : null,
-      extended_warranty_months: typeof item.extended_warranty_months === 'number' ? item.extended_warranty_months : null
-    }));
-    
-    // Clean store info
-    const cleanedStoreInfo = {
-      store_name: storeInfo.store_name || null,
-      purchase_location: storeInfo.purchase_location || null,
-      purchase_date: storeInfo.purchase_date || new Date().toISOString().split('T')[0],
-      total_amount: typeof storeInfo.total_amount === 'number' ? storeInfo.total_amount : null,
-      country: storeInfo.country || 'United States'
+    // Clean and validate the extracted data
+    const cleanedData = {
+      product_description: extractedData.product_description || 'Unknown Product',
+      brand_name: extractedData.brand_name || 'Unknown Brand',
+      model_number: extractedData.model_number || null,
+      store_name: extractedData.store_name || null,
+      purchase_location: extractedData.purchase_location || null,
+      purchase_date: extractedData.purchase_date || new Date().toISOString().split('T')[0],
+      amount: typeof extractedData.amount === 'number' ? extractedData.amount : null,
+      warranty_period: extractedData.warranty_period || '1 year',
+      extended_warranty: extractedData.extended_warranty || null,
+      country: extractedData.country || 'United States'
     };
     
     // Ensure date is in correct format
-    if (cleanedStoreInfo.purchase_date && !cleanedStoreInfo.purchase_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      const date = new Date(cleanedStoreInfo.purchase_date);
+    if (cleanedData.purchase_date && !cleanedData.purchase_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const date = new Date(cleanedData.purchase_date);
       if (!isNaN(date.getTime())) {
-        cleanedStoreInfo.purchase_date = date.toISOString().split('T')[0];
+        cleanedData.purchase_date = date.toISOString().split('T')[0];
       } else {
-        cleanedStoreInfo.purchase_date = new Date().toISOString().split('T')[0];
+        cleanedData.purchase_date = new Date().toISOString().split('T')[0];
       }
     }
     
-    const result = {
-      items: cleanedItems,
-      store_info: cleanedStoreInfo
-    };
-
-    console.log('GPT multi-item extraction successful:', {
-      itemCount: result.items.length,
-      storeName: result.store_info.store_name,
-      totalAmount: result.store_info.total_amount
+    console.log('GPT extraction successful:', {
+      product: cleanedData.product_description,
+      brand: cleanedData.brand_name,
+      store: cleanedData.store_name
     });
     
-    return { data: result, error: null };
+    return cleanedData;
 
   } catch (error: any) {
     console.error('GPT extraction error:', error);
-    return { 
-      data: null, 
-      error: { message: error.message || 'Failed to extract data with GPT' } 
-    };
+    throw new Error(error.message || 'Failed to extract data with GPT');
   }
 }

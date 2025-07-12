@@ -136,16 +136,18 @@ Before you begin, ensure you have the following installed:
 2. Copy your project URL and anon key from Settings → API
 3. Add them to your `.env.local` file
 
-#### **OpenAI Setup** (Required for AI features)
+#### **OpenAI Setup** (REQUIRED for AI receipt processing)
 1. Create an account at [openai.com](https://openai.com)
 2. Generate an API key from the API section
-3. Add the key to your `.env.local` file
+3. Add the key to your `.env` file as `VITE_OPENAI_API_KEY`
+
+**Important**: The OpenAI API key is required for the receipt scanning functionality to work properly.
 
 #### **Google Cloud Vision** (Optional - enhances OCR)
 1. Create a Google Cloud project
 2. Enable the Vision API
 3. Generate an API key
-4. Add to your `.env.local` file
+4. Add to your `.env` file as `VITE_GOOGLE_CLOUD_API_KEY`
 
 ### **Running the Application**
 
@@ -233,6 +235,25 @@ Smart_Receipts_Suraj_V5/
 - Export receipt data when needed
 
 ## 🔧 Configuration
+
+### **Environment Variables Setup**
+
+1. **Copy the example file**:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Fill in your API keys**:
+   ```env
+   VITE_SUPABASE_URL=https://napulczxrrnsjtmaixzp.supabase.co
+   VITE_SUPABASE_ANON_KEY=your_actual_supabase_anon_key
+   VITE_OPENAI_API_KEY=your_actual_openai_api_key
+   VITE_GOOGLE_CLOUD_API_KEY=your_actual_google_cloud_key
+   ```
+
+3. **Required vs Optional**:
+   - ✅ **Required**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_OPENAI_API_KEY`
+   - 🔶 **Optional**: `VITE_GOOGLE_CLOUD_API_KEY` (enhances OCR accuracy)
 
 ### **MCP Server Setup (Cursor IDE Users)**
 

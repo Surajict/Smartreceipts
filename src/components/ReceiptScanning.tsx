@@ -28,7 +28,6 @@ import {
   Settings
 } from 'lucide-react';
 import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
-import { AIService, ExtractedItem, StoreInfo } from '../services/aiService';
 import { OCRService, OCREngine } from '../services/ocrService';
 
 interface ReceiptScanningProps {
@@ -48,29 +47,6 @@ interface ExtractedData {
   country: string;
 }
 
-interface ExtractedItem {
-  product_description: string;
-  brand_name: string;
-  model_number: string | null;
-  price: number | null;
-  quantity: number;
-  warranty_period_months: number | null;
-  extended_warranty_months: number | null;
-}
-
-interface ExtractedStoreInfo {
-  store_name: string | null;
-  purchase_location: string | null;
-  purchase_date: string;
-  total_amount: number | null;
-  country: string;
-}
-
-interface MultiItemExtractionResult {
-  items: ExtractedItem[];
-  store_info: ExtractedStoreInfo;
-}
-
 type CaptureMode = 'normal' | 'long';
 type InputMode = 'capture' | 'upload' | 'manual';
 
@@ -81,10 +57,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
-  const [extractedItems, setExtractedItems] = useState<ExtractedItem[]>([]);
-  const [storeInfo, setStoreInfo] = useState<ExtractedStoreInfo | null>(null);
-  const [selectedItem, setSelectedItem] = useState<ExtractedItem | null>(null);
-  const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -145,7 +117,11 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       // Upload image to Supabase Storage
       if (file) {
         setProcessingStep('Uploading image...');
-        uploadedImageUrl = await uploadReceiptImage(file, user.id);
+        const uploadResult = await uploadReceiptImage(file, user.id);
+        if (uploadResult.error) {
+          throw new Error(`Failed to upload image: ${uploadResult.error.message}`);
+        }
+        uploadedImageUrl = uploadResult.data?.url || null;
         setImageUrl(uploadedImageUrl);
       }
 
@@ -154,13 +130,12 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       const openAIWorking = await testOpenAIConnection();
       
       if (!openAIWorking) {
-        throw new Error('OpenAI API is not available. Please check your API key configuration.');
+        console.warn('OpenAI API not available, proceeding with basic extraction');
       }
 
       // Perform OCR
       setProcessingStep('Extracting text from image...');
-      const ocrService = new OCRService();
-      const ocrResult = await ocrService.extractText(imageData, ocrEngine);
+      const ocrResult = await OCRService.extractText(imageData, ocrEngine);
       
       setExtractedText(ocrResult.text);
       setOcrConfidence(ocrResult.confidence);
@@ -169,65 +144,37 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         throw new Error('Could not extract sufficient text from the image. Please try with a clearer image.');
       }
 
-      // Try multi-item extraction first
-      setProcessingStep('Analyzing receipt for multiple items...');
-      try {
-        const { data: multiItemResult, error: multiItemError } = await AIService.extractMultipleItems(ocrResult.text);
-        
-        if (multiItemError) {
-          throw new Error(multiItemError);
-        }
-        
-        if (multiItemResult && multiItemResult.items && multiItemResult.items.length > 0) {
-          setExtractedItems(multiItemResult.items);
-          setStoreInfo(multiItemResult.store_info);
-          setProcessingMethod('ai_multi_item_gpt_structured');
-          
-          if (multiItemResult.items.length === 1) {
-            // Single item - proceed directly to form
-            const item = multiItemResult.items[0];
-            setSelectedItem(item);
-            setSelectedItemIndex(0);
-            
-            // Convert to ExtractedData format
-            const extractedData: ExtractedData = {
-              product_description: item.product_description || '',
-              brand_name: item.brand_name || '',
-              model_number: item.model_number || '',
-              amount: item.price,
-              warranty_period: item.warranty_period_months ? `${item.warranty_period_months} months` : '',
-              extended_warranty: item.extended_warranty_months ? `${item.extended_warranty_months} months` : '',
-              store_name: multiItemResult.store_info.store_name || '',
-              purchase_location: multiItemResult.store_info.purchase_location || '',
-              purchase_date: multiItemResult.store_info.purchase_date || '',
-              country: multiItemResult.store_info.country || 'US'
-            };
-            
-            setExtractedData(extractedData);
-            setCurrentStep('form');
-          } else {
-            // Multiple items - show selection screen
-            setCurrentStep('item-selection');
-          }
-          
+      // Extract receipt data with GPT
+      setProcessingStep('Extracting receipt data...');
+      
+      if (openAIWorking) {
+        try {
+          const result = await extractReceiptDataWithGPT(ocrResult.text);
+          setExtractedData(result);
+          setProcessingMethod('gpt_structured');
+          setCurrentStep('form');
           setIsProcessing(false);
           return;
+        } catch (gptError) {
+          console.warn('GPT extraction failed, proceeding to manual entry:', gptError);
         }
-      } catch (multiItemError) {
-        console.warn('Multi-item extraction failed, falling back to single item:', multiItemError);
       }
 
-      // Fallback to single item extraction
-      setProcessingStep('Extracting receipt data...');
-      const result = await extractReceiptDataWithGPT(ocrResult.text);
-      
-      if (result) {
-        setExtractedData(result);
-        setProcessingMethod('gpt_structured');
-        setCurrentStep('form');
-      } else {
-        throw new Error('Could not extract receipt data. Please try manual entry.');
-      }
+      // If GPT fails or is not available, proceed to manual entry
+      setExtractedData({
+        product_description: '',
+        brand_name: '',
+        store_name: '',
+        purchase_location: '',
+        purchase_date: new Date().toISOString().split('T')[0],
+        amount: null,
+        warranty_period: '1 year',
+        extended_warranty: '',
+        model_number: '',
+        country: 'United States'
+      });
+      setProcessingMethod('manual');
+      setCurrentStep('form');
 
     } catch (error) {
       console.error('Processing error:', error);
@@ -236,28 +183,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const handleItemSelection = (item: ExtractedItem, index: number) => {
-    setSelectedItem(item);
-    setSelectedItemIndex(index);
-    
-    // Convert to ExtractedData format
-    const extractedData: ExtractedData = {
-      product_description: item.product_description || '',
-      brand_name: item.brand_name || '',
-      model_number: item.model_number || '',
-      amount: item.price,
-      warranty_period: item.warranty_period_months ? `${item.warranty_period_months} months` : '',
-      extended_warranty: item.extended_warranty_months ? `${item.extended_warranty_months} months` : '',
-      store_name: storeInfo?.store_name || '',
-      purchase_location: storeInfo?.purchase_location || '',
-      purchase_date: storeInfo?.purchase_date || '',
-      country: storeInfo?.country || 'US'
-    };
-    
-    setExtractedData(extractedData);
-    setCurrentStep('form');
   };
 
   const handleFormSubmit = async (formData: ExtractedData) => {
@@ -270,12 +195,14 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         image_url: imageUrl,
         processing_method: processingMethod,
         ocr_confidence: ocrConfidence,
-        extracted_text: extractedText,
-        selected_item_index: selectedItemIndex,
-        total_items_found: extractedItems.length || 1
+        extracted_text: extractedText
       };
 
-      await saveReceiptToDatabase(receiptData, user.id);
+      const saveResult = await saveReceiptToDatabase(receiptData, user.id);
+      if (saveResult.error) {
+        throw new Error(saveResult.error.message);
+      }
+      
       setSuccess(true);
       setCurrentStep('success');
     } catch (error) {
@@ -291,30 +218,12 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     setCapturedImage(null);
     setUploadedFile(null);
     setExtractedData(null);
-    setExtractedItems([]);
-    setStoreInfo(null);
-    setSelectedItem(null);
-    setSelectedItemIndex(null);
     setError(null);
     setSuccess(false);
     setOcrConfidence(null);
     setExtractedText('');
     setProcessingMethod('manual');
     setImageUrl(null);
-  };
-
-  const formatPrice = (price: number | null): string => {
-    if (price === null || price === undefined) return 'N/A';
-    return `$${price.toFixed(2)}`;
-  };
-
-  const formatWarranty = (months: number | null): string => {
-    if (!months) return 'N/A';
-    if (months < 12) return `${months} month${months !== 1 ? 's' : ''}`;
-    const years = Math.floor(months / 12);
-    const remainingMonths = months % 12;
-    if (remainingMonths === 0) return `${years} year${years !== 1 ? 's' : ''}`;
-    return `${years}y ${remainingMonths}m`;
   };
 
   return (
@@ -486,71 +395,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           </div>
         )}
 
-        {currentStep === 'item-selection' && (
-          <div className="bg-white rounded-xl shadow-lg p-8">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Select Item from Receipt</h2>
-              <p className="text-gray-600">We found {extractedItems.length} items on your receipt. Please select the one you want to track:</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {extractedItems.map((item, index) => (
-                <div
-                  key={index}
-                  className="border border-gray-200 rounded-lg p-6 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group"
-                  onClick={() => handleItemSelection(item, index)}
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors">
-                        {item.product_description || 'Unknown Product'}
-                      </h3>
-                      {item.brand_name && (
-                        <p className="text-sm text-gray-600 mb-2">{item.brand_name}</p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-lg text-gray-900">{formatPrice(item.price)}</p>
-                      {item.quantity > 1 && (
-                        <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 text-sm text-gray-600">
-                    {item.model_number && (
-                      <div className="flex items-center">
-                        <Hash className="w-4 h-4 mr-2" />
-                        <span>Model: {item.model_number}</span>
-                      </div>
-                    )}
-                    {item.warranty_period_months && (
-                      <div className="flex items-center">
-                        <Package className="w-4 h-4 mr-2" />
-                        <span>Warranty: {formatWarranty(item.warranty_period_months)}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <button className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors group-hover:bg-blue-700">
-                    Select This Item
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-8 text-center">
-              <button
-                onClick={() => setCurrentStep('input')}
-                className="text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <ArrowLeft className="w-4 h-4 inline mr-2" />
-                Back to Scanner
-              </button>
-            </div>
-          </div>
-        )}
-
         {currentStep === 'form' && extractedData && (
           <div className="bg-white rounded-xl shadow-lg p-8">
             <div className="text-center mb-8">
@@ -704,7 +548,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
               <div className="flex justify-between pt-6">
                 <button
                   type="button"
-                  onClick={() => setCurrentStep(extractedItems.length > 1 ? 'item-selection' : 'input')}
+                  onClick={() => setCurrentStep('input')}
                   className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                 >
                   Back

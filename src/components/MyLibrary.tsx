@@ -22,9 +22,10 @@ import {
   SortAsc,
   SortDesc,
   X,
-  Loader2
+  Loader2,
+  ImageIcon
 } from 'lucide-react';
-import { getCurrentUser, signOut, getUserReceipts, deleteReceipt } from '../lib/supabase';
+import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getUserCurrencySettings, convertCurrencyWithOpenAI } from '../lib/supabase';
 
 interface MyLibraryProps {
   onBackToDashboard: () => void;
@@ -41,6 +42,17 @@ interface Receipt {
   warranty_period: string;
   image_url?: string;
   created_at: string;
+  original_currency?: string;
+  converted_amount?: number;
+  converted_currency?: string;
+  exchange_rate?: number;
+  conversion_date?: string;
+}
+
+interface CurrencySettings {
+  preferred_currency: string;
+  display_currency_mode: string;
+  currency_symbol: string;
 }
 
 type ViewMode = 'grid' | 'list';
@@ -61,6 +73,13 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [currencySettings, setCurrencySettings] = useState<CurrencySettings>({
+    preferred_currency: 'USD',
+    display_currency_mode: 'native',
+    currency_symbol: '$'
+  });
+  const [imageLoading, setImageLoading] = useState<{ [key: string]: boolean }>({});
+  const [imageErrors, setImageErrors] = useState<{ [key: string]: boolean }>({});
 
   useEffect(() => {
     loadUser();
@@ -69,6 +88,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   useEffect(() => {
     if (user) {
       loadReceipts();
+      loadCurrencySettings();
     }
   }, [user]);
 
@@ -81,6 +101,34 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     setUser(currentUser);
   };
 
+  const loadCurrencySettings = async () => {
+    if (!user) return;
+    
+    try {
+      const settings = await getUserCurrencySettings(user.id);
+      if (settings.data) {
+        setCurrencySettings({
+          preferred_currency: settings.data.preferred_currency || 'USD',
+          display_currency_mode: settings.data.display_currency_mode || 'native',
+          currency_symbol: getCurrencySymbol(settings.data.preferred_currency || 'USD')
+        });
+      }
+    } catch (error) {
+      console.error('Error loading currency settings:', error);
+    }
+  };
+
+  const getCurrencySymbol = (currencyCode: string): string => {
+    const currencyMap: { [key: string]: string } = {
+      'USD': '$', 'AED': 'د.إ', 'GBP': '£', 'EUR': '€', 'CAD': 'C$',
+      'AUD': 'A$', 'JPY': '¥', 'INR': '₹', 'CNY': '¥', 'CHF': 'CHF',
+      'SEK': 'kr', 'NOK': 'kr', 'DKK': 'kr', 'SGD': 'S$', 'HKD': 'HK$',
+      'MYR': 'RM', 'THB': '฿', 'KRW': '₩', 'BRL': 'R$', 'MXN': '$',
+      'SAR': '﷼', 'QAR': '﷼', 'KWD': 'د.ك', 'BHD': '.د.ب', 'OMR': '﷼'
+    };
+    return currencyMap[currencyCode] || currencyCode;
+  };
+
   const loadReceipts = async () => {
     if (!user) return;
     
@@ -90,7 +138,38 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
       if (error) {
         console.error('Error loading receipts:', error);
       } else {
-        setReceipts(data || []);
+        const receiptsWithConversion = await Promise.all(
+          (data || []).map(async (receipt) => {
+            // Convert currency if needed
+            if (receipt.original_currency && 
+                receipt.original_currency !== currencySettings.preferred_currency &&
+                !receipt.converted_amount) {
+              
+              try {
+                const conversion = await convertCurrencyWithOpenAI(
+                  receipt.amount,
+                  receipt.original_currency,
+                  currencySettings.preferred_currency
+                );
+                
+                if (conversion.data) {
+                  return {
+                    ...receipt,
+                    converted_amount: conversion.data.converted_amount,
+                    converted_currency: conversion.data.target_currency,
+                    exchange_rate: conversion.data.exchange_rate,
+                    conversion_date: conversion.data.conversion_date
+                  };
+                }
+              } catch (error) {
+                console.warn('Currency conversion failed for receipt:', receipt.id);
+              }
+            }
+            return receipt;
+          })
+        );
+        
+        setReceipts(receiptsWithConversion);
       }
     } catch (error) {
       console.error('Error loading receipts:', error);
@@ -175,11 +254,42 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
+  const formatCurrency = (receipt: Receipt): { primary: string; secondary?: string } => {
+    const { display_currency_mode, preferred_currency, currency_symbol } = currencySettings;
+    
+    // Get original amount with currency
+    const originalCurrency = receipt.original_currency || 'USD';
+    const originalSymbol = getCurrencySymbol(originalCurrency);
+    const originalAmount = `${originalSymbol}${receipt.amount}`;
+    
+    // Get converted amount
+    const convertedAmount = receipt.converted_amount 
+      ? `${currency_symbol}${receipt.converted_amount.toFixed(2)}`
+      : `${currency_symbol}${receipt.amount}`;
+    
+    if (display_currency_mode === 'usd') {
+      return { primary: originalCurrency === 'USD' ? originalAmount : `$${receipt.amount}` };
+    } else if (display_currency_mode === 'native') {
+      if (originalCurrency !== preferred_currency && receipt.converted_amount) {
+        return { 
+          primary: convertedAmount,
+          secondary: originalAmount
+        };
+      } else {
+        return { primary: originalAmount };
+      }
+    } else if (display_currency_mode === 'both') {
+      if (originalCurrency !== preferred_currency && receipt.converted_amount) {
+        return { 
+          primary: convertedAmount,
+          secondary: originalAmount
+        };
+      } else {
+        return { primary: originalAmount };
+      }
+    }
+    
+    return { primary: originalAmount };
   };
 
   const formatDate = (dateString: string) => {
@@ -211,6 +321,20 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     if (daysLeft < 0) return { status: 'expired', color: 'text-red-600', icon: AlertTriangle };
     if (daysLeft <= 30) return { status: 'expiring', color: 'text-yellow-600', icon: Clock };
     return { status: 'active', color: 'text-green-600', icon: CheckCircle };
+  };
+
+  const handleImageLoad = (receiptId: string) => {
+    setImageLoading(prev => ({ ...prev, [receiptId]: false }));
+  };
+
+  const handleImageError = (receiptId: string) => {
+    setImageLoading(prev => ({ ...prev, [receiptId]: false }));
+    setImageErrors(prev => ({ ...prev, [receiptId]: true }));
+  };
+
+  const handleImageLoadStart = (receiptId: string) => {
+    setImageLoading(prev => ({ ...prev, [receiptId]: true }));
+    setImageErrors(prev => ({ ...prev, [receiptId]: false }));
   };
 
   if (isLoading) {
@@ -447,11 +571,28 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                     {/* Receipt Image or Placeholder */}
                     <div className="aspect-square bg-gradient-feature rounded-lg mb-4 flex items-center justify-center overflow-hidden">
                       {receipt.image_url ? (
-                        <img
-                          src={receipt.image_url}
-                          alt={receipt.product_description}
-                          className="w-full h-full object-cover"
-                        />
+                        <>
+                          {imageLoading[receipt.id] && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                            </div>
+                          )}
+                          {imageErrors[receipt.id] ? (
+                            <div className="text-gray-400 text-center">
+                              <ImageIcon className="h-12 w-12 mx-auto mb-2" />
+                              <p className="text-xs">Image not available</p>
+                            </div>
+                          ) : (
+                            <img
+                              src={receipt.image_url}
+                              alt={receipt.product_description}
+                              className="w-full h-full object-cover"
+                              onLoad={() => handleImageLoad(receipt.id)}
+                              onError={() => handleImageError(receipt.id)}
+                              onLoadStart={() => handleImageLoadStart(receipt.id)}
+                            />
+                          )}
+                        </>
                       ) : (
                         <div className="text-primary">
                           <Tag className="h-12 w-12" />
@@ -475,7 +616,12 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                       <div className="flex items-center justify-between">
                         <span className="text-text-secondary text-sm">{formatDate(receipt.purchase_date)}</span>
                         {receipt.amount && (
-                          <span className="font-bold text-text-primary">{formatCurrency(receipt.amount)}</span>
+                          <div className="text-right">
+                            <div className="font-bold text-text-primary">{formatCurrency(receipt).primary}</div>
+                            {formatCurrency(receipt).secondary && (
+                              <div className="text-xs text-text-secondary">{formatCurrency(receipt).secondary}</div>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -495,11 +641,23 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                       {/* Receipt Image or Placeholder */}
                       <div className="w-16 h-16 bg-gradient-feature rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                         {receipt.image_url ? (
-                          <img
-                            src={receipt.image_url}
-                            alt={receipt.product_description}
-                            className="w-full h-full object-cover"
-                          />
+                          <>
+                            {imageLoading[receipt.id] && (
+                              <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                            )}
+                            {imageErrors[receipt.id] ? (
+                              <ImageIcon className="h-6 w-6 text-gray-400" />
+                            ) : (
+                              <img
+                                src={receipt.image_url}
+                                alt={receipt.product_description}
+                                className="w-full h-full object-cover"
+                                onLoad={() => handleImageLoad(receipt.id)}
+                                onError={() => handleImageError(receipt.id)}
+                                onLoadStart={() => handleImageLoadStart(receipt.id)}
+                              />
+                            )}
+                          </>
                         ) : (
                           <Tag className="h-8 w-8 text-primary" />
                         )}
@@ -520,7 +678,12 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                       {/* Amount and Status */}
                       <div className="flex items-center space-x-4 flex-shrink-0">
                         {receipt.amount && (
-                          <span className="font-bold text-text-primary">{formatCurrency(receipt.amount)}</span>
+                          <div className="text-right">
+                            <div className="font-bold text-text-primary">{formatCurrency(receipt).primary}</div>
+                            {formatCurrency(receipt).secondary && (
+                              <div className="text-xs text-text-secondary">{formatCurrency(receipt).secondary}</div>
+                            )}
+                          </div>
                         )}
                         <div className={`flex items-center space-x-1 ${warrantyStatus.color}`}>
                           <StatusIcon className="h-5 w-5" />
@@ -559,13 +722,31 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                 {/* Receipt Image */}
                 <div>
                   <h3 className="font-medium text-text-primary mb-3">Receipt Image</h3>
-                  <div className="aspect-square bg-gradient-feature rounded-lg flex items-center justify-center overflow-hidden">
+                  <div className="aspect-square bg-gradient-feature rounded-lg flex items-center justify-center overflow-hidden relative">
                     {selectedReceipt.image_url ? (
-                      <img
-                        src={selectedReceipt.image_url}
-                        alt={selectedReceipt.product_description}
-                        className="w-full h-full object-cover"
-                      />
+                      <>
+                        {imageLoading[selectedReceipt.id] && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                            <Loader2 className="h-12 w-12 animate-spin text-gray-400" />
+                          </div>
+                        )}
+                        {imageErrors[selectedReceipt.id] ? (
+                          <div className="text-center text-text-secondary">
+                            <ImageIcon className="h-16 w-16 mx-auto mb-2" />
+                            <p>Image not available</p>
+                          </div>
+                        ) : (
+                          <img
+                            src={selectedReceipt.image_url}
+                            alt={selectedReceipt.product_description}
+                            className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200"
+                            onLoad={() => handleImageLoad(selectedReceipt.id)}
+                            onError={() => handleImageError(selectedReceipt.id)}
+                            onLoadStart={() => handleImageLoadStart(selectedReceipt.id)}
+                            onClick={() => window.open(selectedReceipt.image_url, '_blank')}
+                          />
+                        )}
+                      </>
                     ) : (
                       <div className="text-center text-text-secondary">
                         <Tag className="h-16 w-16 mx-auto mb-2" />
@@ -602,7 +783,18 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                   {selectedReceipt.amount && (
                     <div>
                       <label className="block text-sm font-medium text-text-secondary mb-1">Amount</label>
-                      <p className="text-text-primary font-bold">{formatCurrency(selectedReceipt.amount)}</p>
+                      <div className="space-y-1">
+                        <p className="text-text-primary font-bold">{formatCurrency(selectedReceipt).primary}</p>
+                        {formatCurrency(selectedReceipt).secondary && (
+                          <p className="text-text-secondary text-sm">Original: {formatCurrency(selectedReceipt).secondary}</p>
+                        )}
+                        {selectedReceipt.exchange_rate && selectedReceipt.conversion_date && (
+                          <div className="text-xs text-text-secondary">
+                            <p>Exchange Rate: 1 {selectedReceipt.original_currency} = {selectedReceipt.exchange_rate} {selectedReceipt.converted_currency}</p>
+                            <p>Conversion Date: {formatDate(selectedReceipt.conversion_date)}</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 

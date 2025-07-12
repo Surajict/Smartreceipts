@@ -22,7 +22,7 @@ import {
   Brain,
   Lightbulb
 } from 'lucide-react';
-import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats } from '../lib/supabase';
+import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats, getUserCurrencySettings, convertCurrencyWithOpenAI } from '../lib/supabase';
 import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
 import { AIService } from '../services/aiService';
@@ -52,6 +52,10 @@ interface RecentReceipt {
   date: string;
   amount: number;
   items: number;
+  original_currency?: string;
+  converted_amount?: number;
+  converted_currency?: string;
+  exchange_rate?: number;
 }
 
 interface SummaryStats {
@@ -78,6 +82,12 @@ interface RAGResult {
   error?: string;
 }
 
+interface CurrencySettings {
+  preferred_currency: string;
+  display_currency_mode: string;
+  currency_symbol: string;
+}
+
 const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning, onShowProfile, onShowLibrary }) => {
   const [user, setUser] = useState<any>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
@@ -98,6 +108,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   
   // Currency state
   const [showCurrencyToggle, setShowCurrencyToggle] = useState(false);
+  const [currencySettings, setCurrencySettings] = useState<CurrencySettings>({
+    preferred_currency: 'USD',
+    display_currency_mode: 'native',
+    currency_symbol: '$'
+  });
+  const [isConvertingCurrency, setIsConvertingCurrency] = useState(false);
   
   const [summaryStats, setSummaryStats] = useState<SummaryStats>({
     receiptsScanned: 0,
@@ -197,6 +213,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (user && recentReceipts.length > 0) {
+      convertReceiptAmounts();
+    }
+  }, [currencySettings.display_currency_mode, currencySettings.preferred_currency]);
+
   const loadUserCurrency = async (currentUser: any) => {
     try {
       const nativeCountry = currentUser.user_metadata?.native_country;
@@ -216,29 +238,67 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
   const loadCurrencySettings = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('user_privacy_settings')
-        .select('preferred_currency, display_currency_mode')
-        .eq('user_id', userId)
-        .single();
-
-      if (error) {
-        console.warn('Error loading currency settings:', error);
-        return;
-      }
-
-      if (data) {
-        setCurrencyDisplayMode(data.display_currency_mode || 'native');
-        if (data.preferred_currency) {
-          // Update user currency if they have a preference set
-          const currencyInfo = await AIService.getCurrencyForCountry('');
-          // You might want to create a currency lookup function here
-        }
+      const settings = await getUserCurrencySettings(userId);
+      if (settings.data) {
+        setCurrencySettings({
+          preferred_currency: settings.data.preferred_currency || 'USD',
+          display_currency_mode: settings.data.display_currency_mode || 'native',
+          currency_symbol: getCurrencySymbol(settings.data.preferred_currency || 'USD')
+        });
       }
     } catch (error) {
       console.error('Error loading currency settings:', error);
     }
   };
+
+  const getCurrencySymbol = (currencyCode: string): string => {
+    const currencyMap: { [key: string]: string } = {
+      'USD': '$', 'AED': 'د.إ', 'GBP': '£', 'EUR': '€', 'CAD': 'C$',
+      'AUD': 'A$', 'JPY': '¥', 'INR': '₹', 'CNY': '¥', 'CHF': 'CHF',
+      'SEK': 'kr', 'NOK': 'kr', 'DKK': 'kr', 'SGD': 'S$', 'HKD': 'HK$',
+      'MYR': 'RM', 'THB': '฿', 'KRW': '₩', 'BRL': 'R$', 'MXN': '$',
+      'SAR': '﷼', 'QAR': '﷼', 'KWD': 'د.ك', 'BHD': '.د.ب', 'OMR': '﷼'
+    };
+    return currencyMap[currencyCode] || currencyCode;
+  };
+
+  const convertReceiptAmounts = async () => {
+    if (!recentReceipts.length || isConvertingCurrency) return;
+    
+    setIsConvertingCurrency(true);
+    try {
+      const convertedReceipts = await Promise.all(
+        recentReceipts.map(async (receipt) => {
+          if (currencySettings.display_currency_mode === 'native' && 
+              receipt.original_currency !== currencySettings.preferred_currency) {
+            
+            const conversion = await convertCurrencyWithOpenAI(
+              receipt.amount,
+              receipt.original_currency || 'USD',
+              currencySettings.preferred_currency
+            );
+            
+            if (conversion.data) {
+              return {
+                ...receipt,
+                converted_amount: conversion.data.converted_amount,
+                converted_currency: conversion.data.target_currency,
+                exchange_rate: conversion.data.exchange_rate
+              };
+            }
+          }
+          return receipt;
+        })
+      );
+      
+      setRecentReceipts(convertedReceipts);
+    } catch (error) {
+      console.error('Error converting currency:', error);
+    } finally {
+      setIsConvertingCurrency(false);
+    }
+  };
+
   const loadDashboardData = async (userId: string) => {
     try {
       setIsLoading(true);
@@ -528,23 +588,28 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     setRagResult(null);
   };
 
-  const formatAmount = (amount: number, originalCurrency?: string) => {
-    if (!amount) return userCurrency.symbol + '0.00';
+  const formatAmount = (receipt: RecentReceipt): string => {
+    const { display_currency_mode, preferred_currency, currency_symbol } = currencySettings;
     
-    switch (currencyDisplayMode) {
-      case 'usd':
-        // Convert to USD if needed (simplified conversion for demo)
-        const usdAmount = originalCurrency && originalCurrency !== 'USD' ? amount * 0.27 : amount;
-        return `$${usdAmount.toFixed(2)}`;
-      
-      case 'both':
-        const nativeAmount = `${userCurrency.symbol}${amount.toFixed(2)}`;
-        const usdAmountBoth = originalCurrency && originalCurrency !== 'USD' ? amount * 0.27 : amount;
-        return `${nativeAmount} ($${usdAmountBoth.toFixed(2)})`;
-      
-      default: // native
-        return `${userCurrency.symbol}${amount.toFixed(2)}`;
+    if (display_currency_mode === 'usd') {
+      return `$${receipt.amount}`;
+    } else if (display_currency_mode === 'native') {
+      if (receipt.converted_amount && receipt.original_currency !== preferred_currency) {
+        return `${currency_symbol}${receipt.converted_amount.toFixed(2)}`;
+      } else {
+        return `${currency_symbol}${receipt.amount}`;
+      }
+    } else if (display_currency_mode === 'both') {
+      const nativeAmount = receipt.converted_amount && receipt.original_currency !== preferred_currency
+        ? `${currency_symbol}${receipt.converted_amount.toFixed(2)}`
+        : `${currency_symbol}${receipt.amount}`;
+      const usdAmount = receipt.original_currency === 'USD' 
+        ? `$${receipt.amount}` 
+        : `$${receipt.amount}`;
+      return preferred_currency === 'USD' ? usdAmount : `${nativeAmount} (${usdAmount})`;
     }
+    
+    return `${currency_symbol}${receipt.amount}`;
   };
 
   const updateCurrencyDisplayMode = async (mode: 'native' | 'usd' | 'both') => {
@@ -1305,7 +1370,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                     </div>
                     <div className="text-right flex-shrink-0 ml-4">
                       <div className="font-bold text-text-primary">
-                        {formatCurrency(receipt.amount)}
+                        {formatAmount(receipt)}
                       </div>
                       <ChevronRight className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 ml-auto" />
                     </div>

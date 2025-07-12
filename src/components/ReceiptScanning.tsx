@@ -31,6 +31,7 @@ import {
 import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
 import { OCRService, OCREngine } from '../services/ocrService';
 import { AIService, ExtractedItem, StoreInfo, MultiItemExtractionResult } from '../services/aiService';
+import { supabase } from '../lib/supabase';
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
@@ -77,6 +78,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [extractedText, setExtractedText] = useState<string>('');
   const [processingMethod, setProcessingMethod] = useState<string>('manual');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [userCurrency, setUserCurrency] = useState<{ code: string; symbol: string } | null>(null);
 
   const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -86,6 +88,32 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       try {
         const currentUser = await getCurrentUser();
         setUser(currentUser);
+        
+        // Load user's preferred currency
+        if (currentUser) {
+          const { data: privacySettings } = await supabase
+            .from('user_privacy_settings')
+            .select('preferred_currency')
+            .eq('user_id', currentUser.id)
+            .single();
+          
+          if (privacySettings?.preferred_currency) {
+            const currencyMap: { [key: string]: { code: string; symbol: string } } = {
+              'USD': { code: 'USD', symbol: '$' },
+              'AED': { code: 'AED', symbol: 'د.إ' },
+              'GBP': { code: 'GBP', symbol: '£' },
+              'EUR': { code: 'EUR', symbol: '€' },
+              'CAD': { code: 'CAD', symbol: 'C$' },
+              'AUD': { code: 'AUD', symbol: 'A$' },
+              'JPY': { code: 'JPY', symbol: '¥' },
+              'INR': { code: 'INR', symbol: '₹' },
+              'CNY': { code: 'CNY', symbol: '¥' }
+            };
+            setUserCurrency(currencyMap[privacySettings.preferred_currency] || { code: 'USD', symbol: '$' });
+          } else {
+            setUserCurrency({ code: 'USD', symbol: '$' });
+          }
+        }
       } catch (error) {
         console.error('Error loading user:', error);
       }
@@ -641,7 +669,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Country *
+                    Purchase Country *
                   </label>
                   <select
                     value={extractedData.country}
@@ -649,14 +677,108 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
                   >
-                    <option value="US">United States</option>
-                    <option value="CA">Canada</option>
-                    <option value="UK">United Kingdom</option>
-                    <option value="AU">Australia</option>
-                    <option value="DE">Germany</option>
-                    <option value="FR">France</option>
-                    <option value="JP">Japan</option>
-                    <option value="OTHER">Other</option>
+                    <option value="">Select country</option>
+                    <option value="United States">United States</option>
+                    <option value="United Arab Emirates">United Arab Emirates</option>
+                    <option value="United Kingdom">United Kingdom</option>
+                    <option value="Canada">Canada</option>
+                    <option value="Australia">Australia</option>
+                    <option value="Germany">Germany</option>
+                    <option value="France">France</option>
+                    <option value="Italy">Italy</option>
+                    <option value="Spain">Spain</option>
+                    <option value="Netherlands">Netherlands</option>
+                    <option value="Belgium">Belgium</option>
+                    <option value="Switzerland">Switzerland</option>
+                    <option value="Austria">Austria</option>
+                    <option value="Sweden">Sweden</option>
+                    <option value="Norway">Norway</option>
+                    <option value="Denmark">Denmark</option>
+                    <option value="Finland">Finland</option>
+                    <option value="Japan">Japan</option>
+                    <option value="South Korea">South Korea</option>
+                    <option value="China">China</option>
+                    <option value="India">India</option>
+                    <option value="Singapore">Singapore</option>
+                    <option value="Hong Kong">Hong Kong</option>
+                    <option value="Malaysia">Malaysia</option>
+                    <option value="Thailand">Thailand</option>
+                    <option value="Indonesia">Indonesia</option>
+                    <option value="Philippines">Philippines</option>
+                    <option value="Vietnam">Vietnam</option>
+                    <option value="Brazil">Brazil</option>
+                    <option value="Mexico">Mexico</option>
+                    <option value="Argentina">Argentina</option>
+                    <option value="Chile">Chile</option>
+                    <option value="Colombia">Colombia</option>
+                    <option value="Peru">Peru</option>
+                    <option value="South Africa">South Africa</option>
+                    <option value="Egypt">Egypt</option>
+                    <option value="Saudi Arabia">Saudi Arabia</option>
+                    <option value="Qatar">Qatar</option>
+                    <option value="Kuwait">Kuwait</option>
+                    <option value="Bahrain">Bahrain</option>
+                    <option value="Oman">Oman</option>
+                    <option value="Israel">Israel</option>
+                    <option value="Turkey">Turkey</option>
+                    <option value="Russia">Russia</option>
+                    <option value="Poland">Poland</option>
+                    <option value="Czech Republic">Czech Republic</option>
+                    <option value="Hungary">Hungary</option>
+                    <option value="Romania">Romania</option>
+                    <option value="Bulgaria">Bulgaria</option>
+                    <option value="Croatia">Croatia</option>
+                    <option value="Serbia">Serbia</option>
+                    <option value="Ukraine">Ukraine</option>
+                    <option value="New Zealand">New Zealand</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Receipt Currency *
+                  </label>
+                  <select
+                    value={extractedData.currency || 'USD'}
+                    onChange={(e) => setExtractedData({ ...extractedData, currency: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="USD">USD - US Dollar</option>
+                    <option value="AED">AED - UAE Dirham</option>
+                    <option value="GBP">GBP - British Pound</option>
+                    <option value="EUR">EUR - Euro</option>
+                    <option value="CAD">CAD - Canadian Dollar</option>
+                    <option value="AUD">AUD - Australian Dollar</option>
+                    <option value="JPY">JPY - Japanese Yen</option>
+                    <option value="INR">INR - Indian Rupee</option>
+                    <option value="CNY">CNY - Chinese Yuan</option>
+                    <option value="CHF">CHF - Swiss Franc</option>
+                    <option value="SEK">SEK - Swedish Krona</option>
+                    <option value="NOK">NOK - Norwegian Krone</option>
+                    <option value="DKK">DKK - Danish Krone</option>
+                    <option value="SGD">SGD - Singapore Dollar</option>
+                    <option value="HKD">HKD - Hong Kong Dollar</option>
+                    <option value="MYR">MYR - Malaysian Ringgit</option>
+                    <option value="THB">THB - Thai Baht</option>
+                    <option value="KRW">KRW - South Korean Won</option>
+                    <option value="BRL">BRL - Brazilian Real</option>
+                    <option value="MXN">MXN - Mexican Peso</option>
+                    <option value="SAR">SAR - Saudi Riyal</option>
+                    <option value="QAR">QAR - Qatari Riyal</option>
+                    <option value="KWD">KWD - Kuwaiti Dinar</option>
+                    <option value="BHD">BHD - Bahraini Dinar</option>
+                    <option value="OMR">OMR - Omani Rial</option>
+                    <option value="ILS">ILS - Israeli Shekel</option>
+                    <option value="TRY">TRY - Turkish Lira</option>
+                    <option value="RUB">RUB - Russian Ruble</option>
+                    <option value="PLN">PLN - Polish Zloty</option>
+                    <option value="CZK">CZK - Czech Koruna</option>
+                    <option value="HUF">HUF - Hungarian Forint</option>
+                    <option value="ZAR">ZAR - South African Rand</option>
+                    <option value="EGP">EGP - Egyptian Pound</option>
+                    <option value="NZD">NZD - New Zealand Dollar</option>
                   </select>
                 </div>
 
@@ -687,6 +809,19 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                 </div>
               </div>
 
+              {/* Currency Conversion Info */}
+              {userCurrency && extractedData.currency && extractedData.currency !== userCurrency.code && extractedData.amount && (
+                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h3 className="font-medium text-blue-800 mb-2">Currency Conversion</h3>
+                  <p className="text-sm text-blue-700">
+                    This receipt is in {extractedData.currency} but your dashboard currency is {userCurrency.code}. 
+                    The amount will be automatically converted for dashboard display.
+                  </p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    Original: {extractedData.amount} {extractedData.currency} → Dashboard: ~{userCurrency.symbol}{(extractedData.amount * 1.1).toFixed(2)} {userCurrency.code}
+                  </p>
+                </div>
+              )}
               <div className="flex justify-between pt-6">
                 <button
                   type="button"

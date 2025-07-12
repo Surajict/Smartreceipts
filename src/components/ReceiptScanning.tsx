@@ -27,7 +27,6 @@ import {
   Maximize2,
   Settings
 } from 'lucide-react';
-import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT, extractMultipleItemsFromReceipt } from '../lib/supabase';
 import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
 import { AIService, ExtractedItem, StoreInfo } from '../services/aiService';
 import { OCRService, OCREngine } from '../services/ocrService';

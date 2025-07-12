@@ -1,29 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
-  Camera, 
-  Upload, 
   User, 
-  Mail, 
-  Calendar, 
-  Settings, 
-  Bell,
-  Edit3,
+  Bell, 
+  Shield, 
+  Save,
   Check,
-  X,
-  Loader2,
   AlertCircle,
-  Eye,
-  EyeOff,
-  Shield,
-  LogOut,
-  ToggleLeft,
-  ToggleRight,
-  Download,
-  Trash2,
-  RefreshCw
+  Loader2,
+  Globe,
+  DollarSign
 } from 'lucide-react';
-import { getCurrentUser, supabase, signOut } from '../lib/supabase';
+import { getCurrentUser, signOut, updateUserProfile, getUserProfile } from '../lib/supabase';
+import { AIService } from '../services/aiService';
 
 interface ProfilePageProps {
   onBackToDashboard: () => void;
@@ -33,8 +22,8 @@ interface UserProfile {
   id: string;
   email: string;
   full_name: string;
+  native_country: string;
   avatar_url?: string;
-  created_at: string;
 }
 
 interface NotificationSettings {
@@ -45,42 +34,38 @@ interface NotificationSettings {
 
 interface PrivacySettings {
   data_collection: boolean;
-  data_analysis: 'allowed' | 'not_allowed';
+  data_analysis: string;
   biometric_login: boolean;
   two_factor_auth: boolean;
   preferred_currency: string;
-  display_currency_mode: 'native' | 'usd' | 'both';
+  display_currency_mode: string;
 }
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [profilePicture, setProfilePicture] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedName, setEditedName] = useState('');
+  const [user, setUser] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'privacy'>('profile');
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [alertsCount] = useState(3);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'privacy' | 'data'>('profile');
-  
-  // Email update states
-  const [isEditingEmail, setIsEditingEmail] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [emailUpdateError, setEmailUpdateError] = useState<string | null>(null);
-  const [emailUpdateSuccess, setEmailUpdateSuccess] = useState(false);
-  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
-  
-  // Settings states
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Profile state
+  const [profile, setProfile] = useState<UserProfile>({
+    id: '',
+    email: '',
+    full_name: '',
+    native_country: '',
+    avatar_url: ''
+  });
+
+  // Notification settings state
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
     warranty_alerts: true,
     auto_system_update: true,
     marketing_notifications: false
   });
-  
+
+  // Privacy settings state
   const [privacySettings, setPrivacySettings] = useState<PrivacySettings>({
     data_collection: true,
     data_analysis: 'allowed',
@@ -89,93 +74,120 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
     preferred_currency: 'USD',
     display_currency_mode: 'native'
   });
-  
-  const [isLoadingSettings, setIsLoadingSettings] = useState(false);
-  const [settingsError, setSettingsError] = useState<string | null>(null);
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const countries = [
+    'United States', 'United Arab Emirates', 'United Kingdom', 'Canada', 'Australia',
+    'Germany', 'France', 'Italy', 'Spain', 'Netherlands', 'Belgium', 'Switzerland',
+    'Austria', 'Sweden', 'Norway', 'Denmark', 'Finland', 'Japan', 'South Korea',
+    'China', 'India', 'Singapore', 'Hong Kong', 'Malaysia', 'Thailand', 'Indonesia',
+    'Philippines', 'Vietnam', 'Brazil', 'Mexico', 'Argentina', 'Chile', 'Colombia',
+    'Peru', 'South Africa', 'Egypt', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain',
+    'Oman', 'Israel', 'Turkey', 'Russia', 'Poland', 'Czech Republic', 'Hungary',
+    'Romania', 'Bulgaria', 'Croatia', 'Serbia', 'Ukraine', 'New Zealand', 'Other'
+  ];
+
+  const currencies = [
+    { code: 'USD', name: 'US Dollar', symbol: '$' },
+    { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ' },
+    { code: 'GBP', name: 'British Pound', symbol: '£' },
+    { code: 'EUR', name: 'Euro', symbol: '€' },
+    { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$' },
+    { code: 'AUD', name: 'Australian Dollar', symbol: 'A$' },
+    { code: 'JPY', name: 'Japanese Yen', symbol: '¥' },
+    { code: 'INR', name: 'Indian Rupee', symbol: '₹' },
+    { code: 'CNY', name: 'Chinese Yuan', symbol: '¥' },
+    { code: 'CHF', name: 'Swiss Franc', symbol: 'CHF' },
+    { code: 'SEK', name: 'Swedish Krona', symbol: 'kr' },
+    { code: 'NOK', name: 'Norwegian Krone', symbol: 'kr' },
+    { code: 'DKK', name: 'Danish Krone', symbol: 'kr' },
+    { code: 'SGD', name: 'Singapore Dollar', symbol: 'S$' },
+    { code: 'HKD', name: 'Hong Kong Dollar', symbol: 'HK$' },
+    { code: 'MYR', name: 'Malaysian Ringgit', symbol: 'RM' },
+    { code: 'THB', name: 'Thai Baht', symbol: '฿' },
+    { code: 'KRW', name: 'South Korean Won', symbol: '₩' },
+    { code: 'BRL', name: 'Brazilian Real', symbol: 'R$' },
+    { code: 'MXN', name: 'Mexican Peso', symbol: '$' },
+    { code: 'SAR', name: 'Saudi Riyal', symbol: '﷼' },
+    { code: 'QAR', name: 'Qatari Riyal', symbol: '﷼' },
+    { code: 'KWD', name: 'Kuwaiti Dinar', symbol: 'د.ك' },
+    { code: 'BHD', name: 'Bahraini Dinar', symbol: '.د.ب' },
+    { code: 'OMR', name: 'Omani Rial', symbol: '﷼' }
+  ];
 
   useEffect(() => {
-    loadUserProfile();
-    loadUserSettings();
+    loadUserData();
   }, []);
 
-  const loadUserProfile = async () => {
+  const loadUserData = async () => {
     try {
-      const currentUser = await getCurrentUser();
-      if (currentUser) {
-        const userProfile: UserProfile = {
-          id: currentUser.id,
-          email: currentUser.email || '',
-          full_name: currentUser.user_metadata?.full_name || '',
-          avatar_url: currentUser.user_metadata?.avatar_url,
-          created_at: currentUser.created_at || ''
-        };
-        
-        setUser(userProfile);
-        setEditedName(userProfile.full_name);
-        setNewEmail(userProfile.email);
-        
-        // Load profile picture if exists
-        if (userProfile.avatar_url) {
-          const { data } = supabase.storage
-            .from('profile-pictures')
-            .getPublicUrl(userProfile.avatar_url);
-          setProfilePicture(data.publicUrl);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading user profile:', error);
-    }
-  };
-
-  const loadUserSettings = async () => {
-    try {
-      setIsLoadingSettings(true);
+      setIsLoading(true);
       const currentUser = await getCurrentUser();
       if (!currentUser) return;
 
-      // Load notification settings
-      const { data: notifData, error: notifError } = await supabase
-        .from('user_notification_settings')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .limit(1);
+      setUser(currentUser);
 
-      if (notifError) {
-        console.error('Error loading notification settings:', notifError);
-      } else if (notifData && notifData.length > 0) {
-        setNotificationSettings({
-          warranty_alerts: notifData[0].warranty_alerts,
-          auto_system_update: notifData[0].auto_system_update,
-          marketing_notifications: notifData[0].marketing_notifications
-        });
+      // Load user profile
+      const profileResult = await getUserProfile(currentUser.id);
+      if (profileResult.data) {
+        setProfile(profileResult.data);
+        
+        // Auto-detect currency when country is loaded
+        if (profileResult.data.native_country && !privacySettings.preferred_currency) {
+          await handleCountryChange(profileResult.data.native_country);
+        }
       }
 
-      // Load privacy settings
-      const { data: privacyData, error: privacyError } = await supabase
-        .from('user_privacy_settings')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .limit(1);
-
-      if (privacyError) {
-        console.error('Error loading privacy settings:', privacyError);
-      } else if (privacyData && privacyData.length > 0) {
-        setPrivacySettings({
-          data_collection: privacyData[0].data_collection,
-          data_analysis: privacyData[0].data_analysis,
-          biometric_login: privacyData[0].biometric_login,
-          two_factor_auth: privacyData[0].two_factor_auth,
-          preferred_currency: privacyData[0].preferred_currency || 'USD',
-          display_currency_mode: privacyData[0].display_currency_mode || 'native'
-        });
-      }
     } catch (error) {
-      console.error('Error loading settings:', error);
-      setSettingsError('Failed to load settings');
+      console.error('Error loading user data:', error);
+      setSaveError('Failed to load user data');
     } finally {
-      setIsLoadingSettings(false);
+      setIsLoading(false);
+    }
+  };
+
+  const handleCountryChange = async (country: string) => {
+    setProfile(prev => ({ ...prev, native_country: country }));
+    
+    // Auto-detect currency using OpenAI
+    try {
+      const currencyInfo = await AIService.getCurrencyForCountry(country);
+      setPrivacySettings(prev => ({
+        ...prev,
+        preferred_currency: currencyInfo.currency_code
+      }));
+    } catch (error) {
+      console.warn('Failed to auto-detect currency:', error);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+
+    try {
+      // Update user profile
+      const updateResult = await updateUserProfile(user.id, {
+        full_name: profile.full_name,
+        native_country: profile.native_country,
+        notification_settings: notificationSettings,
+        privacy_settings: privacySettings
+      });
+
+      if (updateResult.error) {
+        throw new Error(updateResult.error.message);
+      }
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+
+    } catch (error: any) {
+      console.error('Error saving profile:', error);
+      setSaveError(error.message || 'Failed to save profile');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -188,322 +200,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
     }
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      uploadProfilePicture(file);
-    }
-  };
-
-  const uploadProfilePicture = async (file: File) => {
-    if (!user) return;
-
-    // Validate file
-    if (!file.type.startsWith('image/')) {
-      setUploadError('Please select a valid image file');
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) { // 5MB limit
-      setUploadError('File size must be less than 5MB');
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadError(null);
-    setUploadSuccess(false);
-
-    try {
-      // Generate unique filename
-      const fileExtension = file.name.split('.').pop() || 'jpg';
-      const fileName = `${user.id}/avatar.${fileExtension}`;
-
-      // Upload to Supabase Storage
-      const { data, error: uploadError } = await supabase.storage
-        .from('profile-pictures')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: true // Replace existing file
-        });
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('profile-pictures')
-        .getPublicUrl(fileName);
-
-      // Update user metadata
-      const { error: updateError } = await supabase.auth.updateUser({
-        data: {
-          avatar_url: fileName
-        }
-      });
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      // Update local state
-      setProfilePicture(urlData.publicUrl);
-      setUploadSuccess(true);
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => setUploadSuccess(false), 3000);
-
-    } catch (error: any) {
-      console.error('Upload error:', error);
-      setUploadError(error.message || 'Failed to upload profile picture');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleNameUpdate = async () => {
-    if (!user || !editedName.trim()) return;
-
-    setIsSaving(true);
-    try {
-      const { error } = await supabase.auth.updateUser({
-        data: {
-          full_name: editedName.trim()
-        }
-      });
-
-      if (error) throw error;
-
-      // Update local state
-      setUser(prev => prev ? { ...prev, full_name: editedName.trim() } : null);
-      setIsEditing(false);
-    } catch (error: any) {
-      console.error('Error updating name:', error);
-      setUploadError('Failed to update name');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleEmailUpdate = async () => {
-    if (!user || !newEmail.trim() || !currentPassword.trim()) {
-      setEmailUpdateError('Please fill in all fields');
-      return;
-    }
-
-    if (newEmail === user.email) {
-      setEmailUpdateError('New email must be different from current email');
-      return;
-    }
-
-    if (!/\S+@\S+\.\S+/.test(newEmail)) {
-      setEmailUpdateError('Please enter a valid email address');
-      return;
-    }
-
-    setIsUpdatingEmail(true);
-    setEmailUpdateError(null);
-
-    try {
-      // First verify the current password by attempting to sign in
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: currentPassword
-      });
-
-      if (signInError) {
-        throw new Error('Current password is incorrect');
-      }
-
-      // Update email
-      const { error: updateError } = await supabase.auth.updateUser({
-        email: newEmail
-      });
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      setEmailUpdateSuccess(true);
-      setIsEditingEmail(false);
-      setCurrentPassword('');
-      
-      // Update local state
-      setUser(prev => prev ? { ...prev, email: newEmail } : null);
-      
-      // Clear success message after 5 seconds
-      setTimeout(() => setEmailUpdateSuccess(false), 5000);
-
-    } catch (error: any) {
-      console.error('Email update error:', error);
-      setEmailUpdateError(error.message || 'Failed to update email');
-    } finally {
-      setIsUpdatingEmail(false);
-    }
-  };
-
-  const updateNotificationSettings = async (newSettings: Partial<NotificationSettings>) => {
-    if (!user) return;
-
-    try {
-      const updatedSettings = { ...notificationSettings, ...newSettings };
-      
-      const { error } = await supabase
-        .from('user_notification_settings')
-        .upsert({
-          user_id: user.id,
-          ...updatedSettings
-        });
-
-      if (error) throw error;
-
-      setNotificationSettings(updatedSettings);
-    } catch (error) {
-      console.error('Error updating notification settings:', error);
-      setSettingsError('Failed to update notification settings');
-    }
-  };
-
-  const updatePrivacySettings = async (newSettings: Partial<PrivacySettings>) => {
-    if (!user) return;
-
-    try {
-      const updatedSettings = { ...privacySettings, ...newSettings };
-      
-      const { error } = await supabase
-        .from('user_privacy_settings')
-        .upsert({
-          user_id: user.id,
-          ...updatedSettings
-        });
-
-      if (error) throw error;
-
-      setPrivacySettings(updatedSettings);
-    } catch (error) {
-      console.error('Error updating privacy settings:', error);
-      setSettingsError('Failed to update privacy settings');
-    }
-  };
-
-  const cancelEmailEdit = () => {
-    setIsEditingEmail(false);
-    setNewEmail(user?.email || '');
-    setCurrentPassword('');
-    setEmailUpdateError(null);
-  };
-
-  const updateUserCountry = async (country: string) => {
-    if (!user) return;
-
-    try {
-      const { error } = await supabase.auth.updateUser({
-        data: {
-          native_country: country
-        }
-      });
-
-      if (error) throw error;
-
-      // Also update the users table
-      const { error: dbError } = await supabase
-        .from('users')
-        .update({ native_country: country })
-        .eq('id', user.id);
-
-      if (dbError) {
-        console.warn('Failed to update users table:', dbError);
-      }
-
-      // Auto-update preferred currency based on country
-      if (country) {
-        const currencyMapping: { [key: string]: string } = {
-          'United States': 'USD',
-          'United Arab Emirates': 'AED',
-          'United Kingdom': 'GBP',
-          'Germany': 'EUR',
-          'France': 'EUR',
-          'Italy': 'EUR',
-          'Spain': 'EUR',
-          'Netherlands': 'EUR',
-          'Belgium': 'EUR',
-          'Austria': 'EUR',
-          'Finland': 'EUR',
-          'Canada': 'CAD',
-          'Australia': 'AUD',
-          'Japan': 'JPY',
-          'China': 'CNY',
-          'India': 'INR',
-          'Switzerland': 'CHF',
-          'Sweden': 'SEK',
-          'Norway': 'NOK',
-          'Denmark': 'DKK',
-          'Singapore': 'SGD',
-          'Hong Kong': 'HKD',
-          'South Korea': 'KRW',
-          'Brazil': 'BRL',
-          'Mexico': 'MXN',
-          'Saudi Arabia': 'SAR',
-          'Qatar': 'QAR',
-          'Kuwait': 'KWD',
-          'Bahrain': 'BHD',
-          'Oman': 'OMR',
-          'Israel': 'ILS',
-          'Turkey': 'TRY',
-          'Russia': 'RUB',
-          'Poland': 'PLN',
-          'Czech Republic': 'CZK',
-          'Hungary': 'HUF',
-          'South Africa': 'ZAR',
-          'Egypt': 'EGP',
-          'New Zealand': 'NZD'
-        };
-        
-        const suggestedCurrency = currencyMapping[country] || 'USD';
-        await updatePrivacySettings({ preferred_currency: suggestedCurrency });
-      }
-
-      // Update local state
-      setUser(prev => prev ? { 
-        ...prev, 
-        user_metadata: { ...prev.user_metadata || {}, native_country: country }
-      } : null);
-
-    } catch (error) {
-      console.error('Error updating country:', error);
-      setSettingsError('Failed to update country');
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  const ToggleSwitch: React.FC<{ enabled: boolean; onChange: (enabled: boolean) => void; disabled?: boolean }> = ({ enabled, onChange, disabled = false }) => (
-    <button
-      onClick={() => !disabled && onChange(!enabled)}
-      disabled={disabled}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
-        enabled ? 'bg-primary' : 'bg-gray-300'
-      } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-    >
-      <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
-          enabled ? 'translate-x-6' : 'translate-x-1'
-        }`}
-      />
-    </button>
-  );
-
-  if (!user) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
           <p className="text-text-secondary">Loading profile...</p>
         </div>
       </div>
@@ -516,452 +217,153 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       <header className="bg-white shadow-card border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Logo */}
-            <div className="flex items-center space-x-3">
-              <img 
-                src="/Smart Receipt Logo.png" 
-                alt="Smart Receipts Logo" 
-                className="h-10 w-10 object-contain"
-              />
-              <span className="text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent">
-                Smart Receipts
-              </span>
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={onBackToDashboard}
+                className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+              >
+                <ArrowLeft className="h-5 w-5" />
+                <span>Back to Dashboard</span>
+              </button>
+              <div className="flex items-center space-x-3">
+                <img 
+                  src="/Smart Receipt Logo.png" 
+                  alt="Smart Receipts Logo" 
+                  className="h-8 w-8 object-contain"
+                />
+                <h1 className="text-xl font-bold text-text-primary">Profile Settings</h1>
+              </div>
             </div>
 
-            {/* Header Actions */}
             <div className="flex items-center space-x-4">
-              {/* Alerts */}
-              <button className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
-                <Bell className="h-6 w-6" />
-                {alertsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-accent-red text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
-                    {alertsCount}
-                  </span>
+              {saveSuccess && (
+                <div className="flex items-center space-x-2 text-green-600">
+                  <Check className="h-5 w-5" />
+                  <span className="text-sm font-medium">Saved successfully!</span>
+                </div>
+              )}
+              
+              <button
+                onClick={handleSaveProfile}
+                disabled={isSaving}
+                className="flex items-center space-x-2 bg-primary text-white px-6 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
                 )}
+                <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
               </button>
-
-              {/* User Menu */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
-                >
-                  <div className="bg-primary rounded-full p-2">
-                    <User className="h-4 w-4 text-white" />
-                  </div>
-                  <span className="text-sm font-medium text-text-primary hidden sm:inline">
-                    {user?.full_name || user?.email?.split('@')[0] || 'User'}
-                  </span>
-                </button>
-
-                {/* User Dropdown */}
-                {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
-                    <div className="px-4 py-2 border-b border-gray-200">
-                      <p className="text-sm font-medium text-text-primary">
-                        {user?.full_name || 'User'}
-                      </p>
-                      <p className="text-xs text-text-secondary">{user?.email}</p>
-                    </div>
-                    <button
-                      onClick={onBackToDashboard}
-                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                      <span>Back to Dashboard</span>
-                    </button>
-                    <button
-                      onClick={handleSignOut}
-                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      <span>Sign Out</span>
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Page Title */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
-            Account Settings
-          </h1>
-          <p className="text-xl text-text-secondary">
-            Manage your profile, notifications, and privacy settings
-          </p>
-        </div>
-
-        {/* Error/Success Messages */}
-        {(uploadError || emailUpdateError || settingsError) && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-center">
-              <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
-              <p className="text-sm text-red-700">{uploadError || emailUpdateError || settingsError}</p>
-            </div>
-          </div>
-        )}
-
-        {(uploadSuccess || emailUpdateSuccess) && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-            <div className="flex items-center">
-              <Check className="h-5 w-5 text-green-600 mr-2" />
-              <p className="text-sm text-green-700">
-                {uploadSuccess && 'Profile picture updated successfully!'}
-                {emailUpdateSuccess && 'Email updated successfully! Please check your new email for confirmation.'}
-              </p>
-            </div>
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Error Message */}
+        {saveError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
+            <AlertCircle className="h-5 w-5 text-red-600 mr-3" />
+            <p className="text-red-700">{saveError}</p>
           </div>
         )}
 
         {/* Tab Navigation */}
-        <div className="bg-white rounded-2xl shadow-card border border-gray-100 mb-8">
+        <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
           <div className="border-b border-gray-200">
-            <nav className="flex space-x-8 px-6">
-              {[
-                { id: 'profile', label: 'Profile', icon: User },
-                { id: 'notifications', label: 'Notifications', icon: Bell },
-                { id: 'privacy', label: 'Privacy & Security', icon: Shield },
-                { id: 'data', label: 'Data Management', icon: Settings }
-              ].map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex items-center space-x-2 py-4 px-2 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                      activeTab === tab.id
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-text-secondary hover:text-text-primary hover:border-gray-300'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
+            <nav className="flex">
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`flex items-center space-x-2 px-6 py-4 font-medium transition-colors duration-200 ${
+                  activeTab === 'profile'
+                    ? 'text-primary border-b-2 border-primary bg-blue-50'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                <User className="h-5 w-5" />
+                <span>Profile</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('notifications')}
+                className={`flex items-center space-x-2 px-6 py-4 font-medium transition-colors duration-200 ${
+                  activeTab === 'notifications'
+                    ? 'text-primary border-b-2 border-primary bg-blue-50'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                <Bell className="h-5 w-5" />
+                <span>Notifications</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('privacy')}
+                className={`flex items-center space-x-2 px-6 py-4 font-medium transition-colors duration-200 ${
+                  activeTab === 'privacy'
+                    ? 'text-primary border-b-2 border-primary bg-blue-50'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                <Shield className="h-5 w-5" />
+                <span>Privacy & Currency</span>
+              </button>
             </nav>
           </div>
 
           {/* Tab Content */}
-          <div className="p-6">
+          <div className="p-8">
             {/* Profile Tab */}
             {activeTab === 'profile' && (
-              <div className="grid lg:grid-cols-3 gap-8">
-                {/* Profile Picture Card */}
-                <div className="lg:col-span-1">
-                  <div className="text-center">
-                    <h2 className="text-xl font-bold text-text-primary mb-6">Profile Picture</h2>
-                    
-                    {/* Profile Picture Display */}
-                    <div className="relative mb-6">
-                      <div className="w-32 h-32 mx-auto rounded-full overflow-hidden bg-gradient-to-br from-primary/10 to-secondary/10 border-4 border-white shadow-card">
-                        {profilePicture ? (
-                          <img
-                            src={profilePicture}
-                            alt="Profile"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <User className="h-16 w-16 text-text-secondary" />
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Upload Overlay */}
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading}
-                        className="absolute bottom-0 right-1/2 transform translate-x-1/2 translate-y-2 bg-primary text-white rounded-full p-3 shadow-card hover:shadow-card-hover hover:bg-primary/90 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isUploading ? (
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                        ) : (
-                          <Camera className="h-5 w-5" />
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Upload Button */}
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploading}
-                      className="w-full bg-gradient-to-r from-primary to-secondary text-white py-3 px-6 rounded-lg font-medium hover:from-primary/90 hover:to-secondary/90 transition-all duration-200 shadow-card hover:shadow-card-hover disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-                    >
-                      {isUploading ? (
-                        <>
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                          <span>Uploading...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="h-5 w-5" />
-                          <span>Upload Profile Picture</span>
-                        </>
-                      )}
-                    </button>
-
-                    <p className="text-sm text-text-secondary mt-3">
-                      JPG, PNG or GIF. Max size 5MB.
-                    </p>
-
-                    {/* Hidden File Input */}
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileSelect}
-                      className="hidden"
-                    />
-                  </div>
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-text-primary mb-6">Profile Information</h2>
                 </div>
 
-                {/* Profile Information Card */}
-                <div className="lg:col-span-2">
-                  <h2 className="text-xl font-bold text-text-primary mb-6">Profile Information</h2>
-                  
-                  <div className="space-y-6">
-                    {/* Full Name */}
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        <User className="inline h-4 w-4 mr-1" />
-                        Full Name
-                      </label>
-                      {isEditing ? (
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="text"
-                            value={editedName}
-                            onChange={(e) => setEditedName(e.target.value)}
-                            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                            placeholder="Enter your full name"
-                          />
-                          <button
-                            onClick={handleNameUpdate}
-                            disabled={isSaving || !editedName.trim()}
-                            className="bg-primary text-white p-3 rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {isSaving ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Check className="h-4 w-4" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setIsEditing(false);
-                              setEditedName(user.full_name);
-                            }}
-                            className="border border-gray-300 text-text-secondary p-3 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                          <span className="text-text-primary font-medium">
-                            {user.full_name || 'Not set'}
-                          </span>
-                          <button
-                            onClick={() => setIsEditing(true)}
-                            className="text-primary hover:text-primary/80 transition-colors duration-200"
-                          >
-                            <Edit3 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-2">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={profile.full_name}
+                      onChange={(e) => setProfile(prev => ({ ...prev, full_name: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="Enter your full name"
+                    />
+                  </div>
 
-                    {/* Email */}
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        <Mail className="inline h-4 w-4 mr-1" />
-                        Email Address
-                      </label>
-                      {isEditingEmail ? (
-                        <div className="space-y-4">
-                          {/* New Email Input */}
-                          <div>
-                            <input
-                              type="email"
-                              value={newEmail}
-                              onChange={(e) => setNewEmail(e.target.value)}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                              placeholder="Enter new email address"
-                            />
-                          </div>
-                          
-                          {/* Current Password Input */}
-                          <div>
-                            <label className="block text-sm font-medium text-text-secondary mb-2">
-                              <Shield className="inline h-4 w-4 mr-1" />
-                              Current Password (required for email change)
-                            </label>
-                            <div className="relative">
-                              <input
-                                type={showPassword ? 'text' : 'password'}
-                                value={currentPassword}
-                                onChange={(e) => setCurrentPassword(e.target.value)}
-                                className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                                placeholder="Enter your current password"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-secondary hover:text-text-primary transition-colors duration-200"
-                              >
-                                {showPassword ? (
-                                  <EyeOff className="h-5 w-5" />
-                                ) : (
-                                  <Eye className="h-5 w-5" />
-                                )}
-                              </button>
-                            </div>
-                          </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-2">
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      value={profile.email}
+                      disabled
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
+                    />
+                    <p className="text-xs text-text-secondary mt-1">Email cannot be changed</p>
+                  </div>
 
-                          {/* Action Buttons */}
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={handleEmailUpdate}
-                              disabled={isUpdatingEmail || !newEmail.trim() || !currentPassword.trim()}
-                              className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                            >
-                              {isUpdatingEmail ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                  <span>Updating...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Check className="h-4 w-4" />
-                                  <span>Update Email</span>
-                                </>
-                              )}
-                            </button>
-                            <button
-                              onClick={cancelEmailEdit}
-                              className="border border-gray-300 text-text-secondary px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                          
-                          <p className="text-sm text-text-secondary">
-                            You'll receive a confirmation email at your new address. Your email won't change until you confirm it.
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                          <span className="text-text-primary font-medium">{user.email}</span>
-                          <button
-                            onClick={() => setIsEditingEmail(true)}
-                            className="text-primary hover:text-primary/80 transition-colors duration-200"
-                          >
-                            <Edit3 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Member Since */}
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        <Calendar className="inline h-4 w-4 mr-1" />
-                        Member Since
-                      </label>
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <span className="text-text-primary font-medium">
-                          {formatDate(user.created_at)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* User ID */}
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        User ID
-                      </label>
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <span className="text-text-secondary font-mono text-sm break-all">
-                          {user.id}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Native Country */}
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        <User className="inline h-4 w-4 mr-1" />
-                        Native Country
-                      </label>
-                      <select
-                        value={user?.user_metadata?.native_country || ''}
-                        onChange={(e) => updateUserCountry(e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                      >
-                        <option value="">Select your country</option>
-                        <option value="United States">United States</option>
-                        <option value="United Arab Emirates">United Arab Emirates</option>
-                        <option value="United Kingdom">United Kingdom</option>
-                        <option value="Canada">Canada</option>
-                        <option value="Australia">Australia</option>
-                        <option value="Germany">Germany</option>
-                        <option value="France">France</option>
-                        <option value="Italy">Italy</option>
-                        <option value="Spain">Spain</option>
-                        <option value="Netherlands">Netherlands</option>
-                        <option value="Belgium">Belgium</option>
-                        <option value="Switzerland">Switzerland</option>
-                        <option value="Austria">Austria</option>
-                        <option value="Sweden">Sweden</option>
-                        <option value="Norway">Norway</option>
-                        <option value="Denmark">Denmark</option>
-                        <option value="Finland">Finland</option>
-                        <option value="Japan">Japan</option>
-                        <option value="South Korea">South Korea</option>
-                        <option value="China">China</option>
-                        <option value="India">India</option>
-                        <option value="Singapore">Singapore</option>
-                        <option value="Hong Kong">Hong Kong</option>
-                        <option value="Malaysia">Malaysia</option>
-                        <option value="Thailand">Thailand</option>
-                        <option value="Indonesia">Indonesia</option>
-                        <option value="Philippines">Philippines</option>
-                        <option value="Vietnam">Vietnam</option>
-                        <option value="Brazil">Brazil</option>
-                        <option value="Mexico">Mexico</option>
-                        <option value="Argentina">Argentina</option>
-                        <option value="Chile">Chile</option>
-                        <option value="Colombia">Colombia</option>
-                        <option value="Peru">Peru</option>
-                        <option value="South Africa">South Africa</option>
-                        <option value="Egypt">Egypt</option>
-                        <option value="Saudi Arabia">Saudi Arabia</option>
-                        <option value="Qatar">Qatar</option>
-                        <option value="Kuwait">Kuwait</option>
-                        <option value="Bahrain">Bahrain</option>
-                        <option value="Oman">Oman</option>
-                        <option value="Israel">Israel</option>
-                        <option value="Turkey">Turkey</option>
-                        <option value="Russia">Russia</option>
-                        <option value="Poland">Poland</option>
-                        <option value="Czech Republic">Czech Republic</option>
-                        <option value="Hungary">Hungary</option>
-                        <option value="Romania">Romania</option>
-                        <option value="Bulgaria">Bulgaria</option>
-                        <option value="Croatia">Croatia</option>
-                        <option value="Serbia">Serbia</option>
-                        <option value="Ukraine">Ukraine</option>
-                        <option value="New Zealand">New Zealand</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-text-primary mb-2">
+                      <Globe className="inline h-4 w-4 mr-1" />
+                      Native Country
+                    </label>
+                    <select
+                      value={profile.native_country}
+                      onChange={(e) => handleCountryChange(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                      <option value="">Select your country</option>
+                      {countries.map(country => (
+                        <option key={country} value={country}>{country}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-text-secondary mt-1">
+                      This helps us set your default currency and regional preferences
+                    </p>
                   </div>
                 </div>
               </div>
@@ -969,278 +371,172 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
 
             {/* Notifications Tab */}
             {activeTab === 'notifications' && (
-              <div className="max-w-2xl">
-                <h2 className="text-xl font-bold text-text-primary mb-6">Notification Preferences</h2>
-                
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-text-primary mb-6">Notification Preferences</h2>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                     <div>
                       <h3 className="font-medium text-text-primary">Warranty Alerts</h3>
-                      <p className="text-sm text-text-secondary">Get notified when warranties are about to expire</p>
+                      <p className="text-sm text-text-secondary">Get notified before your warranties expire</p>
                     </div>
-                    <ToggleSwitch
-                      enabled={notificationSettings.warranty_alerts}
-                      onChange={(enabled) => updateNotificationSettings({ warranty_alerts: enabled })}
-                    />
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notificationSettings.warranty_alerts}
+                        onChange={(e) => setNotificationSettings(prev => ({ ...prev, warranty_alerts: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                    </label>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                     <div>
-                      <h3 className="font-medium text-text-primary">Auto System Update</h3>
-                      <p className="text-sm text-text-secondary">Automatically update the app with new features</p>
+                      <h3 className="font-medium text-text-primary">System Updates</h3>
+                      <p className="text-sm text-text-secondary">Receive notifications about app updates and new features</p>
                     </div>
-                    <ToggleSwitch
-                      enabled={notificationSettings.auto_system_update}
-                      onChange={(enabled) => updateNotificationSettings({ auto_system_update: enabled })}
-                    />
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notificationSettings.auto_system_update}
+                        onChange={(e) => setNotificationSettings(prev => ({ ...prev, auto_system_update: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                    </label>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                     <div>
-                      <h3 className="font-medium text-text-primary">Marketing Notifications</h3>
-                      <p className="text-sm text-text-secondary">Receive updates about new features and promotions</p>
+                      <h3 className="font-medium text-text-primary">Marketing Communications</h3>
+                      <p className="text-sm text-text-secondary">Receive promotional emails and special offers</p>
                     </div>
-                    <ToggleSwitch
-                      enabled={notificationSettings.marketing_notifications}
-                      onChange={(enabled) => updateNotificationSettings({ marketing_notifications: enabled })}
-                    />
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notificationSettings.marketing_notifications}
+                        onChange={(e) => setNotificationSettings(prev => ({ ...prev, marketing_notifications: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                    </label>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Privacy & Security Tab */}
+            {/* Privacy & Currency Tab */}
             {activeTab === 'privacy' && (
-              <div className="max-w-2xl">
-                <h2 className="text-xl font-bold text-text-primary mb-6">Privacy & Security</h2>
-                
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="space-y-8">
+                <div>
+                  <h2 className="text-2xl font-bold text-text-primary mb-6">Privacy & Currency Settings</h2>
+                </div>
+
+                {/* Currency Settings */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                  <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center">
+                    <DollarSign className="h-5 w-5 mr-2" />
+                    Currency Preferences
+                  </h3>
+                  
+                  <div className="grid md:grid-cols-2 gap-6">
                     <div>
-                      <h3 className="font-medium text-text-primary">Data Collection</h3>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        Preferred Currency
+                      </label>
+                      <select
+                        value={privacySettings.preferred_currency}
+                        onChange={(e) => setPrivacySettings(prev => ({ ...prev, preferred_currency: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      >
+                        {currencies.map(currency => (
+                          <option key={currency.code} value={currency.code}>
+                            {currency.code} - {currency.name} ({currency.symbol})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-text-secondary mt-1">
+                        This will be used as your default currency in the dashboard
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        Currency Display Mode
+                      </label>
+                      <select
+                        value={privacySettings.display_currency_mode}
+                        onChange={(e) => setPrivacySettings(prev => ({ ...prev, display_currency_mode: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      >
+                        <option value="native">Native Currency Only</option>
+                        <option value="usd">USD Only</option>
+                        <option value="both">Both Currencies</option>
+                      </select>
+                      <p className="text-xs text-text-secondary mt-1">
+                        How amounts are displayed in your dashboard
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Privacy Settings */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-bold text-text-primary">Privacy Settings</h3>
+                  
+                  <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                    <div>
+                      <h4 className="font-medium text-text-primary">Data Collection</h4>
                       <p className="text-sm text-text-secondary">Allow us to collect usage data to improve the service</p>
                     </div>
-                    <ToggleSwitch
-                      enabled={privacySettings.data_collection}
-                      onChange={(enabled) => updatePrivacySettings({ data_collection: enabled })}
-                    />
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={privacySettings.data_collection}
+                        onChange={(e) => setPrivacySettings(prev => ({ ...prev, data_collection: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                    </label>
                   </div>
 
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <h3 className="font-medium text-text-primary">Data Analysis</h3>
-                        <p className="text-sm text-text-secondary">How we can use your data for analysis</p>
-                      </div>
-                    </div>
-                    <div className="flex space-x-4">
-                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="data_analysis"
-                          value="allowed"
-                          checked={privacySettings.data_analysis === 'allowed'}
-                          onChange={(e) => updatePrivacySettings({ data_analysis: e.target.value as 'allowed' | 'not_allowed' })}
-                          className="text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm text-text-secondary">Allowed</span>
-                      </label>
-                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="data_analysis"
-                          value="not_allowed"
-                          checked={privacySettings.data_analysis === 'not_allowed'}
-                          onChange={(e) => updatePrivacySettings({ data_analysis: e.target.value as 'allowed' | 'not_allowed' })}
-                          className="text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm text-text-secondary">Not Allowed</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div>
-                      <h3 className="font-medium text-text-primary">Biometric Login</h3>
-                      <p className="text-sm text-text-secondary">Use fingerprint or face recognition to log in</p>
-                    </div>
-                    <ToggleSwitch
-                      enabled={privacySettings.biometric_login}
-                      onChange={(enabled) => updatePrivacySettings({ biometric_login: enabled })}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div>
-                      <h3 className="font-medium text-text-primary">Two Factor Authentication</h3>
-                      <p className="text-sm text-text-secondary">Add an extra layer of security to your account</p>
-                    </div>
-                    <ToggleSwitch
-                      enabled={privacySettings.two_factor_auth}
-                      onChange={(enabled) => updatePrivacySettings({ two_factor_auth: enabled })}
-                    />
-                  </div>
-
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <h3 className="font-medium text-text-primary">Preferred Currency</h3>
-                        <p className="text-sm text-text-secondary">Default currency for dashboard display</p>
-                      </div>
-                    </div>
+                  <div className="p-4 border border-gray-200 rounded-lg">
+                    <h4 className="font-medium text-text-primary mb-2">Data Analysis</h4>
+                    <p className="text-sm text-text-secondary mb-3">How we can use your data for analysis</p>
                     <select
-                      value={privacySettings.preferred_currency}
-                      onChange={(e) => updatePrivacySettings({ preferred_currency: e.target.value })}
+                      value={privacySettings.data_analysis}
+                      onChange={(e) => setPrivacySettings(prev => ({ ...prev, data_analysis: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                     >
-                      <option value="USD">USD - US Dollar</option>
-                      <option value="AED">AED - UAE Dirham</option>
-                      <option value="GBP">GBP - British Pound</option>
-                      <option value="EUR">EUR - Euro</option>
-                      <option value="CAD">CAD - Canadian Dollar</option>
-                      <option value="AUD">AUD - Australian Dollar</option>
-                      <option value="JPY">JPY - Japanese Yen</option>
-                      <option value="INR">INR - Indian Rupee</option>
-                      <option value="CNY">CNY - Chinese Yuan</option>
-                      <option value="CHF">CHF - Swiss Franc</option>
-                      <option value="SEK">SEK - Swedish Krona</option>
-                      <option value="NOK">NOK - Norwegian Krone</option>
-                      <option value="DKK">DKK - Danish Krone</option>
-                      <option value="SGD">SGD - Singapore Dollar</option>
-                      <option value="HKD">HKD - Hong Kong Dollar</option>
-                      <option value="MYR">MYR - Malaysian Ringgit</option>
-                      <option value="THB">THB - Thai Baht</option>
-                      <option value="KRW">KRW - South Korean Won</option>
-                      <option value="BRL">BRL - Brazilian Real</option>
-                      <option value="MXN">MXN - Mexican Peso</option>
-                      <option value="SAR">SAR - Saudi Riyal</option>
-                      <option value="QAR">QAR - Qatari Riyal</option>
-                      <option value="KWD">KWD - Kuwaiti Dinar</option>
-                      <option value="BHD">BHD - Bahraini Dinar</option>
-                      <option value="OMR">OMR - Omani Rial</option>
-                      <option value="ILS">ILS - Israeli Shekel</option>
-                      <option value="TRY">TRY - Turkish Lira</option>
-                      <option value="RUB">RUB - Russian Ruble</option>
-                      <option value="PLN">PLN - Polish Zloty</option>
-                      <option value="CZK">CZK - Czech Koruna</option>
-                      <option value="HUF">HUF - Hungarian Forint</option>
-                      <option value="ZAR">ZAR - South African Rand</option>
-                      <option value="EGP">EGP - Egyptian Pound</option>
-                      <option value="NZD">NZD - New Zealand Dollar</option>
+                      <option value="allowed">Allowed</option>
+                      <option value="not_allowed">Not Allowed</option>
                     </select>
                   </div>
 
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <h3 className="font-medium text-text-primary">Currency Display Mode</h3>
-                        <p className="text-sm text-text-secondary">How to show amounts on dashboard</p>
-                      </div>
+                  <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                    <div>
+                      <h4 className="font-medium text-text-primary">Two-Factor Authentication</h4>
+                      <p className="text-sm text-text-secondary">Add an extra layer of security to your account</p>
                     </div>
-                    <div className="space-y-2">
-                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="display_currency_mode"
-                          value="native"
-                          checked={privacySettings.display_currency_mode === 'native'}
-                          onChange={(e) => updatePrivacySettings({ display_currency_mode: e.target.value as 'native' | 'usd' | 'both' })}
-                          className="text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm text-text-secondary">Native Currency Only</span>
-                      </label>
-                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="display_currency_mode"
-                          value="usd"
-                          checked={privacySettings.display_currency_mode === 'usd'}
-                          onChange={(e) => updatePrivacySettings({ display_currency_mode: e.target.value as 'native' | 'usd' | 'both' })}
-                          className="text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm text-text-secondary">USD Only</span>
-                      </label>
-                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="display_currency_mode"
-                          value="both"
-                          checked={privacySettings.display_currency_mode === 'both'}
-                          onChange={(e) => updatePrivacySettings({ display_currency_mode: e.target.value as 'native' | 'usd' | 'both' })}
-                          className="text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm text-text-secondary">Both Currencies</span>
-                      </label>
-                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={privacySettings.two_factor_auth}
+                        onChange={(e) => setPrivacySettings(prev => ({ ...prev, two_factor_auth: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                    </label>
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* Data Management Tab */}
-            {activeTab === 'data' && (
-              <div className="max-w-2xl">
-                <h2 className="text-xl font-bold text-text-primary mb-6">Data Management</h2>
-                
-                <div className="space-y-4">
-                  <button className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 group">
-                    <div className="flex items-center space-x-3">
-                      <Download className="h-5 w-5 text-text-secondary group-hover:text-primary transition-colors duration-200" />
-                      <div className="text-left">
-                        <h3 className="font-medium text-text-primary group-hover:text-primary transition-colors duration-200">
-                          Back up data
-                        </h3>
-                        <p className="text-sm text-text-secondary">
-                          Download a copy of all your receipt data
-                        </p>
-                      </div>
-                    </div>
-                    <ArrowLeft className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 rotate-180" />
-                  </button>
-
-                  <button className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 group">
-                    <div className="flex items-center space-x-3">
-                      <Trash2 className="h-5 w-5 text-text-secondary group-hover:text-primary transition-colors duration-200" />
-                      <div className="text-left">
-                        <h3 className="font-medium text-text-primary group-hover:text-primary transition-colors duration-200">
-                          Clean Cache
-                        </h3>
-                        <p className="text-sm text-text-secondary">
-                          Clear temporary files and cached data
-                        </p>
-                      </div>
-                    </div>
-                    <ArrowLeft className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 rotate-180" />
-                  </button>
-
-                  <button className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 group">
-                    <div className="flex items-center space-x-3">
-                      <RefreshCw className="h-5 w-5 text-text-secondary group-hover:text-primary transition-colors duration-200" />
-                      <div className="text-left">
-                        <h3 className="font-medium text-text-primary group-hover:text-primary transition-colors duration-200">
-                          Sync now
-                        </h3>
-                        <p className="text-sm text-text-secondary">
-                          Manually sync your data across all devices
-                        </p>
-                      </div>
-                    </div>
-                    <ArrowLeft className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 rotate-180" />
-                  </button>
                 </div>
               </div>
             )}
           </div>
         </div>
       </main>
-
-      {/* Click outside to close user menu */}
-      {showUserMenu && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setShowUserMenu(false)}
-        />
-      )}
     </div>
   );
 };

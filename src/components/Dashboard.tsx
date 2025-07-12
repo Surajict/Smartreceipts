@@ -93,15 +93,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [embeddingStatus, setEmbeddingStatus] = useState<{total: number, withEmbeddings: number, withoutEmbeddings: number} | null>(null);
   const [ragResult, setRagResult] = useState<RAGResult | null>(null);
   const [showAPITest, setShowAPITest] = useState(false);
+  const [userCurrency, setUserCurrency] = useState<{ code: string; symbol: string }>({ code: 'USD', symbol: '$' });
+  const [currencyDisplayMode, setCurrencyDisplayMode] = useState<'native' | 'usd' | 'both'>('native');
   
   // Currency state
-  const [currencyDisplayMode, setCurrencyDisplayMode] = useState<'native' | 'usd' | 'both'>('native');
   const [showCurrencyToggle, setShowCurrencyToggle] = useState(false);
-  const [userCurrency, setUserCurrency] = useState<{
-    code: string;
-    symbol: string;
-    name: string;
-  }>({ code: 'USD', symbol: '$', name: 'US Dollar' });
   
   const [summaryStats, setSummaryStats] = useState<SummaryStats>({
     receiptsScanned: 0,
@@ -117,6 +113,59 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     const loadUser = async () => {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
+      
+      // Load user's currency preferences
+      if (currentUser) {
+        try {
+          const { data: privacySettings } = await supabase
+            .from('user_privacy_settings')
+            .select('preferred_currency, display_currency_mode')
+            .eq('user_id', currentUser.id)
+            .single();
+          
+          if (privacySettings) {
+            const currencyMap: { [key: string]: { code: string; symbol: string } } = {
+              'USD': { code: 'USD', symbol: '$' },
+              'AED': { code: 'AED', symbol: 'د.إ' },
+              'GBP': { code: 'GBP', symbol: '£' },
+              'EUR': { code: 'EUR', symbol: '€' },
+              'CAD': { code: 'CAD', symbol: 'C$' },
+              'AUD': { code: 'AUD', symbol: 'A$' },
+              'JPY': { code: 'JPY', symbol: '¥' },
+              'INR': { code: 'INR', symbol: '₹' },
+              'CNY': { code: 'CNY', symbol: '¥' },
+              'CHF': { code: 'CHF', symbol: 'CHF' },
+              'SEK': { code: 'SEK', symbol: 'kr' },
+              'NOK': { code: 'NOK', symbol: 'kr' },
+              'DKK': { code: 'DKK', symbol: 'kr' },
+              'SGD': { code: 'SGD', symbol: 'S$' },
+              'HKD': { code: 'HKD', symbol: 'HK$' },
+              'KRW': { code: 'KRW', symbol: '₩' },
+              'BRL': { code: 'BRL', symbol: 'R$' },
+              'MXN': { code: 'MXN', symbol: '$' },
+              'SAR': { code: 'SAR', symbol: '﷼' },
+              'QAR': { code: 'QAR', symbol: '﷼' },
+              'KWD': { code: 'KWD', symbol: 'د.ك' },
+              'BHD': { code: 'BHD', symbol: '.د.ب' },
+              'OMR': { code: 'OMR', symbol: '﷼' },
+              'ILS': { code: 'ILS', symbol: '₪' },
+              'TRY': { code: 'TRY', symbol: '₺' },
+              'RUB': { code: 'RUB', symbol: '₽' },
+              'PLN': { code: 'PLN', symbol: 'zł' },
+              'CZK': { code: 'CZK', symbol: 'Kč' },
+              'HUF': { code: 'HUF', symbol: 'Ft' },
+              'ZAR': { code: 'ZAR', symbol: 'R' },
+              'EGP': { code: 'EGP', symbol: '£' },
+              'NZD': { code: 'NZD', symbol: 'NZ$' }
+            };
+            
+            setUserCurrency(currencyMap[privacySettings.preferred_currency] || { code: 'USD', symbol: '$' });
+            setCurrencyDisplayMode(privacySettings.display_currency_mode || 'native');
+          }
+        } catch (error) {
+          console.error('Error loading currency preferences:', error);
+        }
+      }
       
       // Load profile picture if exists
       if (currentUser?.user_metadata?.avatar_url) {
@@ -477,6 +526,42 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     setSearchResults([]);
     setSearchError(null);
     setRagResult(null);
+  };
+
+  const formatAmount = (amount: number, originalCurrency?: string) => {
+    if (!amount) return userCurrency.symbol + '0.00';
+    
+    switch (currencyDisplayMode) {
+      case 'usd':
+        // Convert to USD if needed (simplified conversion for demo)
+        const usdAmount = originalCurrency && originalCurrency !== 'USD' ? amount * 0.27 : amount;
+        return `$${usdAmount.toFixed(2)}`;
+      
+      case 'both':
+        const nativeAmount = `${userCurrency.symbol}${amount.toFixed(2)}`;
+        const usdAmountBoth = originalCurrency && originalCurrency !== 'USD' ? amount * 0.27 : amount;
+        return `${nativeAmount} ($${usdAmountBoth.toFixed(2)})`;
+      
+      default: // native
+        return `${userCurrency.symbol}${amount.toFixed(2)}`;
+    }
+  };
+
+  const updateCurrencyDisplayMode = async (mode: 'native' | 'usd' | 'both') => {
+    setCurrencyDisplayMode(mode);
+    
+    if (user) {
+      try {
+        await supabase
+          .from('user_privacy_settings')
+          .upsert({
+            user_id: user.id,
+            display_currency_mode: mode
+          });
+      } catch (error) {
+        console.error('Error updating currency display mode:', error);
+      }
+    }
   };
 
   if (showAPITest) {

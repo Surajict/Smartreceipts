@@ -415,10 +415,58 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
         console.warn('Failed to update users table:', dbError);
       }
 
+      // Auto-update preferred currency based on country
+      if (country) {
+        const currencyMapping: { [key: string]: string } = {
+          'United States': 'USD',
+          'United Arab Emirates': 'AED',
+          'United Kingdom': 'GBP',
+          'Germany': 'EUR',
+          'France': 'EUR',
+          'Italy': 'EUR',
+          'Spain': 'EUR',
+          'Netherlands': 'EUR',
+          'Belgium': 'EUR',
+          'Austria': 'EUR',
+          'Finland': 'EUR',
+          'Canada': 'CAD',
+          'Australia': 'AUD',
+          'Japan': 'JPY',
+          'China': 'CNY',
+          'India': 'INR',
+          'Switzerland': 'CHF',
+          'Sweden': 'SEK',
+          'Norway': 'NOK',
+          'Denmark': 'DKK',
+          'Singapore': 'SGD',
+          'Hong Kong': 'HKD',
+          'South Korea': 'KRW',
+          'Brazil': 'BRL',
+          'Mexico': 'MXN',
+          'Saudi Arabia': 'SAR',
+          'Qatar': 'QAR',
+          'Kuwait': 'KWD',
+          'Bahrain': 'BHD',
+          'Oman': 'OMR',
+          'Israel': 'ILS',
+          'Turkey': 'TRY',
+          'Russia': 'RUB',
+          'Poland': 'PLN',
+          'Czech Republic': 'CZK',
+          'Hungary': 'HUF',
+          'South Africa': 'ZAR',
+          'Egypt': 'EGP',
+          'New Zealand': 'NZD'
+        };
+        
+        const suggestedCurrency = currencyMapping[country] || 'USD';
+        await updatePrivacySettings({ preferred_currency: suggestedCurrency });
+      }
+
       // Update local state
       setUser(prev => prev ? { 
         ...prev, 
-        user_metadata: { ...prev.user_metadata, native_country: country }
+        user_metadata: { ...prev.user_metadata || {}, native_country: country }
       } : null);
 
     } catch (error) {
@@ -845,6 +893,75 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
                         </span>
                       </div>
                     </div>
+
+                    {/* Native Country */}
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        <User className="inline h-4 w-4 mr-1" />
+                        Native Country
+                      </label>
+                      <select
+                        value={user?.user_metadata?.native_country || ''}
+                        onChange={(e) => updateUserCountry(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                      >
+                        <option value="">Select your country</option>
+                        <option value="United States">United States</option>
+                        <option value="United Arab Emirates">United Arab Emirates</option>
+                        <option value="United Kingdom">United Kingdom</option>
+                        <option value="Canada">Canada</option>
+                        <option value="Australia">Australia</option>
+                        <option value="Germany">Germany</option>
+                        <option value="France">France</option>
+                        <option value="Italy">Italy</option>
+                        <option value="Spain">Spain</option>
+                        <option value="Netherlands">Netherlands</option>
+                        <option value="Belgium">Belgium</option>
+                        <option value="Switzerland">Switzerland</option>
+                        <option value="Austria">Austria</option>
+                        <option value="Sweden">Sweden</option>
+                        <option value="Norway">Norway</option>
+                        <option value="Denmark">Denmark</option>
+                        <option value="Finland">Finland</option>
+                        <option value="Japan">Japan</option>
+                        <option value="South Korea">South Korea</option>
+                        <option value="China">China</option>
+                        <option value="India">India</option>
+                        <option value="Singapore">Singapore</option>
+                        <option value="Hong Kong">Hong Kong</option>
+                        <option value="Malaysia">Malaysia</option>
+                        <option value="Thailand">Thailand</option>
+                        <option value="Indonesia">Indonesia</option>
+                        <option value="Philippines">Philippines</option>
+                        <option value="Vietnam">Vietnam</option>
+                        <option value="Brazil">Brazil</option>
+                        <option value="Mexico">Mexico</option>
+                        <option value="Argentina">Argentina</option>
+                        <option value="Chile">Chile</option>
+                        <option value="Colombia">Colombia</option>
+                        <option value="Peru">Peru</option>
+                        <option value="South Africa">South Africa</option>
+                        <option value="Egypt">Egypt</option>
+                        <option value="Saudi Arabia">Saudi Arabia</option>
+                        <option value="Qatar">Qatar</option>
+                        <option value="Kuwait">Kuwait</option>
+                        <option value="Bahrain">Bahrain</option>
+                        <option value="Oman">Oman</option>
+                        <option value="Israel">Israel</option>
+                        <option value="Turkey">Turkey</option>
+                        <option value="Russia">Russia</option>
+                        <option value="Poland">Poland</option>
+                        <option value="Czech Republic">Czech Republic</option>
+                        <option value="Hungary">Hungary</option>
+                        <option value="Romania">Romania</option>
+                        <option value="Bulgaria">Bulgaria</option>
+                        <option value="Croatia">Croatia</option>
+                        <option value="Serbia">Serbia</option>
+                        <option value="Ukraine">Ukraine</option>
+                        <option value="New Zealand">New Zealand</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -967,42 +1084,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
                   <div className="p-4 bg-gray-50 rounded-lg">
                     <div className="flex items-center justify-between mb-3">
                       <div>
-                        <h3 className="font-medium text-text-primary">Native Country</h3>
-                        <p className="text-sm text-text-secondary">Your country for currency and regional settings</p>
-                      </div>
-                    </div>
-                    <select
-                      value={user?.user_metadata?.native_country || ''}
-                      onChange={(e) => updateUserCountry(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                      <option value="">Select your country</option>
-                      <option value="United States">United States</option>
-                      <option value="United Arab Emirates">United Arab Emirates</option>
-                      <option value="United Kingdom">United Kingdom</option>
-                      <option value="Canada">Canada</option>
-                      <option value="Australia">Australia</option>
-                      <option value="Germany">Germany</option>
-                      <option value="France">France</option>
-                      <option value="Japan">Japan</option>
-                      <option value="India">India</option>
-                      <option value="China">China</option>
-                      <option value="Brazil">Brazil</option>
-                      <option value="Mexico">Mexico</option>
-                      <option value="South Korea">South Korea</option>
-                      <option value="Singapore">Singapore</option>
-                      <option value="Netherlands">Netherlands</option>
-                      <option value="Switzerland">Switzerland</option>
-                      <option value="Sweden">Sweden</option>
-                      <option value="Norway">Norway</option>
-                      <option value="Denmark">Denmark</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
-
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
                         <h3 className="font-medium text-text-primary">Preferred Currency</h3>
                         <p className="text-sm text-text-secondary">Default currency for dashboard display</p>
                       </div>
@@ -1021,6 +1102,31 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
                       <option value="JPY">JPY - Japanese Yen</option>
                       <option value="INR">INR - Indian Rupee</option>
                       <option value="CNY">CNY - Chinese Yuan</option>
+                      <option value="CHF">CHF - Swiss Franc</option>
+                      <option value="SEK">SEK - Swedish Krona</option>
+                      <option value="NOK">NOK - Norwegian Krone</option>
+                      <option value="DKK">DKK - Danish Krone</option>
+                      <option value="SGD">SGD - Singapore Dollar</option>
+                      <option value="HKD">HKD - Hong Kong Dollar</option>
+                      <option value="MYR">MYR - Malaysian Ringgit</option>
+                      <option value="THB">THB - Thai Baht</option>
+                      <option value="KRW">KRW - South Korean Won</option>
+                      <option value="BRL">BRL - Brazilian Real</option>
+                      <option value="MXN">MXN - Mexican Peso</option>
+                      <option value="SAR">SAR - Saudi Riyal</option>
+                      <option value="QAR">QAR - Qatari Riyal</option>
+                      <option value="KWD">KWD - Kuwaiti Dinar</option>
+                      <option value="BHD">BHD - Bahraini Dinar</option>
+                      <option value="OMR">OMR - Omani Rial</option>
+                      <option value="ILS">ILS - Israeli Shekel</option>
+                      <option value="TRY">TRY - Turkish Lira</option>
+                      <option value="RUB">RUB - Russian Ruble</option>
+                      <option value="PLN">PLN - Polish Zloty</option>
+                      <option value="CZK">CZK - Czech Koruna</option>
+                      <option value="HUF">HUF - Hungarian Forint</option>
+                      <option value="ZAR">ZAR - South African Rand</option>
+                      <option value="EGP">EGP - Egyptian Pound</option>
+                      <option value="NZD">NZD - New Zealand Dollar</option>
                     </select>
                   </div>
 

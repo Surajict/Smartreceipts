@@ -43,6 +43,29 @@ interface ExtractedData {
   country: string;
 }
 
+interface ExtractedItem {
+  product_description: string;
+  brand_name: string;
+  model_number: string | null;
+  price: number | null;
+  quantity: number;
+  warranty_period_months: number | null;
+  extended_warranty_months: number | null;
+}
+
+interface ExtractedStoreInfo {
+  store_name: string | null;
+  purchase_location: string | null;
+  purchase_date: string;
+  total_amount: number | null;
+  country: string;
+}
+
+interface MultiItemExtractionResult {
+  items: ExtractedItem[];
+  store_info: ExtractedStoreInfo;
+}
+
 type CaptureMode = 'normal' | 'long';
 type InputMode = 'capture' | 'upload' | 'manual';
 
@@ -57,6 +80,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [processingStep, setProcessingStep] = useState('');
   const [extractedText, setExtractedText] = useState('');
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
+  const [multiItemData, setMultiItemData] = useState<MultiItemExtractionResult | null>(null);
+  const [showItemSelection, setShowItemSelection] = useState(false);
+  const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
@@ -218,7 +244,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     return result.text;
   };
 
-  const fallbackDataExtraction = (text: string): ExtractedData => {
+  const fallbackDataExtraction = (text: string): MultiItemExtractionResult => {
     console.log('Using fallback data extraction');
     
     // Simple pattern matching for common receipt elements
@@ -244,17 +270,51 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     const storeName = lines[0] || 'Unknown Store';
     
     return {
-      product_description: 'Receipt Item',
-      brand_name: 'Unknown Brand',
-      store_name: storeName,
-      purchase_location: 'Unknown Location',
-      purchase_date: purchaseDate,
-      amount: amount,
-      warranty_period: '1 year',
-      extended_warranty: '',
-      model_number: '',
-      country: 'United States'
+      items: [{
+        product_description: 'Receipt Item',
+        brand_name: 'Unknown Brand',
+        model_number: null,
+        price: amount,
+        quantity: 1,
+        warranty_period_months: 12,
+        extended_warranty_months: null
+      }],
+      store_info: {
+        store_name: storeName,
+        purchase_location: 'Unknown Location',
+        purchase_date: purchaseDate,
+        total_amount: amount,
+        country: 'United States'
+      }
     };
+  };
+
+  const convertItemToExtractedData = (item: ExtractedItem, storeInfo: ExtractedStoreInfo): ExtractedData => {
+    return {
+      product_description: item.product_description,
+      brand_name: item.brand_name,
+      store_name: storeInfo.store_name || '',
+      purchase_location: storeInfo.purchase_location || '',
+      purchase_date: storeInfo.purchase_date,
+      amount: item.price,
+      warranty_period: item.warranty_period_months ? `${item.warranty_period_months} months` : '1 year',
+      extended_warranty: item.extended_warranty_months ? `${item.extended_warranty_months} months` : '',
+      model_number: item.model_number || '',
+      country: storeInfo.country
+    };
+  };
+
+  const handleItemSelection = (itemIndex: number) => {
+    if (!multiItemData) return;
+    
+    setSelectedItemIndex(itemIndex);
+    const selectedItem = multiItemData.items[itemIndex];
+    const convertedData = convertItemToExtractedData(selectedItem, multiItemData.store_info);
+    
+    setExtractedData(convertedData);
+    setShowItemSelection(false);
+    setShowExtractedForm(true);
+    setProcessingStep(`Selected item: ${selectedItem.product_description}`);
   };
 
   const processReceipt = async () => {
@@ -283,7 +343,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       }
 
       // Step 2: Structure data with GPT or fallback
-      let structuredData: ExtractedData;
+      let structuredData: MultiItemExtractionResult;
 
       try {
         if (openaiAvailable) {
@@ -304,9 +364,22 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         structuredData = fallbackDataExtraction(text);
       }
 
-      setExtractedData(structuredData);
-      setShowExtractedForm(true);
-      setProcessingStep('Data extracted successfully! Please review and edit as needed.');
+      setMultiItemData(structuredData);
+      
+      // Check if multiple items were found
+      if (structuredData.items.length > 1) {
+        setShowItemSelection(true);
+        setProcessingStep(`Found ${structuredData.items.length} items. Please select one to continue.`);
+      } else if (structuredData.items.length === 1) {
+        // Single item - proceed directly to form
+        const singleItemData = convertItemToExtractedData(structuredData.items[0], structuredData.store_info);
+        setExtractedData(singleItemData);
+        setSelectedItemIndex(0);
+        setShowExtractedForm(true);
+        setProcessingStep('Data extracted successfully! Please review and edit as needed.');
+      } else {
+        throw new Error('No items found in receipt');
+      }
 
     } catch (err: any) {
       console.error('Processing error:', err);
@@ -321,6 +394,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     setUploadedFile(null);
     setExtractedText('');
     setExtractedData(null);
+    setMultiItemData(null);
+    setShowItemSelection(false);
+    setSelectedItemIndex(null);
     setError(null);
     setSuccess(false);
     setOcrProgress(0);
@@ -336,7 +412,10 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
 
   const cancelAndRetry = () => {
     setShowExtractedForm(false);
+    setShowItemSelection(false);
     setExtractedData(null);
+    setMultiItemData(null);
+    setSelectedItemIndex(null);
     setExtractedText('');
     setError(null);
     setProcessingStep('');
@@ -380,10 +459,12 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       const receiptData = {
         ...extractedData,
         image_url: imageUrl,
-        processing_method: inputMode === 'manual' ? 'manual' : (extractedText ? 'ai_text_recognition_gpt_structured' : 'manual'),
+        processing_method: inputMode === 'manual' ? 'manual' : (extractedText ? 'ai_multi_item_gpt_structured' : 'manual'),
         ocr_confidence: extractedText ? 0.85 : null,
         extracted_text: extractedText || null,
-        ocr_engine: extractedText ? selectedOCREngine : null
+        ocr_engine: extractedText ? selectedOCREngine : null,
+        selected_item_index: selectedItemIndex,
+        total_items_found: multiItemData?.items.length || 1
       };
 
       const { error: saveError } = await saveReceiptToDatabase(receiptData, user.id);
@@ -395,6 +476,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       setSuccess(true);
       setProcessingStep('Receipt saved successfully!');
       setShowExtractedForm(false);
+      setShowItemSelection(false);
 
     } catch (err: any) {
       console.error('Save error:', err);
@@ -670,7 +752,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         )}
 
         {/* Input Method Selection */}
-        {!capturedImage && !showExtractedForm && (
+        {!capturedImage && !showExtractedForm && !showItemSelection && (
           <div className="grid md:grid-cols-3 gap-6 mb-8">
             {/* Camera Capture */}
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
@@ -747,7 +829,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         {/* OCR Engine Selection - Removed since there's only one option */}
 
         {/* Image Preview and Processing */}
-        {capturedImage && !showExtractedForm && (
+        {capturedImage && !showExtractedForm && !showItemSelection && (
           <div className="grid lg:grid-cols-2 gap-8 mb-8">
             {/* Left Column - Image Preview */}
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
@@ -828,11 +910,11 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                   </span>
                 </div>
 
-                <div className={`flex items-center space-x-3 p-3 rounded-lg ${extractedData ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
-                  <div className={`rounded-full p-1 ${extractedData ? 'bg-green-500' : 'bg-gray-300'}`}>
-                    {extractedData ? <Check className="h-3 w-3 text-white" /> : <Brain className="h-3 w-3 text-white" />}
+                <div className={`flex items-center space-x-3 p-3 rounded-lg ${multiItemData ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                  <div className={`rounded-full p-1 ${multiItemData ? 'bg-green-500' : 'bg-gray-300'}`}>
+                    {multiItemData ? <Check className="h-3 w-3 text-white" /> : <Brain className="h-3 w-3 text-white" />}
                   </div>
-                  <span className={`text-sm ${extractedData ? 'text-green-700' : 'text-text-secondary'}`}>
+                  <span className={`text-sm ${multiItemData ? 'text-green-700' : 'text-text-secondary'}`}>
                     AI Data Structuring
                   </span>
                 </div>
@@ -856,6 +938,110 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Item Selection Screen */}
+        {showItemSelection && multiItemData && (
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-text-primary">
+                Select Item from Receipt
+              </h2>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-text-secondary bg-primary/10 px-3 py-1 rounded-full">
+                  {multiItemData.items.length} items found
+                </span>
+                <button
+                  onClick={cancelAndRetry}
+                  className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200 px-3 py-2 border border-gray-300 rounded-lg"
+                >
+                  <X className="h-4 w-4" />
+                  <span>Cancel</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-700">
+                We found multiple items on this receipt. Please select the item you want to add to your library.
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {multiItemData.items.map((item, index) => (
+                <div
+                  key={index}
+                  className="bg-white border-2 border-gray-200 rounded-xl p-4 hover:border-primary/50 hover:shadow-md transition-all duration-200 cursor-pointer group"
+                  onClick={() => handleItemSelection(index)}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 line-clamp-2">
+                        {item.product_description}
+                      </h3>
+                      <p className="text-sm text-text-secondary mt-1">
+                        {item.brand_name}
+                      </p>
+                    </div>
+                    <div className="ml-3 text-right">
+                      {item.price && (
+                        <div className="font-bold text-text-primary">
+                          ${item.price.toFixed(2)}
+                        </div>
+                      )}
+                      <div className="text-xs text-text-secondary">
+                        Qty: {item.quantity}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-sm text-text-secondary">
+                    {item.model_number && (
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium">Model:</span>
+                        <span>{item.model_number}</span>
+                      </div>
+                    )}
+                    {item.warranty_period_months && (
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium">Warranty:</span>
+                        <span>{item.warranty_period_months} months</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <button className="w-full mt-4 bg-primary text-white py-2 px-4 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 group-hover:bg-primary/90">
+                    Select This Item
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Store Information */}
+            <div className="mt-8 p-4 bg-gray-50 rounded-lg">
+              <h3 className="font-medium text-text-primary mb-3">Receipt Information</h3>
+              <div className="grid md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-medium text-text-secondary">Store:</span>
+                  <span className="ml-2 text-text-primary">{multiItemData.store_info.store_name || 'Unknown Store'}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-text-secondary">Date:</span>
+                  <span className="ml-2 text-text-primary">{multiItemData.store_info.purchase_date}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-text-secondary">Location:</span>
+                  <span className="ml-2 text-text-primary">{multiItemData.store_info.purchase_location || 'Unknown Location'}</span>
+                </div>
+                {multiItemData.store_info.total_amount && (
+                  <div>
+                    <span className="font-medium text-text-secondary">Total:</span>
+                    <span className="ml-2 text-text-primary font-bold">${multiItemData.store_info.total_amount.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -888,7 +1074,10 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
             {inputMode !== 'manual' && (
               <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-700">
-                  Please review the extracted information below and make any necessary corrections before saving.
+                  {multiItemData && multiItemData.items.length > 1 
+                    ? `Selected item: ${extractedData.product_description}. Please review and edit the information below.`
+                    : 'Please review the extracted information below and make any necessary corrections before saving.'
+                  }
                 </p>
               </div>
             )}

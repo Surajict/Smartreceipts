@@ -826,21 +826,31 @@ export const extractReceiptDataWithGPT = async (extractedText: string) => {
 
     console.log('Extracting receipt data with GPT...');
 
-    const prompt = `You are a reliable AI that extracts structured receipt details from plain text.
-Given raw text from a receipt, extract the following fields and return ONLY valid JSON.
-If a field is missing, set its value to null. No extra explanation or text outside the JSON.
+    const prompt = `You are an AI assistant that extracts individual items from retail receipts.
+Given raw text from a receipt, analyze and return a list of each item in the following JSON format.
+If only one item is found, still return it as an array with one element.
 
-Required JSON fields:
-- product_description (string): Main product or service purchased
-- brand_name (string): Brand or manufacturer name
-- store_name (string): Name of the store/merchant
-- purchase_location (string): Store location/address
-- purchase_date (string): Date in YYYY-MM-DD format
-- amount (number): Total amount paid (numeric only, no currency symbol)
-- warranty_period (string): Warranty duration (e.g., "1 year", "6 months")
-- extended_warranty (string): Extended warranty info if any
-- model_number (string): Product model number if available
-- country (string): Country where purchase was made
+Return ONLY valid JSON in this exact format:
+{
+  "items": [
+    {
+      "product_description": "string - product name",
+      "brand_name": "string - brand or null",
+      "model_number": "string - model or null", 
+      "price": "number - individual item price or null",
+      "quantity": "number - quantity purchased or 1",
+      "warranty_period_months": "number - warranty in months or null",
+      "extended_warranty_months": "number - extended warranty months or null"
+    }
+  ],
+  "store_info": {
+    "store_name": "string - store name or null",
+    "purchase_location": "string - store address or null",
+    "purchase_date": "string - date in YYYY-MM-DD format",
+    "total_amount": "number - receipt total or null",
+    "country": "string - country or 'United States'"
+  }
+}
 
 Receipt text:
 ${extractedText}
@@ -858,14 +868,14 @@ Return only valid JSON:`;
         messages: [
           {
             role: 'system',
-            content: 'You are a precise data extraction assistant. Return only valid JSON with the requested fields.'
+            content: 'You are a precise data extraction assistant. Extract individual items from receipts and return only valid JSON with the requested structure.'
           },
           {
             role: 'user',
             content: prompt
           }
         ],
-        max_tokens: 500,
+        max_tokens: 800,
         temperature: 0.1,
       }),
     });
@@ -892,37 +902,46 @@ Return only valid JSON:`;
     const extractedData = JSON.parse(jsonMatch[0]);
     
     // Validate and clean the extracted data
-    const cleanedData = {
-      product_description: extractedData.product_description || 'Receipt Item',
-      brand_name: extractedData.brand_name || 'Unknown Brand',
-      store_name: extractedData.store_name || null,
-      purchase_location: extractedData.purchase_location || null,
-      purchase_date: extractedData.purchase_date || new Date().toISOString().split('T')[0],
-      amount: extractedData.amount && typeof extractedData.amount === 'number' ? extractedData.amount : null,
-      warranty_period: extractedData.warranty_period || '1 year',
-      extended_warranty: extractedData.extended_warranty || null,
-      model_number: extractedData.model_number || null,
-      country: extractedData.country || 'United States'
+    const items = extractedData.items || [];
+    const storeInfo = extractedData.store_info || {};
+    
+    // Clean and validate items
+    const cleanedItems = items.map((item: any, index: number) => ({
+      product_description: item.product_description || `Receipt Item ${index + 1}`,
+      brand_name: item.brand_name || 'Unknown Brand',
+      model_number: item.model_number || null,
+      price: typeof item.price === 'number' ? item.price : null,
+      quantity: typeof item.quantity === 'number' ? item.quantity : 1,
+      warranty_period_months: typeof item.warranty_period_months === 'number' ? item.warranty_period_months : null,
+      extended_warranty_months: typeof item.extended_warranty_months === 'number' ? item.extended_warranty_months : null
+    }));
+    
+    // Clean store info
+    const cleanedStoreInfo = {
+      store_name: storeInfo.store_name || null,
+      purchase_location: storeInfo.purchase_location || null,
+      purchase_date: storeInfo.purchase_date || new Date().toISOString().split('T')[0],
+      total_amount: typeof storeInfo.total_amount === 'number' ? storeInfo.total_amount : null,
+      country: storeInfo.country || 'United States'
     };
-
-    // Ensure amount is a number or null
-    if (cleanedData.amount && typeof cleanedData.amount === 'string') {
-      const numericAmount = parseFloat(cleanedData.amount.replace(/[^0-9.]/g, ''));
-      cleanedData.amount = isNaN(numericAmount) ? null : numericAmount;
-    }
-
+    
     // Ensure date is in correct format
-    if (cleanedData.purchase_date && !cleanedData.purchase_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      const date = new Date(cleanedData.purchase_date);
+    if (cleanedStoreInfo.purchase_date && !cleanedStoreInfo.purchase_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const date = new Date(cleanedStoreInfo.purchase_date);
       if (!isNaN(date.getTime())) {
-        cleanedData.purchase_date = date.toISOString().split('T')[0];
+        cleanedStoreInfo.purchase_date = date.toISOString().split('T')[0];
       } else {
-        cleanedData.purchase_date = new Date().toISOString().split('T')[0];
+        cleanedStoreInfo.purchase_date = new Date().toISOString().split('T')[0];
       }
     }
+    
+    const result = {
+      items: cleanedItems,
+      store_info: cleanedStoreInfo
+    };
 
-    console.log('GPT extraction successful:', cleanedData);
-    return { data: cleanedData, error: null };
+    console.log('GPT extraction successful:', result);
+    return { data: result, error: null };
 
   } catch (error: any) {
     console.error('GPT extraction error:', error);

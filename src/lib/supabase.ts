@@ -392,7 +392,7 @@ export const updateReceipt = async (userId: string, receiptId: string, updateDat
 };
 
 // Auth helper functions with improved error handling
-export const signUp = async (email: string, password: string, fullName: string) => {
+export const signUp = async (email: string, password: string, fullName: string, nativeCountry: string) => {
   try {
     console.log('Starting signup process for:', email)
     
@@ -402,6 +402,7 @@ export const signUp = async (email: string, password: string, fullName: string) 
       options: {
         data: {
           full_name: fullName,
+          native_country: nativeCountry,
         }
       }
     })
@@ -468,14 +469,14 @@ export const signUp = async (email: string, password: string, fullName: string) 
         if (profileError && profileError.code !== 'PGRST116') {
           console.warn('Profile verification failed:', profileError)
           // Try to create profile manually if trigger failed
-          await createUserProfileManually(data.user.id, email, fullName)
+          await createUserProfileManually(data.user.id, email, fullName, nativeCountry)
         } else if (profile) {
           console.log('User profile created successfully')
         }
       } catch (profileErr) {
         console.warn('Profile verification error:', profileErr)
         // Try to create profile manually
-        await createUserProfileManually(data.user.id, email, fullName)
+        await createUserProfileManually(data.user.id, email, fullName, nativeCountry)
       }
     }
     
@@ -493,7 +494,7 @@ export const signUp = async (email: string, password: string, fullName: string) 
 }
 
 // Helper function to create user profile manually if trigger fails
-const createUserProfileManually = async (userId: string, email: string, fullName: string) => {
+const createUserProfileManually = async (userId: string, email: string, fullName: string, nativeCountry: string) => {
   try {
     console.log('Creating user profile manually for:', userId)
     
@@ -503,7 +504,8 @@ const createUserProfileManually = async (userId: string, email: string, fullName
       .upsert({
         id: userId,
         email: email,
-        full_name: fullName
+        full_name: fullName,
+        native_country: nativeCountry
       }, {
         onConflict: 'id'
       })

@@ -12,7 +12,8 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
-    password: ''
+    password: '',
+    nativeCountry: ''
   });
   const [errors, setErrors] = useState<{fullName?: string; email?: string; password?: string; general?: string}>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -57,6 +58,10 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
       newErrors.password = 'Password must contain uppercase, lowercase, and number';
     }
     
+    if (!formData.nativeCountry.trim()) {
+      newErrors.nativeCountry = 'Native country is required';
+    }
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -78,7 +83,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
     try {
       console.log('Attempting to sign up user:', formData.email);
       
-      const { data, error } = await signUp(formData.email, formData.password, formData.fullName);
+      const { data, error } = await signUp(formData.email, formData.password, formData.fullName, formData.nativeCountry);
       
       if (error) {
         console.error('SignUp error details:', error);
@@ -408,6 +413,54 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
                   </div>
                 </div>
               )}
+
+              {/* Native Country Field */}
+              <div>
+                <label htmlFor="nativeCountry" className="block text-sm font-medium text-text-primary mb-2">
+                  <User className="inline h-4 w-4 mr-1" />
+                  Native Country
+                </label>
+                <select
+                  id="nativeCountry"
+                  name="nativeCountry"
+                  value={formData.nativeCountry}
+                  onChange={handleInputChange('nativeCountry')}
+                  className={`block w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
+                    errors.nativeCountry 
+                      ? 'border-accent-red bg-red-50' 
+                      : 'border-gray-300 bg-white hover:border-gray-400'
+                  }`}
+                  required
+                >
+                  <option value="">Select your country</option>
+                  <option value="United States">United States</option>
+                  <option value="United Arab Emirates">United Arab Emirates</option>
+                  <option value="United Kingdom">United Kingdom</option>
+                  <option value="Canada">Canada</option>
+                  <option value="Australia">Australia</option>
+                  <option value="Germany">Germany</option>
+                  <option value="France">France</option>
+                  <option value="Japan">Japan</option>
+                  <option value="India">India</option>
+                  <option value="China">China</option>
+                  <option value="Brazil">Brazil</option>
+                  <option value="Mexico">Mexico</option>
+                  <option value="South Korea">South Korea</option>
+                  <option value="Singapore">Singapore</option>
+                  <option value="Netherlands">Netherlands</option>
+                  <option value="Switzerland">Switzerland</option>
+                  <option value="Sweden">Sweden</option>
+                  <option value="Norway">Norway</option>
+                  <option value="Denmark">Denmark</option>
+                  <option value="Other">Other</option>
+                </select>
+                {errors.nativeCountry && (
+                  <p className="mt-2 text-sm text-accent-red flex items-center">
+                    <AlertCircle className="h-4 w-4 mr-1" />
+                    {errors.nativeCountry}
+                  </p>
+                )}
+              </div>
               
               {errors.password && (
                 <p className="mt-2 text-sm text-accent-red flex items-center">

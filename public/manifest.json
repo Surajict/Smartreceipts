@@ -1,0 +1,21 @@
+{
+  "name": "Smart Receipts",
+  "short_name": "Receipts",
+  "description": "AI-powered receipt management, warranty tracking, and smart search.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "Smart Receipt Logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "Smart Receipt Logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+} 

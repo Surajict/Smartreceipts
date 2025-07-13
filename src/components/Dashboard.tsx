@@ -27,6 +27,8 @@ import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats
 import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
+import { useNavigate } from 'react-router-dom';
+import Footer from './Footer';
 
 interface DashboardProps {
   onSignOut: () => void;
@@ -111,6 +113,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [archivingAll, setArchivingAll] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const loadUser = async () => {
@@ -1249,7 +1252,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                 warrantyAlerts.map((alert) => (
                   <div
                     key={alert.id}
-                    className={`p-4 rounded-lg border-2 ${getUrgencyColor(alert.urgency)} hover:shadow-md transition-shadow duration-200`}
+                    className={`p-4 rounded-lg border-2 ${getUrgencyColor(alert.urgency)} hover:shadow-md transition-shadow duration-200 cursor-pointer`}
+                    onClick={() => navigate('/warranty', { state: { id: alert.id } })}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -1376,6 +1380,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </div>
         </div>
       </main>
+      <Footer />
 
       {/* Click outside to close menus */}
       {(showUserMenu || showNotificationMenu) && (

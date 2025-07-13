@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt, getUserNotifications, archiveNotification, archiveAllNotifications, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
+import Footer from './Footer';
 
 interface MyLibraryProps {
   onBackToDashboard: () => void;
@@ -934,6 +935,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
           </div>
         )}
       </main>
+      <Footer />
 
       {/* Receipt Detail Modal */}
       {showReceiptModal && selectedReceipt && (

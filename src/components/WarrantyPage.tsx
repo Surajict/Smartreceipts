@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { getCurrentUser, getReceiptImageSignedUrl } from '../lib/supabase';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
+import { useLocation } from 'react-router-dom';
+import Footer from './Footer';
 
 interface WarrantyPageProps {
   onBackToDashboard: () => void;
@@ -58,6 +60,8 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [showFilters, setShowFilters] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const location = useLocation();
+  const selectedId = location.state?.id;
 
   useEffect(() => {
     const loadUser = async () => {
@@ -78,6 +82,13 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
   useEffect(() => {
     applyFiltersAndSort();
   }, [warrantyItems, searchQuery, filterType, sortType, sortOrder]);
+
+  // Add this effect to filter by selectedId if present
+  useEffect(() => {
+    if (selectedId && warrantyItems.length > 0) {
+      setFilteredItems(warrantyItems.filter(item => item.id === selectedId));
+    }
+  }, [selectedId, warrantyItems]);
 
   const loadWarrantyData = async (userId: string) => {
     try {
@@ -654,6 +665,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
           </div>
         )}
       </div>
+      <Footer />
     </div>
   );
 };

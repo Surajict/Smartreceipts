@@ -7,7 +7,7 @@ import HowItWorks from './components/HowItWorks';
 import Testimonials from './components/Testimonials';
 import FAQ from './components/FAQ';
 import CTA from './components/CTA';
-import Footer from './components/Footer';
+import Footer, { OldFooter } from './components/Footer';
 import Login from './components/Login';
 import SignUp from './components/SignUp';
 import Dashboard from './components/Dashboard';
@@ -32,7 +32,7 @@ const HomePage = () => {
   const handleShowSignUp = () => navigate('/signup');
   return (
     <div className="min-h-screen font-['Inter',sans-serif]">
-      <Header onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
+      <Header />
       <main>
         <Hero onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
         <Benefits onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
@@ -41,7 +41,7 @@ const HomePage = () => {
         <FAQ />
         <CTA onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
       </main>
-      <Footer />
+      <OldFooter />
     </div>
   );
 };

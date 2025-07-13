@@ -23,7 +23,7 @@ import {
   Lightbulb,
   Package
 } from 'lucide-react';
-import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, Notification } from '../lib/supabase';
+import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
 import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
@@ -766,13 +766,46 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       if (error) {
         setNotificationsError('Failed to load notifications');
       } else {
-        setNotifications(data || []);
+        // Clean up duplicates in database first
+        await cleanupDuplicateNotifications(userId);
+        // Then clean up duplicates in the UI
+        const cleanedNotifications = removeDuplicateNotifications(data || []);
+        setNotifications(cleanedNotifications);
       }
     } catch (err) {
       setNotificationsError('Failed to load notifications');
     } finally {
       setNotificationsLoading(false);
     }
+  };
+
+  // Function to remove duplicate notifications based on item name
+  const removeDuplicateNotifications = (notifications: Notification[]): Notification[] => {
+    const seen = new Set<string>();
+    const filtered: Notification[] = [];
+    
+    // Sort by creation date (newest first) to keep the most recent duplicate
+    const sorted = [...notifications].sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    
+    for (const notification of sorted) {
+      if (notification.type === 'warranty_alert') {
+        // Extract item name from message
+        const match = notification.message.match(/Warranty for (.+?) expires in/);
+        const itemName = match ? match[1] : notification.message;
+        
+        if (!seen.has(itemName)) {
+          seen.add(itemName);
+          filtered.push(notification);
+        }
+      } else {
+        // Keep all non-warranty notifications
+        filtered.push(notification);
+      }
+    }
+    
+    return filtered;
   };
 
   // Archive (clear) a single notification
@@ -797,17 +830,32 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   useEffect(() => {
     const createWarrantyNotifications = async () => {
       if (user && warrantyAlerts.length > 0) {
-        // Fetch all current unarchived notifications from DB
-        const { data: dbNotifications } = await getUserNotifications(user.id);
+        // Fetch all current notifications from DB (including archived ones to prevent re-creation)
+        const { data: dbNotifications } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('type', 'warranty_alert');
+        
         for (const alert of warrantyAlerts) {
-          const message = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days.`;
+          // Create a unique identifier based on the item name and receipt ID
+          const uniqueIdentifier = `${alert.itemName}_${alert.id}`;
+          
+          // Check if a notification for this specific item already exists (archived or not)
           const alreadyExists = (dbNotifications || []).some(
-            n => n.type === 'warranty_alert' && n.message === message && !n.archived
+            n => n.message.includes(alert.itemName) && n.message.includes('expires in')
           );
-          if (!alreadyExists) {
+
+                     // Check if the notification was previously dismissed
+           const wasDismissed = await wasNotificationDismissed(user.id, alert.itemName);
+
+          // Only create notification if it doesn't exist at all or if it was dismissed
+          if (!alreadyExists && !wasDismissed) {
+            const message = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days.`;
             await createNotification(user.id, 'warranty_alert', message);
           }
         }
+        
         // Reload notifications after possible creation
         await loadNotifications(user.id);
       }

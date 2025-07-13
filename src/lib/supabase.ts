@@ -1191,3 +1191,83 @@ export const archiveAllNotifications = async (
     .select();
   return { data, error };
 };
+
+// Check if a notification was previously dismissed for a specific item
+export const wasNotificationDismissed = async (
+  userId: string,
+  itemName: string
+): Promise<boolean> => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('type', 'warranty_alert')
+    .eq('archived', true)
+    .ilike('message', `%${itemName}%`);
+  
+  if (error) {
+    console.error('Error checking dismissed notifications:', error);
+    return false;
+  }
+  
+  return (data || []).length > 0;
+};
+
+// Clean up duplicate notifications for a user
+export const cleanupDuplicateNotifications = async (userId: string): Promise<void> => {
+  try {
+    // Get all warranty notifications for the user
+    const { data: notifications, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('type', 'warranty_alert')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching notifications for cleanup:', error);
+      return;
+    }
+
+    if (!notifications || notifications.length === 0) return;
+
+    // Group notifications by item name
+    const notificationGroups: { [key: string]: any[] } = {};
+    
+    notifications.forEach(notification => {
+      const match = notification.message.match(/Warranty for (.+?) expires in/);
+      const itemName = match ? match[1] : notification.message;
+      
+      if (!notificationGroups[itemName]) {
+        notificationGroups[itemName] = [];
+      }
+      notificationGroups[itemName].push(notification);
+    });
+
+    // For each group, keep only the most recent notification and delete the rest
+    for (const [itemName, group] of Object.entries(notificationGroups)) {
+      if (group.length > 1) {
+        // Sort by creation date (newest first)
+        group.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        
+        // Keep the first (most recent) and delete the rest
+        const duplicateIds = group.slice(1).map(n => n.id);
+        
+        if (duplicateIds.length > 0) {
+          const { error: deleteError } = await supabase
+            .from('notifications')
+            .delete()
+            .in('id', duplicateIds);
+          
+          if (deleteError) {
+            console.error(`Error deleting duplicate notifications for ${itemName}:`, deleteError);
+          } else {
+            console.log(`Cleaned up ${duplicateIds.length} duplicate notifications for ${itemName}`);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in cleanupDuplicateNotifications:', error);
+  }
+};

@@ -29,7 +29,7 @@ import {
   MapPin,
   AlertCircle
 } from 'lucide-react';
-import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt } from '../lib/supabase';
+import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt, getUserNotifications, archiveNotification, archiveAllNotifications, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 
 interface MyLibraryProps {
@@ -69,13 +69,19 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [alertsCount] = useState(3);
+  const [alertsCount, setAlertsCount] = useState(0);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editForm, setEditForm] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Notification state
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     loadUser();
@@ -84,6 +90,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   useEffect(() => {
     if (user) {
       loadReceipts();
+      loadNotifications(user.id);
     }
   }, [user]);
 
@@ -162,6 +169,82 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     setFilteredReceipts(filtered);
   };
 
+  const loadNotifications = async (userId: string) => {
+    setNotificationsLoading(true);
+    setNotificationsError(null);
+    try {
+      const { data, error } = await getUserNotifications(userId);
+      if (error) {
+        setNotificationsError('Failed to load notifications');
+      } else {
+        // Clean up duplicates in database first
+        await cleanupDuplicateNotifications(userId);
+        // Then clean up duplicates in the UI
+        const cleanedNotifications = removeDuplicateNotifications(data || []);
+        setNotifications(cleanedNotifications);
+        setAlertsCount(cleanedNotifications.filter(n => !n.read && !n.archived).length);
+      }
+    } catch (err) {
+      setNotificationsError('Failed to load notifications');
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  // Function to remove duplicate notifications based on item name
+  const removeDuplicateNotifications = (notifications: Notification[]): Notification[] => {
+    const seen = new Set<string>();
+    const uniqueNotifications: Notification[] = [];
+    
+    // Sort by created_at descending to keep the most recent
+    const sortedNotifications = [...notifications].sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    
+    for (const notification of sortedNotifications) {
+      if (notification.type === 'warranty_alert') {
+        // Extract item name from warranty message
+        const match = notification.message.match(/Warranty for (.+?) expires in/);
+        const itemName = match ? match[1] : notification.message;
+        
+        if (!seen.has(itemName)) {
+          seen.add(itemName);
+          uniqueNotifications.push(notification);
+        }
+      } else {
+        // For non-warranty notifications, keep all
+        uniqueNotifications.push(notification);
+      }
+    }
+    
+    return uniqueNotifications;
+  };
+
+  const handleArchiveNotification = async (notificationId: string) => {
+    if (!user) return;
+    
+    try {
+      await archiveNotification(notificationId);
+      setNotifications(notifications.filter(n => n.id !== notificationId));
+      setAlertsCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error archiving notification:', error);
+    }
+  };
+
+  const handleArchiveAllNotifications = async () => {
+    if (!user) return;
+    
+    try {
+      await archiveAllNotifications(user.id);
+      setNotifications([]);
+      setAlertsCount(0);
+      setShowNotifications(false);
+    } catch (error) {
+      console.error('Error archiving all notifications:', error);
+    }
+  };
+
   const handleSignOut = async () => {
     try {
       await signOut();
@@ -187,7 +270,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
         // Delete all items in the group by receipt_group_id
         const groupId = receipt.receipts[0].receipt_group_id;
         if (groupId) {
-          const res = await deleteReceipt(user.id, null, groupId); // null for id, pass groupId
+          const res = await deleteReceipt(user.id, undefined, groupId); // undefined for id, pass groupId
           error = res.error;
         } else {
           // fallback: delete all by id
@@ -371,7 +454,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
         }));
         // Update local state
         setReceipts(receipts.map(r => {
-          if (r.id === selectedReceipt.id) {
+          if (r.id === selectedReceipt?.id) {
             return {
               ...r,
               store_name: editForm.store_name,
@@ -382,7 +465,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
             return r;
           }
         }));
-        setSelectedReceipt((prev) => prev && prev.id === selectedReceipt.id ? {
+        setSelectedReceipt((prev) => prev && prev.id === selectedReceipt?.id ? {
           ...prev,
           store_name: editForm.store_name,
           purchase_date: editForm.purchase_date,
@@ -450,15 +533,87 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
 
             {/* Header Actions */}
             <div className="flex items-center space-x-4">
-              {/* Alerts */}
-              <button className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
-                <Bell className="h-6 w-6" />
-                {alertsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-accent-red text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
-                    {alertsCount}
-                  </span>
+              {/* Notifications */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                >
+                  <Bell className="h-6 w-6" />
+                  {alertsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-accent-red text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+                      {alertsCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notifications Dropdown */}
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 max-h-96 overflow-y-auto">
+                    <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200">
+                      <h3 className="font-medium text-text-primary">Notifications</h3>
+                      {notifications.length > 0 && (
+                        <button
+                          onClick={handleArchiveAllNotifications}
+                          className="text-xs text-primary hover:text-primary/80 transition-colors duration-200"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
+                    
+                    {notificationsLoading ? (
+                      <div className="px-4 py-8 text-center">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-text-secondary" />
+                        <p className="text-sm text-text-secondary">Loading notifications...</p>
+                      </div>
+                    ) : notificationsError ? (
+                      <div className="px-4 py-8 text-center">
+                        <AlertCircle className="h-6 w-6 mx-auto mb-2 text-red-500" />
+                        <p className="text-sm text-red-600">{notificationsError}</p>
+                      </div>
+                    ) : notifications.length === 0 ? (
+                      <div className="px-4 py-8 text-center">
+                        <Bell className="h-6 w-6 mx-auto mb-2 text-text-secondary" />
+                        <p className="text-sm text-text-secondary">No notifications</p>
+                      </div>
+                    ) : (
+                      <div className="max-h-64 overflow-y-auto">
+                        {notifications.map((notification) => (
+                          <div
+                            key={notification.id}
+                            className={`px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 ${
+                              !notification.read ? 'bg-blue-50' : ''
+                            }`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-text-primary mb-1">
+                                  {notification.message}
+                                </p>
+                                <p className="text-xs text-text-secondary">
+                                  {new Date(notification.created_at).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => handleArchiveNotification(notification.id)}
+                                className="ml-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
-              </button>
+              </div>
 
               {/* Back Button */}
               <button
@@ -1029,6 +1184,14 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
         <div
           className="fixed inset-0 z-40"
           onClick={() => setShowUserMenu(false)}
+        />
+      )}
+
+      {/* Click outside to close notifications */}
+      {showNotifications && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowNotifications(false)}
         />
       )}
     </div>

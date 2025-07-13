@@ -793,23 +793,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   // Count of unread notifications
   const unreadCount = notifications.filter(n => !n.read && !n.archived).length;
 
-  // When a new warranty alert is generated, create a notification
+  // When a new warranty alert is generated, create a notification only if it does not exist in the DB
   useEffect(() => {
-    if (user && warrantyAlerts.length > 0) {
-      warrantyAlerts.forEach(async (alert) => {
-        // Only create notification if not already present
-        const alreadyExists = notifications.some(n => n.type === 'warranty_alert' && n.message.includes(alert.itemName) && !n.archived);
-        if (!alreadyExists) {
-          await createNotification(
-            user.id,
-            'warranty_alert',
-            `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days.`
+    const createWarrantyNotifications = async () => {
+      if (user && warrantyAlerts.length > 0) {
+        // Fetch all current unarchived notifications from DB
+        const { data: dbNotifications } = await getUserNotifications(user.id);
+        for (const alert of warrantyAlerts) {
+          const message = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days.`;
+          const alreadyExists = (dbNotifications || []).some(
+            n => n.type === 'warranty_alert' && n.message === message && !n.archived
           );
-          // Reload notifications after creating
-          await loadNotifications(user.id);
+          if (!alreadyExists) {
+            await createNotification(user.id, 'warranty_alert', message);
+          }
         }
-      });
-    }
+        // Reload notifications after possible creation
+        await loadNotifications(user.id);
+      }
+    };
+    createWarrantyNotifications();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [warrantyAlerts, user]);
 

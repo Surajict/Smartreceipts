@@ -1127,3 +1127,67 @@ Return only valid JSON:`;
     };
   }
 }
+
+// Notification Types
+export type NotificationType = 'warranty_alert' | 'new_receipt' | 'system' | 'other';
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  message: string;
+  created_at: string;
+  read: boolean;
+  archived: boolean;
+}
+
+// Create a new notification
+export const createNotification = async (
+  userId: string,
+  type: NotificationType,
+  message: string
+): Promise<{ data: Notification[] | null; error: any }> => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .insert([{ user_id: userId, type, message }])
+    .select();
+  return { data, error };
+};
+
+// Fetch notifications for a user (unarchived, newest first)
+export const getUserNotifications = async (
+  userId: string
+): Promise<{ data: Notification[] | null; error: any }> => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('archived', false)
+    .order('created_at', { ascending: false });
+  return { data, error };
+};
+
+// Mark a notification as read and archive it
+export const archiveNotification = async (
+  notificationId: string
+): Promise<{ data: Notification[] | null; error: any }> => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .update({ read: true, archived: true })
+    .eq('id', notificationId)
+    .select();
+  return { data, error };
+};
+
+// Mark all notifications as read and archive for a user
+export const archiveAllNotifications = async (
+  userId: string
+): Promise<{ data: Notification[] | null; error: any }> => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .update({ read: true, archived: true })
+    .eq('user_id', userId)
+    .eq('archived', false)
+    .select();
+  return { data, error };
+};

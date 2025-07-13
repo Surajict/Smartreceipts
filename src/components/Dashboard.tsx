@@ -23,7 +23,7 @@ import {
   Lightbulb,
   Package
 } from 'lucide-react';
-import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats } from '../lib/supabase';
+import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, Notification } from '../lib/supabase';
 import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
@@ -107,6 +107,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [warrantyAlerts, setWarrantyAlerts] = useState<WarrantyAlert[]>([]);
   const [recentReceipts, setRecentReceipts] = useState<RecentReceipt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [archivingAll, setArchivingAll] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -129,6 +133,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       if (currentUser) {
         await loadDashboardData(currentUser.id);
         await loadEmbeddingStatus(currentUser.id);
+        await loadNotifications(currentUser.id); // Load notifications on user load
       }
     };
     loadUser();
@@ -140,6 +145,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
     return () => clearInterval(timer);
   }, []);
+
+  // Fetch notifications on load
+  useEffect(() => {
+    if (user) {
+      loadNotifications(user.id);
+    }
+  }, [user]);
 
   const loadDashboardData = async (userId: string) => {
     try {
@@ -746,6 +758,61 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     });
   };
 
+  const loadNotifications = async (userId: string) => {
+    setNotificationsLoading(true);
+    setNotificationsError(null);
+    try {
+      const { data, error } = await getUserNotifications(userId);
+      if (error) {
+        setNotificationsError('Failed to load notifications');
+      } else {
+        setNotifications(data || []);
+      }
+    } catch (err) {
+      setNotificationsError('Failed to load notifications');
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  // Archive (clear) a single notification
+  const handleArchiveNotification = async (id: string) => {
+    await archiveNotification(id);
+    if (user) loadNotifications(user.id);
+  };
+
+  // Archive (clear) all notifications
+  const handleArchiveAllNotifications = async () => {
+    if (!user) return;
+    setArchivingAll(true);
+    await archiveAllNotifications(user.id);
+    await loadNotifications(user.id);
+    setArchivingAll(false);
+  };
+
+  // Count of unread notifications
+  const unreadCount = notifications.filter(n => !n.read && !n.archived).length;
+
+  // When a new warranty alert is generated, create a notification
+  useEffect(() => {
+    if (user && warrantyAlerts.length > 0) {
+      warrantyAlerts.forEach(async (alert) => {
+        // Only create notification if not already present
+        const alreadyExists = notifications.some(n => n.type === 'warranty_alert' && n.message.includes(alert.itemName) && !n.archived);
+        if (!alreadyExists) {
+          await createNotification(
+            user.id,
+            'warranty_alert',
+            `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days.`
+          );
+          // Reload notifications after creating
+          await loadNotifications(user.id);
+        }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warrantyAlerts, user]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -784,45 +851,56 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                   className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
                 >
                   <Bell className="h-6 w-6" />
-                  {alertsCount > 0 && (
+                  {unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 bg-accent-red text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
-                      {alertsCount}
+                      {unreadCount}
                     </span>
                   )}
                 </button>
 
                 {/* Notification Dropdown */}
                 {showNotificationMenu && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
-                    <div className="px-4 py-2 border-b border-gray-200">
+                  <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-between">
                       <h3 className="font-medium text-text-primary">Notifications</h3>
+                      {notifications.length > 0 && (
+                        <button
+                          onClick={handleArchiveAllNotifications}
+                          disabled={archivingAll}
+                          className="text-xs text-primary hover:underline disabled:opacity-50"
+                        >
+                          {archivingAll ? 'Clearing...' : 'Clear All'}
+                        </button>
+                      )}
                     </div>
-                    <div className="max-h-64 overflow-y-auto">
-                      {warrantyAlerts.length === 0 ? (
+                    <div className="max-h-80 overflow-y-auto">
+                      {notificationsLoading ? (
+                        <div className="px-4 py-8 text-center text-text-secondary">Loading...</div>
+                      ) : notificationsError ? (
+                        <div className="px-4 py-8 text-center text-red-500">{notificationsError}</div>
+                      ) : notifications.length === 0 ? (
                         <div className="px-4 py-8 text-center">
                           <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                          <p className="text-sm text-text-secondary">No warranty alerts at this time</p>
+                          <p className="text-sm text-text-secondary">No notifications at this time</p>
                         </div>
                       ) : (
-                        warrantyAlerts.map((alert) => (
-                          <div key={alert.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
-                            <div className="flex items-start space-x-3">
-                              {getUrgencyIcon(alert.urgency)}
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-text-primary">{alert.itemName}</p>
-                                <p className="text-xs text-text-secondary">
-                                  Warranty expires in {alert.daysLeft} days
-                                </p>
+                        notifications.map((n) => (
+                          <div key={n.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="text-sm font-medium text-text-primary mb-1">{n.message}</div>
+                              <div className="text-xs text-text-secondary">
+                                {n.type.replace('_', ' ')} • {new Date(n.created_at).toLocaleString()}
                               </div>
                             </div>
+                            <button
+                              onClick={() => handleArchiveNotification(n.id)}
+                              className="ml-4 text-xs text-primary hover:underline"
+                            >
+                              Clear
+                            </button>
                           </div>
                         ))
                       )}
-                    </div>
-                    <div className="px-4 py-2 border-t border-gray-200">
-                      <button className="text-sm text-primary hover:text-primary/80 font-medium">
-                        View all notifications
-                      </button>
                     </div>
                   </div>
                 )}

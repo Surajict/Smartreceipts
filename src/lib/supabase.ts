@@ -1,13 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://napulczxrrnsjtmaixzp.supabase.co'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'PLACEHOLDER_ANON_KEY'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY!
 
-if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('placeholder') || supabaseAnonKey.includes('placeholder')) {
-  console.warn('Supabase environment variables not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your deployment environment.')
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
@@ -15,72 +11,157 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 })
 
+/**
+ * Global data cleaning function to remove problematic fields before database operations
+ * This ensures no old or invalid field names are sent to the database
+ */
+export const cleanReceiptDataGlobal = (receiptData: any): any => {
+  if (!receiptData || typeof receiptData !== 'object') {
+    return receiptData;
+  }
+
+  const cleanedData = { ...receiptData };
+  
+  // Comprehensive list of fields that might cause database errors
+  const fieldsToRemove = [
+    'has_line_items',
+    'has_multiple_products', 
+    'line_items',
+    'items',
+    'products', // This shouldn't be in individual receipt records
+    'hasLineItems',
+    'hasMultipleProducts',
+    'lineItems',
+    'multipleProducts',
+    'productItems',
+    'receiptItems'
+  ];
+  
+  // Remove problematic fields
+  fieldsToRemove.forEach(field => {
+    if (cleanedData.hasOwnProperty(field)) {
+      console.log(`🧹 Removing problematic field from database operation: ${field}`);
+      delete cleanedData[field];
+    }
+  });
+  
+  // Log for debugging
+  console.log('🛡️ Global data cleaning applied:', {
+    original: receiptData,
+    cleaned: cleanedData
+  });
+  
+  return cleanedData;
+};
+
+/**
+ * Test function to validate the global cleaning function
+ * This can be called from the browser console for debugging
+ */
+export const testGlobalCleaning = () => {
+  const testData = {
+    product_description: 'Test Product',
+    brand_name: 'Test Brand',
+    has_line_items: true,
+    has_multiple_products: false,
+    line_items: ['item1', 'item2'],
+    products: [{ name: 'product1' }],
+    hasLineItems: true,
+    amount: 100
+  };
+
+  console.log('🧪 Testing global cleaning function...');
+  const cleaned = cleanReceiptDataGlobal(testData);
+  
+  console.log('✅ Global cleaning test completed:', {
+    original: testData,
+    cleaned: cleaned,
+    removedFields: Object.keys(testData).filter(key => !cleaned.hasOwnProperty(key))
+  });
+  
+  return cleaned;
+};
+
+// Make the test function available globally for browser console debugging
+if (typeof window !== 'undefined') {
+  (window as any).testGlobalCleaning = testGlobalCleaning;
+  (window as any).cleanReceiptDataGlobal = cleanReceiptDataGlobal;
+}
+
+// Helper function to get signed URL for existing receipt image
+export const getReceiptImageSignedUrl = async (imageUrl: string): Promise<string | null> => {
+  try {
+    if (!imageUrl) return null;
+    
+    // If it's already a signed URL (contains token), return as is
+    if (imageUrl.includes('token=')) {
+      return imageUrl;
+    }
+    
+    // Extract the file path from the URL
+    let filePath = '';
+    
+    if (imageUrl.includes('/storage/v1/object/public/receipt-images/')) {
+      // Extract path from public URL format
+      filePath = imageUrl.split('/storage/v1/object/public/receipt-images/')[1];
+    } else if (imageUrl.includes('/storage/v1/object/sign/receipt-images/')) {
+      // Extract path from signed URL format
+      filePath = imageUrl.split('/storage/v1/object/sign/receipt-images/')[1]?.split('?')[0];
+    } else {
+      // Assume it's just the file path
+      filePath = imageUrl;
+    }
+    
+    if (!filePath) {
+      console.warn('Could not extract file path from URL:', imageUrl);
+      return null;
+    }
+    
+    // Generate new signed URL
+    const { data: urlData, error: urlError } = await supabase.storage
+      .from('receipt-images')
+      .createSignedUrl(filePath, 365 * 24 * 60 * 60); // 1 year expiry
+    
+    if (urlError || !urlData?.signedUrl) {
+      console.error('Error creating signed URL for existing image:', urlError);
+      return null;
+    }
+    
+    return urlData.signedUrl;
+  } catch (err) {
+    console.error('Error getting signed URL:', err);
+    return null;
+  }
+};
+
 // Receipt-specific database functions
 export const saveReceiptToDatabase = async (receiptData: any, userId: string) => {
   try {
-    console.log('Saving receipt to database for user:', userId);
-    console.log('Receipt data:', receiptData);
-
+    console.log('📝 [saveReceiptToDatabase] Inserting into receipts:', receiptData);
+    // Clean the data globally before any processing
+    const cleanedReceiptData = cleanReceiptDataGlobal(receiptData);
     // Validate required fields
-    if (!receiptData.product_description?.trim()) {
+    if (!cleanedReceiptData.product_description?.trim()) {
       throw new Error('Product description is required');
     }
-    if (!receiptData.brand_name?.trim()) {
+    if (!cleanedReceiptData.brand_name?.trim()) {
       throw new Error('Brand name is required');
     }
-    if (!receiptData.purchase_date) {
+    if (!cleanedReceiptData.purchase_date) {
       throw new Error('Purchase date is required');
     }
-    if (!receiptData.warranty_period?.trim()) {
+    if (!cleanedReceiptData.warranty_period?.trim()) {
       throw new Error('Warranty period is required');
     }
-    if (!receiptData.country?.trim()) {
-      throw new Error('Country is required');
-    }
-
-    // Prepare the data for insertion
-    const insertData = {
-      user_id: userId,
-      product_description: receiptData.product_description.trim(),
-      brand_name: receiptData.brand_name.trim(),
-      store_name: receiptData.store_name?.trim() || null,
-      purchase_location: receiptData.purchase_location?.trim() || null,
-      purchase_date: receiptData.purchase_date,
-      amount: receiptData.amount && receiptData.amount > 0 ? receiptData.amount : null,
-      warranty_period: receiptData.warranty_period.trim(),
-      extended_warranty: receiptData.extended_warranty?.trim() || null,
-      model_number: receiptData.model_number?.trim() || null,
-      country: receiptData.country.trim(),
-      image_url: receiptData.image_url || null,
-      image_path: receiptData.image_url || null, // For backward compatibility
-      processing_method: receiptData.processing_method || 'manual',
-      ocr_confidence: receiptData.ocr_confidence || null,
-      extracted_text: receiptData.extracted_text || null,
-      ocr_engine: receiptData.ocr_engine || null
-    };
-
-    console.log('Prepared insert data:', insertData);
-
-    // Insert the receipt
+    // Insert into receipts table
     const { data, error } = await supabase
       .from('receipts')
-      .insert([insertData])
-      .select();
-
-    if (error) {
-      console.error('Database insert error:', error);
-      throw new Error(`Failed to save receipt: ${error.message}`);
-    }
-
-    console.log('Receipt saved successfully:', data);
-    return { data, error: null };
-
-  } catch (err: any) {
-    console.error('Save receipt error:', err);
-    return { 
-      data: null, 
-      error: { message: err.message || 'Failed to save receipt' } 
-    };
+      .insert([cleanedReceiptData]);
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error saving receipt to database:', error);
+    throw error;
   }
 };
 
@@ -111,17 +192,22 @@ export const uploadReceiptImage = async (file: File | Blob, userId: string, file
 
     console.log('Image uploaded successfully:', uploadData);
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
+    // Generate signed URL for private bucket (valid for 1 year)
+    const { data: urlData, error: urlError } = await supabase.storage
       .from('receipt-images')
-      .getPublicUrl(fileName);
+      .createSignedUrl(fileName, 365 * 24 * 60 * 60); // 1 year expiry
 
-    console.log('Image URL:', urlData.publicUrl);
+    if (urlError || !urlData?.signedUrl) {
+      console.error('Error creating signed URL:', urlError);
+      throw new Error(`Failed to create signed URL: ${urlError?.message}`);
+    }
+
+    console.log('Signed URL created:', urlData.signedUrl);
 
     return { 
       data: { 
         path: fileName, 
-        url: urlData.publicUrl 
+        url: urlData.signedUrl
       }, 
       error: null 
     };
@@ -362,8 +448,8 @@ export const updateReceipt = async (userId: string, receiptId: string, updateDat
 
     // Remove undefined values
     Object.keys(cleanedData).forEach(key => {
-      if (cleanedData[key] === undefined) {
-        delete cleanedData[key];
+      if ((cleanedData as any)[key] === undefined) {
+        delete (cleanedData as any)[key];
       }
     });
 
@@ -692,7 +778,7 @@ export const onAuthStateChange = (callback: (event: string, session: any) => voi
 export const testSupabaseConnection = async () => {
   try {
     // If using placeholder values, return false
-    if (supabaseUrl.includes('placeholder') || supabaseAnonKey.includes('placeholder')) {
+    if (supabaseUrl.includes('placeholder') || supabaseKey.includes('placeholder')) {
       console.warn('Using placeholder Supabase credentials')
       return false
     }
@@ -815,7 +901,7 @@ export const testOpenAIConnection = async () => {
   }
 }
 
-// GPT-powered receipt data extraction
+// GPT-powered receipt data extraction with multi-product support
 export const extractReceiptDataWithGPT = async (extractedText: string) => {
   try {
     const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
@@ -827,10 +913,15 @@ export const extractReceiptDataWithGPT = async (extractedText: string) => {
     console.log('Extracting receipt data with GPT...');
 
     const prompt = `You are a reliable AI that extracts structured receipt details from plain text.
-Given raw text from a receipt, extract the following fields and return ONLY valid JSON.
-If a field is missing, set its value to null. No extra explanation or text outside the JSON.
+Analyze the receipt and determine if it contains one product or multiple products.
 
-Required JSON fields:
+IMPORTANT: Look for multiple line items with different product names and prices. If you see 2 or more distinct products with individual prices, this is a MULTI-PRODUCT receipt.
+
+Examples of MULTI-PRODUCT receipts:
+- "DJI Mini Drone $899.00, Nintendo Switch $649.00, Surface Pro $1299.00"
+- Multiple different items listed separately with individual prices
+
+For SINGLE PRODUCT receipts, return JSON with these fields:
 - product_description (string): Main product or service purchased
 - brand_name (string): Brand or manufacturer name
 - store_name (string): Name of the store/merchant
@@ -841,6 +932,22 @@ Required JSON fields:
 - extended_warranty (string): Extended warranty info if any
 - model_number (string): Product model number if available
 - country (string): Country where purchase was made
+
+For MULTI-PRODUCT receipts, return JSON with these fields:
+- store_name (string): Name of the store/merchant
+- purchase_location (string): Store location/address
+- purchase_date (string): Date in YYYY-MM-DD format
+- total_amount (number): Total amount paid for all products
+- warranty_period (string): Default warranty duration
+- extended_warranty (string): Extended warranty info if any
+- country (string): Country where purchase was made
+- products (array): Array of product objects, each with:
+  - product_description (string): Product name
+  - brand_name (string): Brand name
+  - model_number (string): Model number if available
+  - amount (number): Individual product price
+
+If a field is missing, set its value to null. Return ONLY valid JSON, no extra text.
 
 Receipt text:
 ${extractedText}
@@ -891,38 +998,80 @@ Return only valid JSON:`;
 
     const extractedData = JSON.parse(jsonMatch[0]);
     
-    // Validate and clean the extracted data
-    const cleanedData = {
-      product_description: extractedData.product_description || 'Receipt Item',
-      brand_name: extractedData.brand_name || 'Unknown Brand',
-      store_name: extractedData.store_name || null,
-      purchase_location: extractedData.purchase_location || null,
-      purchase_date: extractedData.purchase_date || new Date().toISOString().split('T')[0],
-      amount: extractedData.amount && typeof extractedData.amount === 'number' ? extractedData.amount : null,
-      warranty_period: extractedData.warranty_period || '1 year',
-      extended_warranty: extractedData.extended_warranty || null,
-      model_number: extractedData.model_number || null,
-      country: extractedData.country || 'United States'
-    };
+    // Check if this is a multi-product receipt
+    const isMultiProduct = extractedData.products && Array.isArray(extractedData.products);
+    
+    if (isMultiProduct) {
+      // Handle multi-product receipt
+      const baseData = {
+        store_name: extractedData.store_name || null,
+        purchase_location: extractedData.purchase_location || null,
+        purchase_date: extractedData.purchase_date || new Date().toISOString().split('T')[0],
+        total_amount: extractedData.total_amount || null,
+        warranty_period: extractedData.warranty_period || '1 year',
+        extended_warranty: extractedData.extended_warranty || null,
+        country: extractedData.country || 'United States'
+      };
 
-    // Ensure amount is a number or null
-    if (cleanedData.amount && typeof cleanedData.amount === 'string') {
-      const numericAmount = parseFloat(cleanedData.amount.replace(/[^0-9.]/g, ''));
-      cleanedData.amount = isNaN(numericAmount) ? null : numericAmount;
-    }
+      // Validate and clean products
+      const cleanedProducts = extractedData.products.map((product: any) => ({
+        product_description: product.product_description || 'Receipt Item',
+        brand_name: product.brand_name || 'Unknown Brand',
+        model_number: product.model_number || null,
+        amount: typeof product.amount === 'number' ? product.amount : null
+      }));
 
-    // Ensure date is in correct format
-    if (cleanedData.purchase_date && !cleanedData.purchase_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      const date = new Date(cleanedData.purchase_date);
-      if (!isNaN(date.getTime())) {
-        cleanedData.purchase_date = date.toISOString().split('T')[0];
-      } else {
-        cleanedData.purchase_date = new Date().toISOString().split('T')[0];
+      // Ensure date is in correct format
+      if (baseData.purchase_date && !baseData.purchase_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const date = new Date(baseData.purchase_date);
+        if (!isNaN(date.getTime())) {
+          baseData.purchase_date = date.toISOString().split('T')[0];
+        } else {
+          baseData.purchase_date = new Date().toISOString().split('T')[0];
+        }
       }
-    }
 
-    console.log('GPT extraction successful:', cleanedData);
-    return { data: cleanedData, error: null };
+      const cleanedData = {
+        ...baseData,
+        products: cleanedProducts
+      };
+
+      console.log('GPT extraction successful (multi-product):', cleanedData);
+      return { data: cleanedData, error: null };
+    } else {
+      // Handle single-product receipt (existing logic)
+      const cleanedData = {
+        product_description: extractedData.product_description || 'Receipt Item',
+        brand_name: extractedData.brand_name || 'Unknown Brand',
+        store_name: extractedData.store_name || null,
+        purchase_location: extractedData.purchase_location || null,
+        purchase_date: extractedData.purchase_date || new Date().toISOString().split('T')[0],
+        amount: extractedData.amount && typeof extractedData.amount === 'number' ? extractedData.amount : null,
+        warranty_period: extractedData.warranty_period || '1 year',
+        extended_warranty: extractedData.extended_warranty || null,
+        model_number: extractedData.model_number || null,
+        country: extractedData.country || 'United States'
+      };
+
+      // Ensure amount is a number or null
+      if (cleanedData.amount && typeof cleanedData.amount === 'string') {
+        const numericAmount = parseFloat(cleanedData.amount.replace(/[^0-9.]/g, ''));
+        cleanedData.amount = isNaN(numericAmount) ? null : numericAmount;
+      }
+
+      // Ensure date is in correct format
+      if (cleanedData.purchase_date && !cleanedData.purchase_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const date = new Date(cleanedData.purchase_date);
+        if (!isNaN(date.getTime())) {
+          cleanedData.purchase_date = date.toISOString().split('T')[0];
+        } else {
+          cleanedData.purchase_date = new Date().toISOString().split('T')[0];
+        }
+      }
+
+      console.log('GPT extraction successful (single-product):', cleanedData);
+      return { data: cleanedData, error: null };
+    }
 
   } catch (error: any) {
     console.error('GPT extraction error:', error);

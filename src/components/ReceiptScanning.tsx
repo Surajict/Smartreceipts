@@ -23,25 +23,17 @@ import {
   Maximize2,
   Settings
 } from 'lucide-react';
-import { getCurrentUser, signOut, saveReceiptToDatabase, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
+import { getCurrentUser, signOut, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
 import { OCRService, OCREngine } from '../services/ocrService';
+import { MultiProductReceiptService } from '../services/multiProductReceiptService';
+import { ExtractedReceiptData } from '../types/receipt';
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
 }
 
-interface ExtractedData {
-  product_description: string;
-  brand_name: string;
-  store_name: string;
-  purchase_location: string;
-  purchase_date: string;
-  amount: number | null;
-  warranty_period: string;
-  extended_warranty: string;
-  model_number: string;
-  country: string;
-}
+// Use the imported type instead of local interface
+type ExtractedData = ExtractedReceiptData;
 
 type CaptureMode = 'normal' | 'long';
 type InputMode = 'capture' | 'upload' | 'manual';
@@ -227,7 +219,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     // Try to find amount
     const amountPattern = /\$?(\d+\.?\d*)/g;
     const amounts = text.match(amountPattern);
-    const amount = amounts ? parseFloat(amounts[amounts.length - 1].replace('$', '')) : null;
+    const amount = amounts ? parseFloat(amounts[amounts.length - 1].replace('$', '')) : undefined;
     
     // Try to find date
     const datePattern = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/g;
@@ -250,6 +242,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       purchase_location: 'Unknown Location',
       purchase_date: purchaseDate,
       amount: amount,
+      total_amount: amount || 0,
       warranty_period: '1 year',
       extended_warranty: '',
       model_number: '',
@@ -294,7 +287,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
             throw new Error(gptError.message);
           }
           
-          structuredData = gptData!;
+          // Cast to ExtractedReceiptData - the service will handle the validation
+          structuredData = gptData as ExtractedReceiptData;
         } else {
           throw new Error('OpenAI not available');
         }
@@ -342,7 +336,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     setProcessingStep('');
   };
 
-  const updateExtractedData = (field: keyof ExtractedData, value: string | number | null) => {
+  const updateExtractedData = (field: keyof ExtractedData, value: string | number | null | any) => {
     if (extractedData) {
       setExtractedData({
         ...extractedData,
@@ -361,39 +355,50 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     setError(null);
 
     try {
-      let imageUrl = null;
-      
+      let imageUrl = undefined;
       // Upload image if we have one
       if (capturedImage || uploadedFile) {
         setProcessingStep('Uploading image...');
         const imageFile = uploadedFile || dataURLtoBlob(capturedImage!);
         const { data: uploadData, error: uploadError } = await uploadReceiptImage(imageFile, user.id);
-        
-        if (uploadError) {
-          console.warn('Failed to upload image:', uploadError);
+        if (uploadError || !uploadData?.url) {
+          setError('Failed to upload image. Please try again.');
+          setIsProcessing(false);
+          return;
         } else {
-          imageUrl = uploadData?.url;
+          imageUrl = uploadData.url;
         }
+      } else {
+        setError('No image found. Please capture or upload a receipt image.');
+        setIsProcessing(false);
+        return;
       }
 
       setProcessingStep('Saving receipt...');
-      const receiptData = {
-        ...extractedData,
-        image_url: imageUrl,
-        processing_method: inputMode === 'manual' ? 'manual' : (extractedText ? 'ai_text_recognition_gpt_structured' : 'manual'),
-        ocr_confidence: extractedText ? 0.85 : null,
-        extracted_text: extractedText || null,
-        ocr_engine: extractedText ? selectedOCREngine : null
-      };
+      const processingMethod = inputMode === 'manual' ? 'manual' : (extractedText ? 'gpt_structured' : 'manual');
+      const ocrConfidence = extractedText ? 0.85 : undefined;
 
-      const { error: saveError } = await saveReceiptToDatabase(receiptData, user.id);
+      // Use the new MultiProductReceiptService
+      const result = await MultiProductReceiptService.saveReceipt(
+        extractedData,
+        user.id,
+        imageUrl,
+        processingMethod,
+        ocrConfidence,
+        extractedText || undefined
+      );
 
-      if (saveError) {
-        throw new Error(`Save failed: ${saveError.message}`);
+      if (!result.receipts || result.receipts.length === 0) {
+        throw new Error(result.error || 'Failed to save receipt');
       }
 
       setSuccess(true);
-      setProcessingStep('Receipt saved successfully!');
+      const isMultiProduct = result.receipts.length > 1;
+      setProcessingStep(
+        isMultiProduct 
+          ? `Multi-product receipt saved successfully! (${result.receipts.length} products)`
+          : 'Receipt saved successfully!'
+      );
       setShowExtractedForm(false);
 
     } catch (err: any) {
@@ -412,7 +417,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       store_name: '',
       purchase_location: '',
       purchase_date: new Date().toISOString().split('T')[0],
-      amount: null,
+      amount: undefined,
+      total_amount: 0,
       warranty_period: '1 year',
       extended_warranty: '',
       model_number: '',
@@ -893,138 +899,325 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
               </div>
             )}
 
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Product Information */}
-              <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
-                  Product Description *
-                </label>
-                <input
-                  type="text"
-                  value={extractedData.product_description}
-                  onChange={(e) => updateExtractedData('product_description', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                  placeholder="Enter product description"
-                />
-              </div>
+            {/* Check if this is a multi-product receipt */}
+            {extractedData.products && extractedData.products.length > 0 ? (
+              /* Multi-Product Receipt Form */
+              <div className="space-y-8">
+                {/* Receipt Header Information */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-green-800 mb-2">
+                    Multi-Product Receipt Detected! 🎉
+                  </h3>
+                  <p className="text-sm text-green-700">
+                    Found {extractedData.products.length} products on this receipt. Total amount: ${extractedData.total_amount?.toFixed(2) || '0.00'}
+                  </p>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
-                  Brand Name *
-                </label>
-                <input
-                  type="text"
-                  value={extractedData.brand_name}
-                  onChange={(e) => updateExtractedData('brand_name', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                  placeholder="Enter brand name"
-                />
-              </div>
+                {/* Store Information */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-text-primary mb-4">Store Information</h3>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        Store Name
+                      </label>
+                      <input
+                        type="text"
+                        value={extractedData.store_name || ''}
+                        onChange={(e) => updateExtractedData('store_name', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                        placeholder="Enter store name"
+                      />
+                    </div>
 
-              <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
-                  Store Name
-                </label>
-                <input
-                  type="text"
-                  value={extractedData.store_name}
-                  onChange={(e) => updateExtractedData('store_name', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                  placeholder="Enter store name"
-                />
-              </div>
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        Purchase Location
+                      </label>
+                      <input
+                        type="text"
+                        value={extractedData.purchase_location || ''}
+                        onChange={(e) => updateExtractedData('purchase_location', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                        placeholder="Enter purchase location"
+                      />
+                    </div>
 
-              <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
-                  Purchase Location
-                </label>
-                <input
-                  type="text"
-                  value={extractedData.purchase_location}
-                  onChange={(e) => updateExtractedData('purchase_location', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                  placeholder="Enter purchase location"
-                />
-              </div>
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        Purchase Date *
+                      </label>
+                      <input
+                        type="date"
+                        value={extractedData.purchase_date}
+                        onChange={(e) => updateExtractedData('purchase_date', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                      />
+                    </div>
 
-              <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
-                  Purchase Date *
-                </label>
-                <input
-                  type="date"
-                  value={extractedData.purchase_date}
-                  onChange={(e) => updateExtractedData('purchase_date', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                />
-              </div>
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        Total Amount
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={extractedData.total_amount || ''}
+                        onChange={(e) => updateExtractedData('total_amount', e.target.value ? parseFloat(e.target.value) : null)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                        placeholder="Enter total amount"
+                      />
+                    </div>
 
-              <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
-                  Amount
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={extractedData.amount || ''}
-                  onChange={(e) => updateExtractedData('amount', e.target.value ? parseFloat(e.target.value) : null)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                  placeholder="Enter amount"
-                />
-              </div>
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        Country *
+                      </label>
+                      <input
+                        type="text"
+                        value={extractedData.country}
+                        onChange={(e) => updateExtractedData('country', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                        placeholder="Enter country"
+                      />
+                    </div>
 
-              <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
-                  Warranty Period *
-                </label>
-                <input
-                  type="text"
-                  value={extractedData.warranty_period}
-                  onChange={(e) => updateExtractedData('warranty_period', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                  placeholder="e.g., 1 year, 6 months"
-                />
-              </div>
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        Warranty Period *
+                      </label>
+                      <input
+                        type="text"
+                        value={extractedData.warranty_period}
+                        onChange={(e) => updateExtractedData('warranty_period', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                        placeholder="e.g., 1 year, 6 months"
+                      />
+                    </div>
+                  </div>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
-                  Model Number
-                </label>
-                <input
-                  type="text"
-                  value={extractedData.model_number}
-                  onChange={(e) => updateExtractedData('model_number', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                  placeholder="Enter model number"
-                />
-              </div>
+                {/* Products List */}
+                <div>
+                  <h3 className="text-lg font-semibold text-text-primary mb-4">Products</h3>
+                  <div className="space-y-4">
+                    {extractedData.products.map((product, index) => (
+                      <div key={index} className="bg-white border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-md font-medium text-text-primary">Product {index + 1}</h4>
+                          <span className="text-sm text-text-secondary">${product.amount?.toFixed(2) || '0.00'}</span>
+                        </div>
+                        
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-text-primary mb-2">
+                              Product Description *
+                            </label>
+                            <input
+                              type="text"
+                              value={product.product_description || ''}
+                              onChange={(e) => {
+                                const updatedProducts = [...extractedData.products!];
+                                updatedProducts[index] = { ...product, product_description: e.target.value };
+                                updateExtractedData('products', updatedProducts);
+                              }}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                              placeholder="Enter product description"
+                            />
+                          </div>
 
-              <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
-                  Extended Warranty
-                </label>
-                <input
-                  type="text"
-                  value={extractedData.extended_warranty}
-                  onChange={(e) => updateExtractedData('extended_warranty', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                  placeholder="Enter extended warranty details"
-                />
-              </div>
+                          <div>
+                            <label className="block text-sm font-medium text-text-primary mb-2">
+                              Brand Name *
+                            </label>
+                            <input
+                              type="text"
+                              value={product.brand_name || ''}
+                              onChange={(e) => {
+                                const updatedProducts = [...extractedData.products!];
+                                updatedProducts[index] = { ...product, brand_name: e.target.value };
+                                updateExtractedData('products', updatedProducts);
+                              }}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                              placeholder="Enter brand name"
+                            />
+                          </div>
 
-              <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
-                  Country *
-                </label>
-                <input
-                  type="text"
-                  value={extractedData.country}
-                  onChange={(e) => updateExtractedData('country', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                  placeholder="Enter country"
-                />
+                          <div>
+                            <label className="block text-sm font-medium text-text-primary mb-2">
+                              Model Number
+                            </label>
+                            <input
+                              type="text"
+                              value={product.model_number || ''}
+                              onChange={(e) => {
+                                const updatedProducts = [...extractedData.products!];
+                                updatedProducts[index] = { ...product, model_number: e.target.value };
+                                updateExtractedData('products', updatedProducts);
+                              }}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                              placeholder="Enter model number"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-primary mb-2">
+                              Amount
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={product.amount || ''}
+                              onChange={(e) => {
+                                const updatedProducts = [...extractedData.products!];
+                                updatedProducts[index] = { ...product, amount: e.target.value ? parseFloat(e.target.value) : 0 };
+                                updateExtractedData('products', updatedProducts);
+                              }}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                              placeholder="Enter amount"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              /* Single Product Receipt Form */
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Product Information */}
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    Product Description *
+                  </label>
+                  <input
+                    type="text"
+                    value={extractedData.product_description || ''}
+                    onChange={(e) => updateExtractedData('product_description', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    placeholder="Enter product description"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    Brand Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={extractedData.brand_name || ''}
+                    onChange={(e) => updateExtractedData('brand_name', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    placeholder="Enter brand name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    Store Name
+                  </label>
+                  <input
+                    type="text"
+                    value={extractedData.store_name || ''}
+                    onChange={(e) => updateExtractedData('store_name', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    placeholder="Enter store name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    Purchase Location
+                  </label>
+                  <input
+                    type="text"
+                    value={extractedData.purchase_location || ''}
+                    onChange={(e) => updateExtractedData('purchase_location', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    placeholder="Enter purchase location"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    Purchase Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={extractedData.purchase_date}
+                    onChange={(e) => updateExtractedData('purchase_date', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    Amount
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={extractedData.amount || ''}
+                    onChange={(e) => updateExtractedData('amount', e.target.value ? parseFloat(e.target.value) : null)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    placeholder="Enter amount"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    Warranty Period *
+                  </label>
+                  <input
+                    type="text"
+                    value={extractedData.warranty_period}
+                    onChange={(e) => updateExtractedData('warranty_period', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    placeholder="e.g., 1 year, 6 months"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    Model Number
+                  </label>
+                  <input
+                    type="text"
+                    value={extractedData.model_number || ''}
+                    onChange={(e) => updateExtractedData('model_number', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    placeholder="Enter model number"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    Extended Warranty
+                  </label>
+                  <input
+                    type="text"
+                    value={extractedData.extended_warranty || ''}
+                    onChange={(e) => updateExtractedData('extended_warranty', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    placeholder="Enter extended warranty details"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    Country *
+                  </label>
+                  <input
+                    type="text"
+                    value={extractedData.country}
+                    onChange={(e) => updateExtractedData('country', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                    placeholder="Enter country"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="mt-8 flex justify-end space-x-4">

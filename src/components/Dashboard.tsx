@@ -23,16 +23,19 @@ import {
   Lightbulb,
   Package
 } from 'lucide-react';
-import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats } from '../lib/supabase';
+import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
 import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
+import { useNavigate } from 'react-router-dom';
+import Footer from './Footer';
 
 interface DashboardProps {
   onSignOut: () => void;
   onShowReceiptScanning: () => void;
   onShowProfile: () => void;
   onShowLibrary: () => void;
+  onShowWarranty: () => void;
 }
 
 interface WarrantyAlert {
@@ -82,7 +85,7 @@ interface RAGResult {
   error?: string;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning, onShowProfile, onShowLibrary }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning, onShowProfile, onShowLibrary, onShowWarranty }) => {
   const [user, setUser] = useState<any>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -106,6 +109,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [warrantyAlerts, setWarrantyAlerts] = useState<WarrantyAlert[]>([]);
   const [recentReceipts, setRecentReceipts] = useState<RecentReceipt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [archivingAll, setArchivingAll] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const loadUser = async () => {
@@ -128,6 +136,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       if (currentUser) {
         await loadDashboardData(currentUser.id);
         await loadEmbeddingStatus(currentUser.id);
+        await loadNotifications(currentUser.id); // Load notifications on user load
       }
     };
     loadUser();
@@ -139,6 +148,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
     return () => clearInterval(timer);
   }, []);
+
+  // Fetch notifications on load
+  useEffect(() => {
+    if (user) {
+      loadNotifications(user.id);
+    }
+  }, [user]);
 
   const loadDashboardData = async (userId: string) => {
     try {
@@ -153,7 +169,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       if (statsError) {
         console.warn('Error loading receipt stats:', statsError);
         // Use fallback calculation based on grouped receipts
-        const totalReceipts = groupedReceipts.length;
+        const totalReceipts = groupedReceipts.length; // This is the correct count of actual receipts
         const totalAmount = groupedReceipts.reduce((sum, receipt) => {
           if (receipt.type === 'group') {
             return sum + (receipt.receipt_total || 0);
@@ -161,18 +177,37 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             return sum + (receipt.amount || 0);
           }
         }, 0);
+        
+        // Calculate total items by counting individual products
+        const totalItems = groupedReceipts.reduce((sum, receipt) => {
+          if (receipt.type === 'group') {
+            return sum + (receipt.product_count || 0);
+          } else {
+            return sum + 1; // Single product receipt = 1 item
+          }
+        }, 0);
+        
         const fallbackStats: SummaryStats = {
-          receiptsScanned: totalReceipts,
+          receiptsScanned: totalReceipts, // Actual number of receipts scanned
           totalAmount: totalAmount,
-          itemsCaptured: totalReceipts,
+          itemsCaptured: totalItems, // Total number of individual items/products
           warrantiesClaimed: 0
         };
         setSummaryStats(fallbackStats);
       } else {
+        // Calculate items from grouped receipts even when stats are available
+        const totalItems = groupedReceipts.reduce((sum, receipt) => {
+          if (receipt.type === 'group') {
+            return sum + (receipt.product_count || 0);
+          } else {
+            return sum + 1; // Single product receipt = 1 item
+          }
+        }, 0);
+        
         const summaryStats: SummaryStats = {
-          receiptsScanned: stats.total_receipts || 0,
+          receiptsScanned: groupedReceipts.length, // Use actual grouped receipts count
           totalAmount: stats.total_amount || 0,
-          itemsCaptured: stats.total_receipts || 0,
+          itemsCaptured: totalItems, // Use calculated items count
           warrantiesClaimed: 0 // This would need a separate tracking mechanism
         };
         setSummaryStats(summaryStats);
@@ -223,28 +258,81 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         }
       });
 
+      console.log('Processing warranty alerts for receipts:', allReceipts.length);
+      console.log('Sample receipts:', allReceipts.slice(0, 3).map(r => ({
+        id: r.id,
+        product: r.product_description,
+        brand: r.brand_name,
+        purchase_date: r.purchase_date,
+        warranty_period: r.warranty_period
+      })));
+
+      // Check for specific items we're looking for
+      const targetItems = allReceipts.filter(r => 
+        r.product_description?.toLowerCase().includes('nintendo') ||
+        r.product_description?.toLowerCase().includes('dji') ||
+        r.product_description?.toLowerCase().includes('microsoft') ||
+        r.product_description?.toLowerCase().includes('surface')
+      );
+      
+      console.log('Target electronics items found:', targetItems.length);
+      targetItems.forEach(item => {
+        console.log(`Target item: ${item.product_description}`, {
+          purchase_date: item.purchase_date,
+          warranty_period: item.warranty_period,
+          brand: item.brand_name
+        });
+      });
+
       const alerts: WarrantyAlert[] = allReceipts
         .map(receipt => {
-          const warrantyExpiry = calculateWarrantyExpiry(receipt.purchase_date, receipt.warranty_period);
+          // Skip items without purchase date
+          if (!receipt.purchase_date) {
+            console.log(`Skipping ${receipt.product_description} - no purchase date`);
+            return null;
+          }
+          
+          // Use enhanced warranty period detection for electronics
+          let warrantyPeriod = receipt.warranty_period;
+          if (!warrantyPeriod || warrantyPeriod.trim() === '') {
+            warrantyPeriod = getDefaultWarrantyPeriod(receipt.product_description, receipt.brand_name);
+            console.log(`Applied default warranty for ${receipt.product_description}: ${warrantyPeriod}`);
+          }
+          
+          const warrantyExpiry = calculateWarrantyExpiry(receipt.purchase_date, warrantyPeriod);
           const daysLeft = Math.ceil((warrantyExpiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+          
+          console.log(`Warranty check for ${receipt.product_description}:`, {
+            purchase_date: receipt.purchase_date,
+            original_warranty_period: receipt.warranty_period,
+            calculated_warranty_period: warrantyPeriod,
+            warranty_expiry: warrantyExpiry.toISOString().split('T')[0],
+            days_left: daysLeft,
+            within_threshold: daysLeft > 0 && daysLeft <= 180
+          });
           
           // Only include items with warranties expiring in the next 6 months
           if (daysLeft > 0 && daysLeft <= 180) {
-            return {
+            const alert = {
               id: receipt.id,
-              itemName: receipt.product_description,
+              itemName: receipt.product_description || 'Unknown Product',
               purchaseDate: receipt.purchase_date,
               expiryDate: warrantyExpiry.toISOString().split('T')[0],
               daysLeft,
               urgency: daysLeft <= 30 ? 'high' : daysLeft <= 90 ? 'medium' : 'low'
             };
+            console.log(`✅ Adding warranty alert for ${receipt.product_description}:`, alert);
+            return alert;
+          } else {
+            console.log(`❌ Not adding alert for ${receipt.product_description} - days left: ${daysLeft}`);
           }
           return null;
         })
         .filter(alert => alert !== null)
         .sort((a, b) => a!.daysLeft - b!.daysLeft)
-        .slice(0, 3) as WarrantyAlert[];
+        .slice(0, 6) as WarrantyAlert[]; // Increased from 3 to 6 to show more items
 
+      console.log('Warranty alerts found:', alerts.length, alerts);
       setWarrantyAlerts(alerts);
       setAlertsCount(alerts.length);
 
@@ -288,6 +376,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
   const calculateWarrantyExpiry = (purchaseDate: string, warrantyPeriod: string): Date => {
     const purchase = new Date(purchaseDate);
+    
+    // Handle null, undefined, or empty warranty period
+    if (!warrantyPeriod || warrantyPeriod.trim() === '') {
+      // Default to 1 year for items without warranty period specified
+      purchase.setFullYear(purchase.getFullYear() + 1);
+      return purchase;
+    }
+    
     const period = warrantyPeriod.toLowerCase();
     
     if (period.includes('lifetime')) {
@@ -307,6 +403,45 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     }
     
     return purchase;
+  };
+
+  // Enhanced warranty period detection for electronics
+  const getDefaultWarrantyPeriod = (productDescription: string, brandName: string): string => {
+    const product = (productDescription || '').toLowerCase();
+    const brand = (brandName || '').toLowerCase();
+    
+    // Gaming consoles and accessories - typically 1 year
+    if (product.includes('nintendo') || product.includes('xbox') || product.includes('playstation') || 
+        product.includes('ps5') || product.includes('ps4') || product.includes('switch')) {
+      return '1 year';
+    }
+    
+    // Drones and camera equipment - typically 1 year
+    if (product.includes('dji') || product.includes('drone') || product.includes('gimbal') || 
+        brand.includes('dji')) {
+      return '1 year';
+    }
+    
+    // Computers and tablets - typically 1 year
+    if (product.includes('surface') || product.includes('laptop') || product.includes('computer') ||
+        product.includes('microsoft') || product.includes('macbook') || product.includes('ipad')) {
+      return '1 year';
+    }
+    
+    // Smartphones - typically 1 year
+    if (product.includes('iphone') || product.includes('samsung') || product.includes('pixel') ||
+        product.includes('phone')) {
+      return '1 year';
+    }
+    
+    // TVs and large appliances - typically 1 year
+    if (product.includes('tv') || product.includes('television') || product.includes('lg') ||
+        product.includes('sony') || product.includes('samsung')) {
+      return '1 year';
+    }
+    
+    // Default for all other electronics
+    return '1 year';
   };
 
   // Enhanced Smart Search functionality with RAG
@@ -626,6 +761,112 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     });
   };
 
+  const loadNotifications = async (userId: string) => {
+    setNotificationsLoading(true);
+    setNotificationsError(null);
+    try {
+      const { data, error } = await getUserNotifications(userId);
+      if (error) {
+        setNotificationsError('Failed to load notifications');
+      } else {
+        // Clean up duplicates in database first
+        await cleanupDuplicateNotifications(userId);
+        // Then clean up duplicates in the UI
+        const cleanedNotifications = removeDuplicateNotifications(data || []);
+        setNotifications(cleanedNotifications);
+      }
+    } catch (err) {
+      setNotificationsError('Failed to load notifications');
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  // Function to remove duplicate notifications based on item name
+  const removeDuplicateNotifications = (notifications: Notification[]): Notification[] => {
+    const seen = new Set<string>();
+    const filtered: Notification[] = [];
+    
+    // Sort by creation date (newest first) to keep the most recent duplicate
+    const sorted = [...notifications].sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    
+    for (const notification of sorted) {
+      if (notification.type === 'warranty_alert') {
+        // Extract item name from message
+        const match = notification.message.match(/Warranty for (.+?) expires in/);
+        const itemName = match ? match[1] : notification.message;
+        
+        if (!seen.has(itemName)) {
+          seen.add(itemName);
+          filtered.push(notification);
+        }
+      } else {
+        // Keep all non-warranty notifications
+        filtered.push(notification);
+      }
+    }
+    
+    return filtered;
+  };
+
+  // Archive (clear) a single notification
+  const handleArchiveNotification = async (id: string) => {
+    await archiveNotification(id);
+    if (user) loadNotifications(user.id);
+  };
+
+  // Archive (clear) all notifications
+  const handleArchiveAllNotifications = async () => {
+    if (!user) return;
+    setArchivingAll(true);
+    await archiveAllNotifications(user.id);
+    await loadNotifications(user.id);
+    setArchivingAll(false);
+  };
+
+  // Count of unread notifications
+  const unreadCount = notifications.filter(n => !n.read && !n.archived).length;
+
+  // When a new warranty alert is generated, create a notification only if it does not exist in the DB
+  useEffect(() => {
+    const createWarrantyNotifications = async () => {
+      if (user && warrantyAlerts.length > 0) {
+        // Fetch all current notifications from DB (including archived ones to prevent re-creation)
+        const { data: dbNotifications } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('type', 'warranty_alert');
+        
+        for (const alert of warrantyAlerts) {
+          // Create a unique identifier based on the item name and receipt ID
+          const uniqueIdentifier = `${alert.itemName}_${alert.id}`;
+          
+          // Check if a notification for this specific item already exists (archived or not)
+          const alreadyExists = (dbNotifications || []).some(
+            n => n.message.includes(alert.itemName) && n.message.includes('expires in')
+          );
+
+                     // Check if the notification was previously dismissed
+           const wasDismissed = await wasNotificationDismissed(user.id, alert.itemName);
+
+          // Only create notification if it doesn't exist at all or if it was dismissed
+          if (!alreadyExists && !wasDismissed) {
+            const message = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days.`;
+            await createNotification(user.id, 'warranty_alert', message);
+          }
+        }
+        
+        // Reload notifications after possible creation
+        await loadNotifications(user.id);
+      }
+    };
+    createWarrantyNotifications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warrantyAlerts, user]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -664,45 +905,56 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                   className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
                 >
                   <Bell className="h-6 w-6" />
-                  {alertsCount > 0 && (
+                  {unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 bg-accent-red text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
-                      {alertsCount}
+                      {unreadCount}
                     </span>
                   )}
                 </button>
 
                 {/* Notification Dropdown */}
                 {showNotificationMenu && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
-                    <div className="px-4 py-2 border-b border-gray-200">
+                  <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-between">
                       <h3 className="font-medium text-text-primary">Notifications</h3>
+                      {notifications.length > 0 && (
+                        <button
+                          onClick={handleArchiveAllNotifications}
+                          disabled={archivingAll}
+                          className="text-xs text-primary hover:underline disabled:opacity-50"
+                        >
+                          {archivingAll ? 'Clearing...' : 'Clear All'}
+                        </button>
+                      )}
                     </div>
-                    <div className="max-h-64 overflow-y-auto">
-                      {warrantyAlerts.length === 0 ? (
+                    <div className="max-h-80 overflow-y-auto">
+                      {notificationsLoading ? (
+                        <div className="px-4 py-8 text-center text-text-secondary">Loading...</div>
+                      ) : notificationsError ? (
+                        <div className="px-4 py-8 text-center text-red-500">{notificationsError}</div>
+                      ) : notifications.length === 0 ? (
                         <div className="px-4 py-8 text-center">
                           <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                          <p className="text-sm text-text-secondary">No warranty alerts at this time</p>
+                          <p className="text-sm text-text-secondary">No notifications at this time</p>
                         </div>
                       ) : (
-                        warrantyAlerts.map((alert) => (
-                          <div key={alert.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
-                            <div className="flex items-start space-x-3">
-                              {getUrgencyIcon(alert.urgency)}
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-text-primary">{alert.itemName}</p>
-                                <p className="text-xs text-text-secondary">
-                                  Warranty expires in {alert.daysLeft} days
-                                </p>
+                        notifications.map((n) => (
+                          <div key={n.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="text-sm font-medium text-text-primary mb-1">{n.message}</div>
+                              <div className="text-xs text-text-secondary">
+                                {n.type.replace('_', ' ')} • {new Date(n.created_at).toLocaleString()}
                               </div>
                             </div>
+                            <button
+                              onClick={() => handleArchiveNotification(n.id)}
+                              className="ml-4 text-xs text-primary hover:underline"
+                            >
+                              Clear
+                            </button>
                           </div>
                         ))
                       )}
-                    </div>
-                    <div className="px-4 py-2 border-t border-gray-200">
-                      <button className="text-sm text-primary hover:text-primary/80 font-medium">
-                        View all notifications
-                      </button>
                     </div>
                   </div>
                 )}
@@ -1000,7 +1252,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                 warrantyAlerts.map((alert) => (
                   <div
                     key={alert.id}
-                    className={`p-4 rounded-lg border-2 ${getUrgencyColor(alert.urgency)} hover:shadow-md transition-shadow duration-200`}
+                    className={`p-4 rounded-lg border-2 ${getUrgencyColor(alert.urgency)} hover:shadow-md transition-shadow duration-200 cursor-pointer`}
+                    onClick={() => navigate('/warranty', { state: { id: alert.id } })}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -1031,7 +1284,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
               )}
             </div>
 
-            <button className="w-full mt-4 text-center text-primary hover:text-primary/80 font-medium py-2 transition-colors duration-200">
+            <button 
+              onClick={onShowWarranty}
+              className="w-full mt-4 text-center text-primary hover:text-primary/80 font-medium py-2 transition-colors duration-200"
+            >
               View All Warranties
             </button>
           </div>
@@ -1040,12 +1296,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-text-primary">Recent Receipts</h2>
-              <button 
-                onClick={onShowLibrary}
-                className="text-primary hover:text-primary/80 font-medium transition-colors duration-200"
-              >
-                View All
-              </button>
+                          <button 
+              onClick={() => navigate('/library')}
+              className="text-primary hover:text-primary/80 font-medium transition-colors duration-200"
+            >
+              View All
+            </button>
             </div>
 
             <div className="space-y-4">
@@ -1066,6 +1322,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                   <div
                     key={receipt.id}
                     className="flex items-center justify-between p-4 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer group"
+                    onClick={() => navigate('/library', { state: { openReceiptId: receipt.id } })}
                   >
                     <div className="flex items-center space-x-4">
                       <div className="bg-gradient-feature rounded-lg p-3">
@@ -1124,6 +1381,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </div>
         </div>
       </main>
+      <Footer />
 
       {/* Click outside to close menus */}
       {(showUserMenu || showNotificationMenu) && (

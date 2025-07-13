@@ -370,10 +370,51 @@ export const getReceiptWithWarrantyStatus = async (userId: string, receiptId: st
   }
 };
 
-export const deleteReceipt = async (userId: string, receiptId: string) => {
+export const deleteReceipt = async (userId: string, receiptId?: string, receiptGroupId?: string) => {
   try {
+    if (receiptGroupId) {
+      // Delete all receipts in the group
+      console.log('Deleting all receipts in group:', receiptGroupId, 'for user:', userId);
+      // Get all receipts in the group
+      const { data: receipts, error: fetchError } = await supabase
+        .from('receipts')
+        .select('id, image_path')
+        .eq('user_id', userId)
+        .eq('receipt_group_id', receiptGroupId);
+      if (fetchError) {
+        console.error('Error fetching group receipts for deletion:', fetchError);
+        throw fetchError;
+      }
+      // Delete all receipts in the group
+      const { error: deleteError } = await supabase
+        .from('receipts')
+        .delete()
+        .eq('user_id', userId)
+        .eq('receipt_group_id', receiptGroupId);
+      if (deleteError) {
+        console.error('Error deleting group receipts:', deleteError);
+        throw deleteError;
+      }
+      // Delete all associated images
+      const imagePaths = receipts?.map((r: any) => r.image_path).filter(Boolean);
+      if (imagePaths && imagePaths.length > 0) {
+        try {
+          const { error: storageError } = await supabase.storage
+            .from('receipt-images')
+            .remove(imagePaths);
+          if (storageError) {
+            console.warn('Failed to delete images from storage:', storageError);
+          }
+        } catch (storageErr) {
+          console.warn('Error deleting images from storage:', storageErr);
+        }
+      }
+      console.log('Group receipts deleted successfully');
+      return { data: true, error: null };
+    }
+    // Single receipt deletion (existing logic)
+    if (!receiptId) throw new Error('No receiptId provided for single deletion');
     console.log('Deleting receipt:', receiptId, 'for user:', userId);
-
     // First get the receipt to check for image
     const { data: receipt, error: fetchError } = await supabase
       .from('receipts')
@@ -381,43 +422,35 @@ export const deleteReceipt = async (userId: string, receiptId: string) => {
       .eq('user_id', userId)
       .eq('id', receiptId)
       .single();
-
     if (fetchError) {
       console.error('Error fetching receipt for deletion:', fetchError);
       throw fetchError;
     }
-
     // Delete the receipt from database
     const { error: deleteError } = await supabase
       .from('receipts')
       .delete()
       .eq('user_id', userId)
       .eq('id', receiptId);
-
     if (deleteError) {
       console.error('Error deleting receipt:', deleteError);
       throw deleteError;
     }
-
     // Delete associated image if exists
     if (receipt?.image_path) {
       try {
         const { error: storageError } = await supabase.storage
           .from('receipt-images')
           .remove([receipt.image_path]);
-
         if (storageError) {
           console.warn('Failed to delete image from storage:', storageError);
-          // Don't fail the entire operation if image deletion fails
         }
       } catch (storageErr) {
         console.warn('Error deleting image from storage:', storageErr);
       }
     }
-
     console.log('Receipt deleted successfully');
     return { data: true, error: null };
-
   } catch (err: any) {
     console.error('Delete receipt error:', err);
     return { 
@@ -921,6 +954,17 @@ Examples of MULTI-PRODUCT receipts:
 - "DJI Mini Drone $899.00, Nintendo Switch $649.00, Surface Pro $1299.00"
 - Multiple different items listed separately with individual prices
 
+WARRANTY PERIOD DETECTION:
+- Look for explicit warranty mentions: "1 year warranty", "2 year limited warranty", "90 days warranty"
+- For electronics without explicit warranty, use these defaults:
+  * Gaming consoles (Nintendo, Xbox, PlayStation): "1 year"
+  * Computers/laptops/tablets (Surface, MacBook, iPad): "1 year"
+  * Smartphones (iPhone, Samsung, Pixel): "1 year"
+  * Drones and cameras (DJI, GoPro): "1 year"
+  * TVs and appliances: "1 year"
+  * Small electronics: "1 year"
+- If no warranty info found, default to "1 year" for electronics
+
 For SINGLE PRODUCT receipts, return JSON with these fields:
 - product_description (string): Main product or service purchased
 - brand_name (string): Brand or manufacturer name
@@ -938,7 +982,7 @@ For MULTI-PRODUCT receipts, return JSON with these fields:
 - purchase_location (string): Store location/address
 - purchase_date (string): Date in YYYY-MM-DD format
 - total_amount (number): Total amount paid for all products
-- warranty_period (string): Default warranty duration
+- warranty_period (string): Default warranty duration for the receipt
 - extended_warranty (string): Extended warranty info if any
 - country (string): Country where purchase was made
 - products (array): Array of product objects, each with:
@@ -946,6 +990,7 @@ For MULTI-PRODUCT receipts, return JSON with these fields:
   - brand_name (string): Brand name
   - model_number (string): Model number if available
   - amount (number): Individual product price
+  - warranty_period (string): Individual product warranty period
 
 If a field is missing, set its value to null. Return ONLY valid JSON, no extra text.
 
@@ -1018,7 +1063,8 @@ Return only valid JSON:`;
         product_description: product.product_description || 'Receipt Item',
         brand_name: product.brand_name || 'Unknown Brand',
         model_number: product.model_number || null,
-        amount: typeof product.amount === 'number' ? product.amount : null
+        amount: typeof product.amount === 'number' ? product.amount : null,
+        warranty_period: product.warranty_period || '1 year' // Ensure warranty_period is included
       }));
 
       // Ensure date is in correct format
@@ -1081,3 +1127,147 @@ Return only valid JSON:`;
     };
   }
 }
+
+// Notification Types
+export type NotificationType = 'warranty_alert' | 'new_receipt' | 'system' | 'other';
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  message: string;
+  created_at: string;
+  read: boolean;
+  archived: boolean;
+}
+
+// Create a new notification
+export const createNotification = async (
+  userId: string,
+  type: NotificationType,
+  message: string
+): Promise<{ data: Notification[] | null; error: any }> => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .insert([{ user_id: userId, type, message }])
+    .select();
+  return { data, error };
+};
+
+// Fetch notifications for a user (unarchived, newest first)
+export const getUserNotifications = async (
+  userId: string
+): Promise<{ data: Notification[] | null; error: any }> => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('archived', false)
+    .order('created_at', { ascending: false });
+  return { data, error };
+};
+
+// Mark a notification as read and archive it
+export const archiveNotification = async (
+  notificationId: string
+): Promise<{ data: Notification[] | null; error: any }> => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .update({ read: true, archived: true })
+    .eq('id', notificationId)
+    .select();
+  return { data, error };
+};
+
+// Mark all notifications as read and archive for a user
+export const archiveAllNotifications = async (
+  userId: string
+): Promise<{ data: Notification[] | null; error: any }> => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .update({ read: true, archived: true })
+    .eq('user_id', userId)
+    .eq('archived', false)
+    .select();
+  return { data, error };
+};
+
+// Check if a notification was previously dismissed for a specific item
+export const wasNotificationDismissed = async (
+  userId: string,
+  itemName: string
+): Promise<boolean> => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('type', 'warranty_alert')
+    .eq('archived', true)
+    .ilike('message', `%${itemName}%`);
+  
+  if (error) {
+    console.error('Error checking dismissed notifications:', error);
+    return false;
+  }
+  
+  return (data || []).length > 0;
+};
+
+// Clean up duplicate notifications for a user
+export const cleanupDuplicateNotifications = async (userId: string): Promise<void> => {
+  try {
+    // Get all warranty notifications for the user
+    const { data: notifications, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('type', 'warranty_alert')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching notifications for cleanup:', error);
+      return;
+    }
+
+    if (!notifications || notifications.length === 0) return;
+
+    // Group notifications by item name
+    const notificationGroups: { [key: string]: any[] } = {};
+    
+    notifications.forEach(notification => {
+      const match = notification.message.match(/Warranty for (.+?) expires in/);
+      const itemName = match ? match[1] : notification.message;
+      
+      if (!notificationGroups[itemName]) {
+        notificationGroups[itemName] = [];
+      }
+      notificationGroups[itemName].push(notification);
+    });
+
+    // For each group, keep only the most recent notification and delete the rest
+    for (const [itemName, group] of Object.entries(notificationGroups)) {
+      if (group.length > 1) {
+        // Sort by creation date (newest first)
+        group.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        
+        // Keep the first (most recent) and delete the rest
+        const duplicateIds = group.slice(1).map(n => n.id);
+        
+        if (duplicateIds.length > 0) {
+          const { error: deleteError } = await supabase
+            .from('notifications')
+            .delete()
+            .in('id', duplicateIds);
+          
+          if (deleteError) {
+            console.error(`Error deleting duplicate notifications for ${itemName}:`, deleteError);
+          } else {
+            console.log(`Cleaned up ${duplicateIds.length} duplicate notifications for ${itemName}`);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in cleanupDuplicateNotifications:', error);
+  }
+};

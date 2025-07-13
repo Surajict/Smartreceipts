@@ -104,24 +104,13 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
               
               {/* Video Placeholder */}
               <div className="relative rounded-lg overflow-hidden aspect-video shadow-lg bg-gradient-to-br from-gray-900 to-gray-800">
-                <a 
-                  href="https://youtu.be/qWJCuc1kUoI" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="absolute inset-0 flex flex-col items-center justify-center group cursor-pointer"
-                >
-                  <div className="bg-gradient-to-r from-primary to-secondary rounded-full py-3 px-12 flex items-center mb-4 shadow-lg">
-                    <Play className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="text-center">
-                    <h3 className="text-lg font-bold text-white mb-1">
-                      See Smart Receipts in Action
-                    </h3>
-                    <p className="text-white/80 text-sm">
-                      Watch our 8-second demo on YouTube
-                    </p>
-                    </div>
-                </a>
+                <iframe
+                  src="https://www.youtube.com/embed/qWJCuc1kUoI"
+                  title="Smart Receipts Demo"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  className="absolute inset-0 w-full h-full border-0"
+                ></iframe>
               </div>
               
               {/* Feature Highlights */}

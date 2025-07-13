@@ -85,7 +85,7 @@ serve(async (req) => {
     } catch (embeddingError) {
       console.error('Embedding generation failed:', embeddingError)
       
-      // Fallback to text search
+      // Fallback to text search with user filtering
       console.log('Falling back to text search')
       const { data: textResults, error: textError } = await supabase
         .from('receipts')
@@ -119,13 +119,14 @@ serve(async (req) => {
       )
     }
 
-    // Perform vector similarity search using the database function
+    // Perform vector similarity search using the database function with user filtering
     try {
       const { data: vectorResults, error: vectorError } = await supabase
         .rpc('match_receipts_simple', {
           query_embedding: embedding,
           match_threshold: threshold,
-          match_count: limit
+          match_count: limit,
+          user_id: userId  // Pass the user ID to filter results
         })
 
       if (vectorError) {
@@ -140,10 +141,10 @@ serve(async (req) => {
         purchaseDate: receipt.purchase_date,
         amount: receipt.amount,
         warrantyPeriod: receipt.warranty_period || 'Unknown',
-        relevanceScore: 1 - (receipt.similarity || 0) // Convert distance to similarity
+        relevanceScore: receipt.similarity || 0.5 // Use actual similarity score
       }))
 
-      console.log(`Found ${results.length} results for query "${query}"`)
+      console.log(`Found ${results.length} results for user ${userId}, query "${query}"`)
 
       return new Response(
         JSON.stringify({ results }),
@@ -153,7 +154,7 @@ serve(async (req) => {
     } catch (vectorError) {
       console.error('Vector search failed:', vectorError)
       
-      // Fallback to text search
+      // Fallback to text search with user filtering
       console.log('Falling back to text search due to vector search failure')
       const { data: textResults, error: textError } = await supabase
         .from('receipts')

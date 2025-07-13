@@ -52,6 +52,7 @@ interface Receipt {
   receipts?: any[];
   receipt_total?: number;
   product_count?: number;
+  receipt_group_id?: string; // Added for grouped receipts
 }
 
 type ViewMode = 'grid' | 'list';
@@ -167,23 +168,56 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     }
   };
 
-  const handleDeleteReceipt = async (receiptId: string) => {
+  const handleDeleteReceipt = async (receipt: Receipt) => {
     if (!user) return;
-    
-    setIsDeleting(receiptId);
+
+    // Confirmation dialog
+    const confirmMsg = receipt.type === 'group'
+      ? 'Are you sure you want to delete this entire receipt and all its items? This action cannot be undone.'
+      : 'Are you sure you want to delete this receipt? This action cannot be undone.';
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsDeleting(receipt.id);
     try {
-      const { error } = await deleteReceipt(user.id, receiptId);
+      let error;
+      if (receipt.type === 'group' && receipt.receipts && receipt.receipts.length > 0) {
+        // Delete all items in the group by receipt_group_id
+        const groupId = receipt.receipts[0].receipt_group_id;
+        if (groupId) {
+          const res = await deleteReceipt(user.id, null, groupId); // null for id, pass groupId
+          error = res.error;
+        } else {
+          // fallback: delete all by id
+          for (const item of receipt.receipts) {
+            const res = await deleteReceipt(user.id, item.id);
+            if (res.error) error = res.error;
+          }
+        }
+      } else {
+        // Single receipt
+        const res = await deleteReceipt(user.id, receipt.id);
+        error = res.error;
+      }
       if (error) {
         console.error('Error deleting receipt:', error);
         alert('Failed to delete receipt');
       } else {
-        setReceipts(receipts.filter(r => r.id !== receiptId));
+        setReceipts(receipts.filter(r => {
+          if (receipt.type === 'group' && receipt.receipts) {
+            // Remove all items in the group
+            return r.id !== receipt.id && !receipt.receipts.some(item => item.id === r.id);
+          } else {
+            return r.id !== receipt.id;
+          }
+        }));
+        setShowReceiptModal(false);
+        setSelectedReceipt(null);
       }
     } catch (error) {
       console.error('Error deleting receipt:', error);
       alert('Failed to delete receipt');
     } finally {
-      setIsDeleting(receiptId);
+      setIsDeleting(null);
     }
   };
 
@@ -773,7 +807,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
             {/* Modal Actions */}
             <div className="flex items-center justify-between p-6 border-t border-gray-200">
               <button
-                onClick={() => handleDeleteReceipt(selectedReceipt.id)}
+                onClick={() => handleDeleteReceipt(selectedReceipt)}
                 disabled={isDeleting === selectedReceipt.id}
                 className="flex items-center space-x-2 text-red-600 hover:text-red-700 transition-colors duration-200 disabled:opacity-50"
               >

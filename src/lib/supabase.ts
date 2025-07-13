@@ -370,10 +370,51 @@ export const getReceiptWithWarrantyStatus = async (userId: string, receiptId: st
   }
 };
 
-export const deleteReceipt = async (userId: string, receiptId: string) => {
+export const deleteReceipt = async (userId: string, receiptId?: string, receiptGroupId?: string) => {
   try {
+    if (receiptGroupId) {
+      // Delete all receipts in the group
+      console.log('Deleting all receipts in group:', receiptGroupId, 'for user:', userId);
+      // Get all receipts in the group
+      const { data: receipts, error: fetchError } = await supabase
+        .from('receipts')
+        .select('id, image_path')
+        .eq('user_id', userId)
+        .eq('receipt_group_id', receiptGroupId);
+      if (fetchError) {
+        console.error('Error fetching group receipts for deletion:', fetchError);
+        throw fetchError;
+      }
+      // Delete all receipts in the group
+      const { error: deleteError } = await supabase
+        .from('receipts')
+        .delete()
+        .eq('user_id', userId)
+        .eq('receipt_group_id', receiptGroupId);
+      if (deleteError) {
+        console.error('Error deleting group receipts:', deleteError);
+        throw deleteError;
+      }
+      // Delete all associated images
+      const imagePaths = receipts?.map((r: any) => r.image_path).filter(Boolean);
+      if (imagePaths && imagePaths.length > 0) {
+        try {
+          const { error: storageError } = await supabase.storage
+            .from('receipt-images')
+            .remove(imagePaths);
+          if (storageError) {
+            console.warn('Failed to delete images from storage:', storageError);
+          }
+        } catch (storageErr) {
+          console.warn('Error deleting images from storage:', storageErr);
+        }
+      }
+      console.log('Group receipts deleted successfully');
+      return { data: true, error: null };
+    }
+    // Single receipt deletion (existing logic)
+    if (!receiptId) throw new Error('No receiptId provided for single deletion');
     console.log('Deleting receipt:', receiptId, 'for user:', userId);
-
     // First get the receipt to check for image
     const { data: receipt, error: fetchError } = await supabase
       .from('receipts')
@@ -381,43 +422,35 @@ export const deleteReceipt = async (userId: string, receiptId: string) => {
       .eq('user_id', userId)
       .eq('id', receiptId)
       .single();
-
     if (fetchError) {
       console.error('Error fetching receipt for deletion:', fetchError);
       throw fetchError;
     }
-
     // Delete the receipt from database
     const { error: deleteError } = await supabase
       .from('receipts')
       .delete()
       .eq('user_id', userId)
       .eq('id', receiptId);
-
     if (deleteError) {
       console.error('Error deleting receipt:', deleteError);
       throw deleteError;
     }
-
     // Delete associated image if exists
     if (receipt?.image_path) {
       try {
         const { error: storageError } = await supabase.storage
           .from('receipt-images')
           .remove([receipt.image_path]);
-
         if (storageError) {
           console.warn('Failed to delete image from storage:', storageError);
-          // Don't fail the entire operation if image deletion fails
         }
       } catch (storageErr) {
         console.warn('Error deleting image from storage:', storageErr);
       }
     }
-
     console.log('Receipt deleted successfully');
     return { data: true, error: null };
-
   } catch (err: any) {
     console.error('Delete receipt error:', err);
     return { 

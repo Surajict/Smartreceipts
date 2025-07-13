@@ -30,7 +30,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt, getUserNotifications, archiveNotification, archiveAllNotifications, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
+import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt, getUserNotifications, archiveNotification, archiveAllNotifications, cleanupDuplicateNotifications, Notification, supabase } from '../lib/supabase';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import Footer from './Footer';
 
@@ -64,6 +64,7 @@ type SortOrder = 'asc' | 'desc';
 const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptScanning }) => {
   const location = useLocation();
   const [user, setUser] = useState<any>(null);
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -118,6 +119,21 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   const loadUser = async () => {
     const currentUser = await getCurrentUser();
     setUser(currentUser);
+    // Load profile picture if exists
+    if (currentUser?.user_metadata?.avatar_url) {
+      try {
+        const { data, error } = await supabase.storage
+          .from('profile-pictures')
+          .createSignedUrl(currentUser.user_metadata.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
+        if (error) {
+          console.error('Error creating signed URL:', error);
+        } else if (data?.signedUrl) {
+          setProfilePicture(data.signedUrl);
+        }
+      } catch (error) {
+        console.error('Error loading profile picture:', error);
+      }
+    }
   };
 
   const loadReceipts = async () => {
@@ -647,8 +663,17 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                   onClick={() => setShowUserMenu(!showUserMenu)}
                   className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
                 >
-                  <div className="bg-primary rounded-full p-2">
-                    <User className="h-4 w-4 text-white" />
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-primary flex items-center justify-center">
+                    {profilePicture ? (
+                      <img
+                        src={profilePicture}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                        onError={() => setProfilePicture(null)}
+                      />
+                    ) : (
+                      <User className="h-4 w-4 text-white" />
+                    )}
                   </div>
                   <span className="text-sm font-medium text-text-primary hidden sm:inline">
                     {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}

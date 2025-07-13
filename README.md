@@ -331,6 +331,76 @@ To apply migrations:
 supabase db push
 ```
 
+> **Note:** As of July 2024, all smart search and AI embedding features require 384-dimension embeddings. Make sure your database function and edge function are updated as described in the 'Smart Search & Embedding Setup' section.
+
+## 🧠 Smart Search & Embedding Setup (2024-07)
+
+### Why this matters
+- The AI-powered smart search now uses 384-dimension embeddings for all queries and receipts.
+- The database function for vector search **must** use `vector(384)` as the parameter type.
+- This ensures natural language queries (like "Have I purchased any Nintendo product?") work reliably and securely.
+
+### How to update your database
+1. **Open Supabase SQL Editor**
+2. **Run this migration:**
+   ```sql
+   DROP FUNCTION IF EXISTS match_receipts_simple(vector(384), double precision, int, uuid);
+   DROP FUNCTION IF EXISTS match_receipts_simple(vector(1536), double precision, int, uuid);
+
+   CREATE OR REPLACE FUNCTION match_receipts_simple(
+     query_embedding vector(384),
+     match_threshold double precision DEFAULT 0.3,
+     match_count int DEFAULT 10,
+     user_id uuid DEFAULT NULL
+   )
+   RETURNS TABLE(
+     id uuid,
+     product_description text,
+     brand_name text,
+     model_number text,
+     purchase_date date,
+     amount decimal,
+     warranty_period text,
+     store_name text,
+     purchase_location text,
+     similarity double precision
+   )
+   LANGUAGE plpgsql
+   AS $$
+   BEGIN
+     RETURN QUERY
+     SELECT
+       r.id,
+       r.product_description,
+       r.brand_name,
+       r.model_number,
+       r.purchase_date,
+       r.amount,
+       r.warranty_period,
+       r.store_name,
+       r.purchase_location,
+       1 - (r.embedding <=> query_embedding) as similarity
+     FROM receipts r
+     WHERE r.embedding IS NOT NULL
+       AND r.user_id = match_receipts_simple.user_id
+       AND 1 - (r.embedding <=> query_embedding) > match_threshold
+     ORDER BY r.embedding <=> query_embedding
+     LIMIT match_count;
+   END;
+   $$;
+
+   GRANT EXECUTE ON FUNCTION match_receipts_simple TO authenticated;
+   GRANT EXECUTE ON FUNCTION match_receipts_simple TO anon;
+   ```
+3. **Edge Function**: Ensure `supabase/functions/smart-search/index.ts` uses `dimensions: 384` for all embedding generation.
+
+### Troubleshooting
+- If smart search returns no results for natural language queries, check that both your embeddings and the database function use **384 dimensions**.
+- If you previously used 1536-dimension embeddings, re-index your receipts with 384-dimension embeddings.
+- Only your own receipts will ever be shown in search results (privacy enforced).
+
+---
+
 ## 🔐 Security & Privacy
 
 - **Row Level Security (RLS)**: Users can only access their own receipts

@@ -173,7 +173,29 @@ export class GoogleCloudVisionOCR {
       if (base64Match) {
         return base64Match[1];
       }
-      throw new Error('Invalid image format');
+      
+      // If it's not a proper data URL, it might be a blob URL or other format
+      // Try to fetch it and convert
+      try {
+        const response = await fetch(imageSource);
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64Match = result.match(/^data:image\/[a-zA-Z]+;base64,(.+)$/);
+            if (base64Match) {
+              resolve(base64Match[1]);
+            } else {
+              reject(new Error('Failed to convert fetched image to base64'));
+            }
+          };
+          reader.onerror = () => reject(new Error('Failed to read fetched image'));
+          reader.readAsDataURL(blob);
+        });
+      } catch (error) {
+        throw new Error(`Invalid image format or unable to fetch: ${error}`);
+      }
     } else {
       // It's a File object, convert to base64
       return new Promise((resolve, reject) => {

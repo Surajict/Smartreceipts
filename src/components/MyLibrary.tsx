@@ -357,13 +357,19 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
       for (const receipt of receipts) {
         if (receipt.image_url && !signedUrls[receipt.image_url]) {
           try {
+            console.log(`Loading signed URL for receipt ${receipt.id}:`, receipt.image_url);
             const signedUrl = await getSignedImageUrl(receipt.image_url);
             if (signedUrl) {
               urlMap[receipt.image_url] = signedUrl;
+              console.log(`✓ Signed URL loaded for receipt ${receipt.id}`);
+            } else {
+              console.warn(`⚠️ No signed URL returned for receipt ${receipt.id}:`, receipt.image_url);
             }
           } catch (error) {
-            console.warn('Failed to get signed URL for receipt:', receipt.id);
+            console.error(`❌ Failed to get signed URL for receipt ${receipt.id}:`, error);
           }
+        } else if (!receipt.image_url) {
+          console.log(`ℹ️ Receipt ${receipt.id} has no image_url`);
         }
       }
       
@@ -422,15 +428,46 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     try {
       const response = await fetch(url);
       const blob = await response.blob();
+      
+      // Determine file extension from blob type or URL
+      let extension = 'jpg'; // default fallback
+      if (blob.type) {
+        const mimeToExt: {[key: string]: string} = {
+          'image/jpeg': 'jpg',
+          'image/jpg': 'jpg',
+          'image/png': 'png',
+          'image/webp': 'webp',
+          'image/gif': 'gif',
+          'image/bmp': 'bmp',
+          'image/tiff': 'tiff',
+          'application/pdf': 'pdf'
+        };
+        extension = mimeToExt[blob.type] || 'jpg';
+      } else {
+        // Try to get extension from URL
+        const urlParts = url.split('.');
+        if (urlParts.length > 1) {
+          const urlExt = urlParts[urlParts.length - 1].split('?')[0].toLowerCase();
+          if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tiff', 'pdf'].includes(urlExt)) {
+            extension = urlExt === 'jpeg' ? 'jpg' : urlExt;
+          }
+        }
+      }
+      
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
+      
       // Use product description or fallback for filename
-      const filename = `${selectedReceipt.product_description ? selectedReceipt.product_description.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'receipt'}_${selectedReceipt.id}.jpg`;
+      const filename = `${selectedReceipt.product_description ? selectedReceipt.product_description.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'receipt'}_${selectedReceipt.id}.${extension}`;
       link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      
+      // Clean up the blob URL
+      window.URL.revokeObjectURL(link.href);
     } catch (err) {
+      console.error('Download error:', err);
       alert('Failed to download receipt image.');
     }
   };
@@ -856,8 +893,13 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                           src={signedUrls[receipt.image_url] || receipt.image_url}
                           alt={receipt.product_description || 'Receipt'}
                           className="w-full h-full object-cover object-center"
-                          onError={e => {
+                          onError={(e) => {
+                            console.error(`Failed to load image for receipt ${receipt.id}:`, receipt.image_url);
+                            console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
                             (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                          }}
+                          onLoad={() => {
+                            console.log(`✓ Image loaded successfully for receipt ${receipt.id}`);
                           }}
                         />
                       ) : (
@@ -921,6 +963,14 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                             src={signedUrls[receipt.image_url] || receipt.image_url}
                             alt={receipt.product_description || 'Receipt'}
                             className="w-full h-full object-cover"
+                            onError={(e) => {
+                              console.error(`Failed to load image for receipt ${receipt.id} (list view):`, receipt.image_url);
+                              console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
+                              (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                            }}
+                            onLoad={() => {
+                              console.log(`✓ Image loaded successfully for receipt ${receipt.id} (list view)`);
+                            }}
                           />
                         ) : (
                           receipt.type === 'group' ? (
@@ -1008,8 +1058,13 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                         src={signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url}
                         alt={selectedReceipt.product_description || 'Receipt'}
                         className="w-full h-full object-cover object-center"
-                        onError={e => {
+                        onError={(e) => {
+                          console.error(`Failed to load image for receipt ${selectedReceipt.id} (modal):`, selectedReceipt.image_url);
+                          console.error('Tried URLs:', selectedReceipt.image_url ? (signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url) : 'No image URL');
                           (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                        }}
+                        onLoad={() => {
+                          console.log(`✓ Image loaded successfully for receipt ${selectedReceipt.id} (modal)`);
                         }}
                       />
                     ) : (

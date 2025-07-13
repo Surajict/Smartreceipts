@@ -28,6 +28,12 @@ import { OCRService, OCREngine } from '../services/ocrService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { ExtractedReceiptData } from '../types/receipt';
 import NotificationDropdown from './NotificationDropdown';
+import * as pdfjsLib from 'pdfjs-dist';
+import mammoth from 'mammoth';
+import html2canvas from 'html2canvas';
+
+// Configure PDF.js worker for Vite (use CDN worker)
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
@@ -180,15 +186,81 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     }
   }, [capturedFrames]);
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setUploadedFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setCapturedImage(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    setUploadedFile(file);
+    setError(null);
+    setIsProcessing(true);
+    setProcessingStep('Processing file...');
+
+    const fileType = file.type;
+    const fileName = file.name.toLowerCase();
+
+    try {
+      if (fileType.startsWith('image/')) {
+        // Image: proceed as before
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setCapturedImage(e.target?.result as string);
+          setIsProcessing(false);
+          setProcessingStep('');
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+      if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
+        // PDF: use pdfjs-dist to render first page to image
+        setProcessingStep('Converting PDF to image...');
+        const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Failed to get canvas context');
+        await page.render({ canvasContext: context, viewport }).promise;
+        const dataUrl = canvas.toDataURL('image/png');
+        setCapturedImage(dataUrl);
+        setIsProcessing(false);
+        setProcessingStep('');
+        return;
+      }
+      if (
+        fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        fileType === 'application/msword' ||
+        fileName.endsWith('.docx') ||
+        fileName.endsWith('.doc')
+      ) {
+        // DOCX: use mammoth to convert to HTML, then html2canvas to render to image
+        setProcessingStep('Converting Word document to image...');
+        const arrayBuffer = await file.arrayBuffer();
+        const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
+        // Create a hidden div to render HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        tempDiv.style.position = 'fixed';
+        tempDiv.style.left = '-9999px';
+        tempDiv.style.top = '0';
+        tempDiv.style.width = '800px';
+        tempDiv.style.background = 'white';
+        document.body.appendChild(tempDiv);
+        const canvas = await html2canvas(tempDiv, { backgroundColor: '#fff', scale: 2 });
+        document.body.removeChild(tempDiv);
+        const dataUrl = canvas.toDataURL('image/png');
+        setCapturedImage(dataUrl);
+        setIsProcessing(false);
+        setProcessingStep('');
+        return;
+      }
+      setError('Unsupported file type. Please upload an image, PDF, or Word document.');
+      setIsProcessing(false);
+      setProcessingStep('');
+    } catch (err: any) {
+      setError('Failed to process file: ' + (err.message || err));
+      setIsProcessing(false);
+      setProcessingStep('');
     }
   };
 
@@ -284,7 +356,10 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
 
     try {
       // Step 1: Perform OCR
-      const text = await performOCR(uploadedFile || capturedImage!);
+      // Always use capturedImage if available (this includes converted PDFs/Word docs)
+      // Otherwise use uploadedFile for direct image uploads
+      const imageSource = capturedImage || uploadedFile!;
+      const text = await performOCR(imageSource);
       setExtractedText(text);
 
       if (!text.trim()) {
@@ -724,12 +799,12 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                 </div>
                 <h3 className="text-lg font-bold text-text-primary mb-2">Upload Image</h3>
                 <p className="text-text-secondary text-sm mb-4">
-                  Select an image file from your device
+                  Select an image, PDF, or Word document from your device
                 </p>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,application/pdf,.doc,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
                   onChange={handleFileUpload}
                   className="hidden"
                 />

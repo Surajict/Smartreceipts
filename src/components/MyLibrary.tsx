@@ -29,7 +29,7 @@ import {
   MapPin,
   AlertCircle
 } from 'lucide-react';
-import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl } from '../lib/supabase';
+import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt } from '../lib/supabase';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 
 interface MyLibraryProps {
@@ -73,6 +73,9 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editForm, setEditForm] = useState<any>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     loadUser();
@@ -294,6 +297,126 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     if (daysLeft < 0) return { status: 'expired', color: 'text-red-600', icon: AlertCircle };
     if (daysLeft <= 30) return { status: 'expiring', color: 'text-yellow-600', icon: Clock };
     return { status: 'active', color: 'text-green-600', icon: CheckCircle };
+  };
+
+  // Download handler for receipt image
+  const handleDownloadReceiptImage = async () => {
+    if (!selectedReceipt || !selectedReceipt.image_url) return;
+    const url = signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url;
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      // Use product description or fallback for filename
+      const filename = `${selectedReceipt.product_description ? selectedReceipt.product_description.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'receipt'}_${selectedReceipt.id}.jpg`;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      alert('Failed to download receipt image.');
+    }
+  };
+
+  // Start editing
+  const handleEditClick = () => {
+    if (!selectedReceipt) return;
+    if (selectedReceipt.type === 'group' && selectedReceipt.receipts) {
+      setEditForm({
+        type: 'group',
+        store_name: selectedReceipt.store_name,
+        purchase_date: selectedReceipt.purchase_date,
+        receipts: selectedReceipt.receipts.map((item: any) => ({ ...item })),
+      });
+    } else {
+      setEditForm({ ...selectedReceipt });
+    }
+    setIsEditMode(true);
+  };
+
+  // Handle form changes
+  const handleEditFormChange = (field: string, value: any, idx?: number) => {
+    setEditForm((prev: any) => {
+      if (prev.type === 'group' && typeof idx === 'number') {
+        const newReceipts = [...prev.receipts];
+        newReceipts[idx] = { ...newReceipts[idx], [field]: value };
+        return { ...prev, receipts: newReceipts };
+      } else {
+        return { ...prev, [field]: value };
+      }
+    });
+  };
+
+  // Save changes
+  const handleSaveEdit = async () => {
+    if (!user || !editForm) return;
+    setIsSaving(true);
+    try {
+      if (editForm.type === 'group' && editForm.receipts) {
+        // Update all items in the group
+        await Promise.all(editForm.receipts.map((item: any) => {
+          const updateData = {
+            product_description: item.product_description,
+            brand_name: item.brand_name,
+            store_name: editForm.store_name,
+            purchase_date: editForm.purchase_date,
+            amount: item.amount,
+            warranty_period: item.warranty_period,
+            model_number: item.model_number,
+            extended_warranty: item.extended_warranty,
+            country: item.country,
+          };
+          return updateReceipt(user.id, item.id, updateData);
+        }));
+        // Update local state
+        setReceipts(receipts.map(r => {
+          if (r.id === selectedReceipt.id) {
+            return {
+              ...r,
+              store_name: editForm.store_name,
+              purchase_date: editForm.purchase_date,
+              receipts: editForm.receipts.map((item: any) => ({ ...item })),
+            };
+          } else {
+            return r;
+          }
+        }));
+        setSelectedReceipt((prev) => prev && prev.id === selectedReceipt.id ? {
+          ...prev,
+          store_name: editForm.store_name,
+          purchase_date: editForm.purchase_date,
+          receipts: editForm.receipts.map((item: any) => ({ ...item })),
+        } : prev);
+      } else {
+        // Single receipt
+        const updateData = {
+          product_description: editForm.product_description,
+          brand_name: editForm.brand_name,
+          store_name: editForm.store_name,
+          purchase_date: editForm.purchase_date,
+          amount: editForm.amount,
+          warranty_period: editForm.warranty_period,
+          model_number: editForm.model_number,
+          extended_warranty: editForm.extended_warranty,
+          country: editForm.country,
+        };
+        await updateReceipt(user.id, editForm.id, updateData);
+        setReceipts(receipts.map(r => r.id === editForm.id ? { ...r, ...updateData } : r));
+        setSelectedReceipt((prev) => prev && prev.id === editForm.id ? { ...prev, ...updateData } : prev);
+      }
+      setIsEditMode(false);
+    } catch (err) {
+      alert('Failed to update receipt.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setIsEditMode(false);
+    setEditForm(null);
   };
 
   if (isLoading) {
@@ -700,52 +823,97 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                     )}
                   </div>
                 </div>
-
-                {/* Receipt Details */}
+                {/* Receipt Details or Edit Form */}
                 <div className="space-y-4">
-                  {selectedReceipt.type === 'group' ? (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">Receipt Type</label>
-                        <p className="text-text-primary font-medium">Multi-Product Receipt ({selectedReceipt.product_count} items)</p>
-                      </div>
-
-                      {selectedReceipt.store_name && (
+                  {isEditMode ? (
+                    editForm.type === 'group' && editForm.receipts ? (
+                      <>
                         <div>
                           <label className="block text-sm font-medium text-text-secondary mb-1">Store</label>
-                          <p className="text-text-primary">{selectedReceipt.store_name}</p>
+                          <input type="text" className="w-full border rounded px-3 py-2" value={editForm.store_name || ''} onChange={e => handleEditFormChange('store_name', e.target.value)} />
                         </div>
-                      )}
-
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">Purchase Date</label>
-                        <p className="text-text-primary">{formatDate(selectedReceipt.purchase_date)}</p>
-                      </div>
-
-                      {selectedReceipt.amount && (
                         <div>
-                          <label className="block text-sm font-medium text-text-secondary mb-1">Total Amount</label>
-                          <p className="text-text-primary font-bold">{formatCurrency(selectedReceipt.amount)}</p>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Purchase Date</label>
+                          <input type="date" className="w-full border rounded px-3 py-2" value={editForm.purchase_date || ''} onChange={e => handleEditFormChange('purchase_date', e.target.value)} />
                         </div>
-                      )}
-
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">Products</label>
-                        <div className="space-y-2">
-                          {selectedReceipt.receipts?.map((product, index) => (
-                            <div key={index} className="bg-gray-50 rounded-lg p-3">
-                              <div className="flex justify-between items-start">
+                        <div className="space-y-6 mt-4">
+                          {editForm.receipts.map((item: any, idx: number) => (
+                            <div key={item.id || idx} className="border rounded-lg p-4 bg-gray-50">
+                              <div className="font-semibold mb-2">Product {idx + 1}</div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                  <p className="font-medium text-text-primary">{product.product_description}</p>
-                                  <p className="text-sm text-text-secondary">{product.brand_name}</p>
+                                  <label className="block text-xs font-medium text-text-secondary mb-1">Product</label>
+                                  <input type="text" className="w-full border rounded px-3 py-2" value={item.product_description || ''} onChange={e => handleEditFormChange('product_description', e.target.value, idx)} />
                                 </div>
-                                <p className="font-medium text-text-primary">{formatCurrency(product.amount)}</p>
+                                <div>
+                                  <label className="block text-xs font-medium text-text-secondary mb-1">Brand</label>
+                                  <input type="text" className="w-full border rounded px-3 py-2" value={item.brand_name || ''} onChange={e => handleEditFormChange('brand_name', e.target.value, idx)} />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-text-secondary mb-1">Amount</label>
+                                  <input type="number" className="w-full border rounded px-3 py-2" value={item.amount || ''} onChange={e => handleEditFormChange('amount', e.target.value, idx)} />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-text-secondary mb-1">Warranty Period</label>
+                                  <input type="text" className="w-full border rounded px-3 py-2" value={item.warranty_period || ''} onChange={e => handleEditFormChange('warranty_period', e.target.value, idx)} />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-text-secondary mb-1">Model Number</label>
+                                  <input type="text" className="w-full border rounded px-3 py-2" value={item.model_number || ''} onChange={e => handleEditFormChange('model_number', e.target.value, idx)} />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-text-secondary mb-1">Extended Warranty</label>
+                                  <input type="text" className="w-full border rounded px-3 py-2" value={item.extended_warranty || ''} onChange={e => handleEditFormChange('extended_warranty', e.target.value, idx)} />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-text-secondary mb-1">Country</label>
+                                  <input type="text" className="w-full border rounded px-3 py-2" value={item.country || ''} onChange={e => handleEditFormChange('country', e.target.value, idx)} />
+                                </div>
                               </div>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    </>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Product</label>
+                          <input type="text" className="w-full border rounded px-3 py-2" value={editForm.product_description || ''} onChange={e => handleEditFormChange('product_description', e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Brand</label>
+                          <input type="text" className="w-full border rounded px-3 py-2" value={editForm.brand_name || ''} onChange={e => handleEditFormChange('brand_name', e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Store</label>
+                          <input type="text" className="w-full border rounded px-3 py-2" value={editForm.store_name || ''} onChange={e => handleEditFormChange('store_name', e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Purchase Date</label>
+                          <input type="date" className="w-full border rounded px-3 py-2" value={editForm.purchase_date || ''} onChange={e => handleEditFormChange('purchase_date', e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Amount</label>
+                          <input type="number" className="w-full border rounded px-3 py-2" value={editForm.amount || ''} onChange={e => handleEditFormChange('amount', e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Period</label>
+                          <input type="text" className="w-full border rounded px-3 py-2" value={editForm.warranty_period || ''} onChange={e => handleEditFormChange('warranty_period', e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Model Number</label>
+                          <input type="text" className="w-full border rounded px-3 py-2" value={editForm.model_number || ''} onChange={e => handleEditFormChange('model_number', e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Extended Warranty</label>
+                          <input type="text" className="w-full border rounded px-3 py-2" value={editForm.extended_warranty || ''} onChange={e => handleEditFormChange('extended_warranty', e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Country</label>
+                          <input type="text" className="w-full border rounded px-3 py-2" value={editForm.country || ''} onChange={e => handleEditFormChange('country', e.target.value)} />
+                        </div>
+                      </>
+                    )
                   ) : (
                     <>
                       <div>
@@ -818,16 +986,38 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                 )}
                 <span>Delete Receipt</span>
               </button>
-
               <div className="flex items-center space-x-3">
-                <button className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
+                <button
+                  className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                  onClick={handleDownloadReceiptImage}
+                >
                   <Download className="h-4 w-4" />
                   <span>Download</span>
                 </button>
-                <button className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200">
-                  <Edit3 className="h-4 w-4" />
-                  <span>Edit</span>
-                </button>
+                {isEditMode ? (
+                  <>
+                    <button
+                      className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200"
+                      onClick={handleSaveEdit}
+                      disabled={isSaving}
+                    >
+                      <Edit3 className="h-4 w-4" />
+                      <span>{isSaving ? 'Saving...' : 'Save'}</span>
+                    </button>
+                    <button
+                      className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200 border border-gray-300 px-4 py-2 rounded-lg"
+                      onClick={handleCancelEdit}
+                      disabled={isSaving}
+                    >
+                      <span>Cancel</span>
+                    </button>
+                  </>
+                ) : (
+                  <button className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200" onClick={handleEditClick}>
+                    <Edit3 className="h-4 w-4" />
+                    <span>Edit</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>

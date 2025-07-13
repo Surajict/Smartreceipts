@@ -19,7 +19,7 @@ import {
   SortAsc,
   SortDesc
 } from 'lucide-react';
-import { getCurrentUser } from '../lib/supabase';
+import { getCurrentUser, getReceiptImageSignedUrl } from '../lib/supabase';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 
 interface WarrantyPageProps {
@@ -96,36 +96,44 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
       });
 
       // Process into warranty items
-      const items: WarrantyItem[] = allReceipts
-        .filter(receipt => receipt.purchase_date) // Only items with purchase dates
-        .map(receipt => {
-          // Use enhanced warranty period detection for electronics
-          let warrantyPeriod = receipt.warranty_period;
-          if (!warrantyPeriod || warrantyPeriod.trim() === '') {
-            warrantyPeriod = getDefaultWarrantyPeriod(receipt.product_description, receipt.brand_name);
-          }
-          
-          const warrantyExpiry = calculateWarrantyExpiry(receipt.purchase_date, warrantyPeriod);
-          const daysLeft = Math.ceil((warrantyExpiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-          
-          return {
-            id: receipt.id,
-            itemName: receipt.product_description || 'Unknown Product',
-            brandName: receipt.brand_name || 'Unknown Brand',
-            modelNumber: receipt.model_number || 'N/A',
-            purchaseDate: receipt.purchase_date,
-            expiryDate: warrantyExpiry.toISOString().split('T')[0],
-            daysLeft,
-            urgency: daysLeft < 0 ? 'expired' : daysLeft <= 30 ? 'high' : daysLeft <= 90 ? 'medium' : 'low',
-            warrantyPeriod: warrantyPeriod,
-            storeName: receipt.store_name || 'Unknown Store',
-            purchaseLocation: receipt.purchase_location || 'Unknown Location',
-            amount: receipt.amount || 0,
-            country: receipt.country || 'Unknown Country',
-            extendedWarranty: receipt.extended_warranty || 'None',
-            imageUrl: receipt.image_url || ''
-          };
-        });
+      const items: WarrantyItem[] = await Promise.all(
+        allReceipts
+          .filter(receipt => receipt.purchase_date) // Only items with purchase dates
+          .map(async receipt => {
+            // Use enhanced warranty period detection for electronics
+            let warrantyPeriod = receipt.warranty_period;
+            if (!warrantyPeriod || warrantyPeriod.trim() === '') {
+              warrantyPeriod = getDefaultWarrantyPeriod(receipt.product_description, receipt.brand_name);
+            }
+            
+            const warrantyExpiry = calculateWarrantyExpiry(receipt.purchase_date, warrantyPeriod);
+            const daysLeft = Math.ceil((warrantyExpiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+            
+            // Generate signed URL for image
+            let signedUrl = '';
+            if (receipt.image_url) {
+              signedUrl = (await getReceiptImageSignedUrl(receipt.image_url)) || '';
+            }
+
+            return {
+              id: receipt.id,
+              itemName: receipt.product_description || 'Unknown Product',
+              brandName: receipt.brand_name || 'Unknown Brand',
+              modelNumber: receipt.model_number || 'N/A',
+              purchaseDate: receipt.purchase_date,
+              expiryDate: warrantyExpiry.toISOString().split('T')[0],
+              daysLeft,
+              urgency: daysLeft < 0 ? 'expired' : daysLeft <= 30 ? 'high' : daysLeft <= 90 ? 'medium' : 'low',
+              warrantyPeriod: warrantyPeriod,
+              storeName: receipt.store_name || 'Unknown Store',
+              purchaseLocation: receipt.purchase_location || 'Unknown Location',
+              amount: receipt.amount || 0,
+              country: receipt.country || 'Unknown Country',
+              extendedWarranty: receipt.extended_warranty || 'None',
+              imageUrl: signedUrl
+            };
+          })
+      );
 
       setWarrantyItems(items);
     } catch (error) {

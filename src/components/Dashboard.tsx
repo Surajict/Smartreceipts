@@ -123,10 +123,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       // Load profile picture if exists
       if (currentUser?.user_metadata?.avatar_url) {
         try {
-          const { data } = supabase.storage
+          const { data, error } = await supabase.storage
             .from('profile-pictures')
-            .getPublicUrl(currentUser.user_metadata.avatar_url);
-          setProfilePicture(data.publicUrl);
+            .createSignedUrl(currentUser.user_metadata.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
+          if (error) {
+            console.error('Error creating signed URL:', error);
+          } else if (data?.signedUrl) {
+            setProfilePicture(data.signedUrl);
+          }
         } catch (error) {
           console.error('Error loading profile picture:', error);
         }

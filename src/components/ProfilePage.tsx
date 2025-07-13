@@ -24,6 +24,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { getCurrentUser, supabase, signOut } from '../lib/supabase';
+import NotificationDropdown from './NotificationDropdown';
 
 interface ProfilePageProps {
   onBackToDashboard: () => void;
@@ -59,7 +60,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [alertsCount] = useState(3);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'privacy' | 'data'>('profile');
   
@@ -114,10 +114,19 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
         
         // Load profile picture if exists
         if (userProfile.avatar_url) {
-          const { data } = supabase.storage
-            .from('profile-pictures')
-            .getPublicUrl(userProfile.avatar_url);
-          setProfilePicture(data.publicUrl);
+          try {
+            const { data, error } = await supabase.storage
+              .from('profile-pictures')
+              .createSignedUrl(userProfile.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
+            
+            if (error) {
+              console.error('Error creating signed URL:', error);
+            } else if (data?.signedUrl) {
+              setProfilePicture(data.signedUrl);
+            }
+          } catch (error) {
+            console.error('Error loading profile picture:', error);
+          }
         }
       }
     } catch (error) {
@@ -128,23 +137,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   const loadUserSettings = async () => {
     try {
       setIsLoadingSettings(true);
-      const currentUser = await getCurrentUser();
-      if (!currentUser) return;
-
+      
       // Load notification settings
-      const { data: notifData, error: notifError } = await supabase
+      const { data: notificationData, error: notificationError } = await supabase
         .from('user_notification_settings')
         .select('*')
-        .eq('user_id', currentUser.id)
-        .limit(1);
+        .eq('user_id', user?.id)
+        .single();
 
-      if (notifError) {
-        console.error('Error loading notification settings:', notifError);
-      } else if (notifData && notifData.length > 0) {
-        setNotificationSettings({
-          warranty_alerts: notifData[0].warranty_alerts,
-          auto_system_update: notifData[0].auto_system_update,
-          marketing_notifications: notifData[0].marketing_notifications
+      if (notificationError && notificationError.code !== 'PGRST116') {
+        console.error('Error loading notification settings:', notificationError);
+      } else {
+        setNotificationSettings(notificationData || {
+          warranty_alerts: true,
+          auto_system_update: true,
+          marketing_notifications: false
         });
       }
 
@@ -152,22 +159,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       const { data: privacyData, error: privacyError } = await supabase
         .from('user_privacy_settings')
         .select('*')
-        .eq('user_id', currentUser.id)
-        .limit(1);
+        .eq('user_id', user?.id)
+        .single();
 
-      if (privacyError) {
+      if (privacyError && privacyError.code !== 'PGRST116') {
         console.error('Error loading privacy settings:', privacyError);
-      } else if (privacyData && privacyData.length > 0) {
-        setPrivacySettings({
-          data_collection: privacyData[0].data_collection,
-          data_analysis: privacyData[0].data_analysis,
-          biometric_login: privacyData[0].biometric_login,
-          two_factor_auth: privacyData[0].two_factor_auth
+      } else {
+        setPrivacySettings(privacyData || {
+          data_collection: true,
+          data_analysis: 'allowed',
+          biometric_login: false,
+          two_factor_auth: false
         });
       }
     } catch (error) {
-      console.error('Error loading settings:', error);
-      setSettingsError('Failed to load settings');
+      console.error('Error loading user settings:', error);
     } finally {
       setIsLoadingSettings(false);
     }
@@ -176,7 +182,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   const handleSignOut = async () => {
     try {
       await signOut();
-      window.location.href = '/';
+      onBackToDashboard();
     } catch (error) {
       console.error('Error signing out:', error);
     }
@@ -224,11 +230,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
         throw uploadError;
       }
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('profile-pictures')
-        .getPublicUrl(fileName);
-
       // Update user metadata
       const { error: updateError } = await supabase.auth.updateUser({
         data: {
@@ -240,13 +241,23 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
         throw updateError;
       }
 
-      // Update local state
-      setProfilePicture(urlData.publicUrl);
-      setUploadSuccess(true);
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => setUploadSuccess(false), 3000);
+      // Create signed URL for the uploaded image
+      const { data: urlData, error: urlError } = await supabase.storage
+        .from('profile-pictures')
+        .createSignedUrl(fileName, 365 * 24 * 60 * 60); // 1 year expiry
 
+      if (urlError || !urlData?.signedUrl) {
+        throw new Error(`Failed to create signed URL: ${urlError?.message}`);
+      }
+
+      // Update the profile picture display
+      setProfilePicture(urlData.signedUrl);
+      
+      // Reload user profile to ensure consistency
+      await loadUserProfile();
+      
+      setUploadSuccess(true);
+      setTimeout(() => setUploadSuccess(false), 3000);
     } catch (error: any) {
       console.error('Upload error:', error);
       setUploadError(error.message || 'Failed to upload profile picture');
@@ -442,24 +453,25 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
 
             {/* Header Actions */}
             <div className="flex items-center space-x-4">
-              {/* Alerts */}
-              <button className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
-                <Bell className="h-6 w-6" />
-                {alertsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-accent-red text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
-                    {alertsCount}
-                  </span>
-                )}
-              </button>
-
+              {/* Notifications */}
+              {user && <NotificationDropdown userId={user.id} />}
               {/* User Menu */}
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
                   className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
                 >
-                  <div className="bg-primary rounded-full p-2">
-                    <User className="h-4 w-4 text-white" />
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-primary flex items-center justify-center">
+                    {profilePicture ? (
+                      <img
+                        src={profilePicture}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                        onError={() => setProfilePicture(null)}
+                      />
+                    ) : (
+                      <User className="h-4 w-4 text-white" />
+                    )}
                   </div>
                   <span className="text-sm font-medium text-text-primary hidden sm:inline">
                     {user?.full_name || user?.email?.split('@')[0] || 'User'}

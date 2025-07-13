@@ -17,9 +17,10 @@ import {
   ChevronDown,
   ChevronUp,
   SortAsc,
-  SortDesc
+  SortDesc,
+  User
 } from 'lucide-react';
-import { getCurrentUser, getReceiptImageSignedUrl } from '../lib/supabase';
+import { getCurrentUser, getReceiptImageSignedUrl, supabase } from '../lib/supabase';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { useLocation } from 'react-router-dom';
 import Footer from './Footer';
@@ -51,6 +52,7 @@ type SortType = 'daysLeft' | 'purchaseDate' | 'itemName' | 'amount';
 
 const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
   const [user, setUser] = useState<any>(null);
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [warrantyItems, setWarrantyItems] = useState<WarrantyItem[]>([]);
   const [filteredItems, setFilteredItems] = useState<WarrantyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -69,6 +71,21 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
         const currentUser = await getCurrentUser();
         if (currentUser) {
           setUser(currentUser);
+          // Load profile picture if exists
+          if (currentUser.user_metadata?.avatar_url) {
+            try {
+              const { data, error } = await supabase.storage
+                .from('profile-pictures')
+                .createSignedUrl(currentUser.user_metadata.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
+              if (error) {
+                console.error('Error creating signed URL:', error);
+              } else if (data?.signedUrl) {
+                setProfilePicture(data.signedUrl);
+              }
+            } catch (error) {
+              console.error('Error loading profile picture:', error);
+            }
+          }
           await loadWarrantyData(currentUser.id);
         }
       } catch (error) {
@@ -403,6 +420,19 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
               <span className="text-sm text-text-secondary">
                 {filteredItems.length} of {warrantyItems.length} items
               </span>
+              {/* User Avatar */}
+              <div className="ml-4 w-8 h-8 rounded-full overflow-hidden bg-primary flex items-center justify-center">
+                {profilePicture ? (
+                  <img
+                    src={profilePicture}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                    onError={() => setProfilePicture(null)}
+                  />
+                ) : (
+                  <User className="h-4 w-4 text-white" />
+                )}
+              </div>
             </div>
           </div>
         </div>

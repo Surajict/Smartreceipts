@@ -29,6 +29,7 @@ import {
   MapPin,
   AlertCircle
 } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt, getUserNotifications, archiveNotification, archiveAllNotifications, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import Footer from './Footer';
@@ -61,6 +62,7 @@ type SortField = 'date' | 'amount' | 'name';
 type SortOrder = 'asc' | 'desc';
 
 const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptScanning }) => {
+  const location = useLocation();
   const [user, setUser] = useState<any>(null);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]);
@@ -98,6 +100,20 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   useEffect(() => {
     filterAndSortReceipts();
   }, [receipts, searchQuery, sortField, sortOrder]);
+
+  // Handle auto-opening receipt from navigation state
+  useEffect(() => {
+    const openReceiptId = location.state?.openReceiptId;
+    if (openReceiptId && receipts.length > 0) {
+      const receiptToOpen = receipts.find(r => r.id === openReceiptId);
+      if (receiptToOpen) {
+        setSelectedReceipt(receiptToOpen);
+        setShowReceiptModal(true);
+        // Clear the state to prevent reopening on re-renders
+        window.history.replaceState({}, document.title);
+      }
+    }
+  }, [location.state, receipts]);
 
   const loadUser = async () => {
     const currentUser = await getCurrentUser();

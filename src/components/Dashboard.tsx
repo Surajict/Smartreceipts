@@ -1296,12 +1296,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-text-primary">Recent Receipts</h2>
-              <button 
-                onClick={onShowLibrary}
-                className="text-primary hover:text-primary/80 font-medium transition-colors duration-200"
-              >
-                View All
-              </button>
+                          <button 
+              onClick={() => navigate('/library')}
+              className="text-primary hover:text-primary/80 font-medium transition-colors duration-200"
+            >
+              View All
+            </button>
             </div>
 
             <div className="space-y-4">
@@ -1322,6 +1322,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                   <div
                     key={receipt.id}
                     className="flex items-center justify-between p-4 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer group"
+                    onClick={() => navigate('/library', { state: { openReceiptId: receipt.id } })}
                   >
                     <div className="flex items-center space-x-4">
                       <div className="bg-gradient-feature rounded-lg p-3">

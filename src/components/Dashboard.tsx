@@ -33,6 +33,7 @@ interface DashboardProps {
   onShowReceiptScanning: () => void;
   onShowProfile: () => void;
   onShowLibrary: () => void;
+  onShowWarranty: () => void;
 }
 
 interface WarrantyAlert {
@@ -82,7 +83,7 @@ interface RAGResult {
   error?: string;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning, onShowProfile, onShowLibrary }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning, onShowProfile, onShowLibrary, onShowWarranty }) => {
   const [user, setUser] = useState<any>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -153,7 +154,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       if (statsError) {
         console.warn('Error loading receipt stats:', statsError);
         // Use fallback calculation based on grouped receipts
-        const totalReceipts = groupedReceipts.length;
+        const totalReceipts = groupedReceipts.length; // This is the correct count of actual receipts
         const totalAmount = groupedReceipts.reduce((sum, receipt) => {
           if (receipt.type === 'group') {
             return sum + (receipt.receipt_total || 0);
@@ -161,18 +162,37 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             return sum + (receipt.amount || 0);
           }
         }, 0);
+        
+        // Calculate total items by counting individual products
+        const totalItems = groupedReceipts.reduce((sum, receipt) => {
+          if (receipt.type === 'group') {
+            return sum + (receipt.product_count || 0);
+          } else {
+            return sum + 1; // Single product receipt = 1 item
+          }
+        }, 0);
+        
         const fallbackStats: SummaryStats = {
-          receiptsScanned: totalReceipts,
+          receiptsScanned: totalReceipts, // Actual number of receipts scanned
           totalAmount: totalAmount,
-          itemsCaptured: totalReceipts,
+          itemsCaptured: totalItems, // Total number of individual items/products
           warrantiesClaimed: 0
         };
         setSummaryStats(fallbackStats);
       } else {
+        // Calculate items from grouped receipts even when stats are available
+        const totalItems = groupedReceipts.reduce((sum, receipt) => {
+          if (receipt.type === 'group') {
+            return sum + (receipt.product_count || 0);
+          } else {
+            return sum + 1; // Single product receipt = 1 item
+          }
+        }, 0);
+        
         const summaryStats: SummaryStats = {
-          receiptsScanned: stats.total_receipts || 0,
+          receiptsScanned: groupedReceipts.length, // Use actual grouped receipts count
           totalAmount: stats.total_amount || 0,
-          itemsCaptured: stats.total_receipts || 0,
+          itemsCaptured: totalItems, // Use calculated items count
           warrantiesClaimed: 0 // This would need a separate tracking mechanism
         };
         setSummaryStats(summaryStats);
@@ -223,28 +243,81 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         }
       });
 
+      console.log('Processing warranty alerts for receipts:', allReceipts.length);
+      console.log('Sample receipts:', allReceipts.slice(0, 3).map(r => ({
+        id: r.id,
+        product: r.product_description,
+        brand: r.brand_name,
+        purchase_date: r.purchase_date,
+        warranty_period: r.warranty_period
+      })));
+
+      // Check for specific items we're looking for
+      const targetItems = allReceipts.filter(r => 
+        r.product_description?.toLowerCase().includes('nintendo') ||
+        r.product_description?.toLowerCase().includes('dji') ||
+        r.product_description?.toLowerCase().includes('microsoft') ||
+        r.product_description?.toLowerCase().includes('surface')
+      );
+      
+      console.log('Target electronics items found:', targetItems.length);
+      targetItems.forEach(item => {
+        console.log(`Target item: ${item.product_description}`, {
+          purchase_date: item.purchase_date,
+          warranty_period: item.warranty_period,
+          brand: item.brand_name
+        });
+      });
+
       const alerts: WarrantyAlert[] = allReceipts
         .map(receipt => {
-          const warrantyExpiry = calculateWarrantyExpiry(receipt.purchase_date, receipt.warranty_period);
+          // Skip items without purchase date
+          if (!receipt.purchase_date) {
+            console.log(`Skipping ${receipt.product_description} - no purchase date`);
+            return null;
+          }
+          
+          // Use enhanced warranty period detection for electronics
+          let warrantyPeriod = receipt.warranty_period;
+          if (!warrantyPeriod || warrantyPeriod.trim() === '') {
+            warrantyPeriod = getDefaultWarrantyPeriod(receipt.product_description, receipt.brand_name);
+            console.log(`Applied default warranty for ${receipt.product_description}: ${warrantyPeriod}`);
+          }
+          
+          const warrantyExpiry = calculateWarrantyExpiry(receipt.purchase_date, warrantyPeriod);
           const daysLeft = Math.ceil((warrantyExpiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+          
+          console.log(`Warranty check for ${receipt.product_description}:`, {
+            purchase_date: receipt.purchase_date,
+            original_warranty_period: receipt.warranty_period,
+            calculated_warranty_period: warrantyPeriod,
+            warranty_expiry: warrantyExpiry.toISOString().split('T')[0],
+            days_left: daysLeft,
+            within_threshold: daysLeft > 0 && daysLeft <= 180
+          });
           
           // Only include items with warranties expiring in the next 6 months
           if (daysLeft > 0 && daysLeft <= 180) {
-            return {
+            const alert = {
               id: receipt.id,
-              itemName: receipt.product_description,
+              itemName: receipt.product_description || 'Unknown Product',
               purchaseDate: receipt.purchase_date,
               expiryDate: warrantyExpiry.toISOString().split('T')[0],
               daysLeft,
               urgency: daysLeft <= 30 ? 'high' : daysLeft <= 90 ? 'medium' : 'low'
             };
+            console.log(`✅ Adding warranty alert for ${receipt.product_description}:`, alert);
+            return alert;
+          } else {
+            console.log(`❌ Not adding alert for ${receipt.product_description} - days left: ${daysLeft}`);
           }
           return null;
         })
         .filter(alert => alert !== null)
         .sort((a, b) => a!.daysLeft - b!.daysLeft)
-        .slice(0, 3) as WarrantyAlert[];
+        .slice(0, 6) as WarrantyAlert[]; // Increased from 3 to 6 to show more items
 
+      console.log('Warranty alerts found:', alerts.length, alerts);
       setWarrantyAlerts(alerts);
       setAlertsCount(alerts.length);
 
@@ -288,6 +361,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
   const calculateWarrantyExpiry = (purchaseDate: string, warrantyPeriod: string): Date => {
     const purchase = new Date(purchaseDate);
+    
+    // Handle null, undefined, or empty warranty period
+    if (!warrantyPeriod || warrantyPeriod.trim() === '') {
+      // Default to 1 year for items without warranty period specified
+      purchase.setFullYear(purchase.getFullYear() + 1);
+      return purchase;
+    }
+    
     const period = warrantyPeriod.toLowerCase();
     
     if (period.includes('lifetime')) {
@@ -307,6 +388,45 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     }
     
     return purchase;
+  };
+
+  // Enhanced warranty period detection for electronics
+  const getDefaultWarrantyPeriod = (productDescription: string, brandName: string): string => {
+    const product = (productDescription || '').toLowerCase();
+    const brand = (brandName || '').toLowerCase();
+    
+    // Gaming consoles and accessories - typically 1 year
+    if (product.includes('nintendo') || product.includes('xbox') || product.includes('playstation') || 
+        product.includes('ps5') || product.includes('ps4') || product.includes('switch')) {
+      return '1 year';
+    }
+    
+    // Drones and camera equipment - typically 1 year
+    if (product.includes('dji') || product.includes('drone') || product.includes('gimbal') || 
+        brand.includes('dji')) {
+      return '1 year';
+    }
+    
+    // Computers and tablets - typically 1 year
+    if (product.includes('surface') || product.includes('laptop') || product.includes('computer') ||
+        product.includes('microsoft') || product.includes('macbook') || product.includes('ipad')) {
+      return '1 year';
+    }
+    
+    // Smartphones - typically 1 year
+    if (product.includes('iphone') || product.includes('samsung') || product.includes('pixel') ||
+        product.includes('phone')) {
+      return '1 year';
+    }
+    
+    // TVs and large appliances - typically 1 year
+    if (product.includes('tv') || product.includes('television') || product.includes('lg') ||
+        product.includes('sony') || product.includes('samsung')) {
+      return '1 year';
+    }
+    
+    // Default for all other electronics
+    return '1 year';
   };
 
   // Enhanced Smart Search functionality with RAG
@@ -1031,7 +1151,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
               )}
             </div>
 
-            <button className="w-full mt-4 text-center text-primary hover:text-primary/80 font-medium py-2 transition-colors duration-200">
+            <button 
+              onClick={onShowWarranty}
+              className="w-full mt-4 text-center text-primary hover:text-primary/80 font-medium py-2 transition-colors duration-200"
+            >
               View All Warranties
             </button>
           </div>

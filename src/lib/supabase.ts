@@ -921,6 +921,17 @@ Examples of MULTI-PRODUCT receipts:
 - "DJI Mini Drone $899.00, Nintendo Switch $649.00, Surface Pro $1299.00"
 - Multiple different items listed separately with individual prices
 
+WARRANTY PERIOD DETECTION:
+- Look for explicit warranty mentions: "1 year warranty", "2 year limited warranty", "90 days warranty"
+- For electronics without explicit warranty, use these defaults:
+  * Gaming consoles (Nintendo, Xbox, PlayStation): "1 year"
+  * Computers/laptops/tablets (Surface, MacBook, iPad): "1 year"
+  * Smartphones (iPhone, Samsung, Pixel): "1 year"
+  * Drones and cameras (DJI, GoPro): "1 year"
+  * TVs and appliances: "1 year"
+  * Small electronics: "1 year"
+- If no warranty info found, default to "1 year" for electronics
+
 For SINGLE PRODUCT receipts, return JSON with these fields:
 - product_description (string): Main product or service purchased
 - brand_name (string): Brand or manufacturer name
@@ -938,7 +949,7 @@ For MULTI-PRODUCT receipts, return JSON with these fields:
 - purchase_location (string): Store location/address
 - purchase_date (string): Date in YYYY-MM-DD format
 - total_amount (number): Total amount paid for all products
-- warranty_period (string): Default warranty duration
+- warranty_period (string): Default warranty duration for the receipt
 - extended_warranty (string): Extended warranty info if any
 - country (string): Country where purchase was made
 - products (array): Array of product objects, each with:
@@ -946,6 +957,7 @@ For MULTI-PRODUCT receipts, return JSON with these fields:
   - brand_name (string): Brand name
   - model_number (string): Model number if available
   - amount (number): Individual product price
+  - warranty_period (string): Individual product warranty period
 
 If a field is missing, set its value to null. Return ONLY valid JSON, no extra text.
 
@@ -1018,7 +1030,8 @@ Return only valid JSON:`;
         product_description: product.product_description || 'Receipt Item',
         brand_name: product.brand_name || 'Unknown Brand',
         model_number: product.model_number || null,
-        amount: typeof product.amount === 'number' ? product.amount : null
+        amount: typeof product.amount === 'number' ? product.amount : null,
+        warranty_period: product.warranty_period || '1 year' // Ensure warranty_period is included
       }));
 
       // Ensure date is in correct format

@@ -14,6 +14,7 @@ import Dashboard from './components/Dashboard';
 import ReceiptScanning from './components/ReceiptScanning';
 import ProfilePage from './components/ProfilePage';
 import MyLibrary from './components/MyLibrary';
+import WarrantyPage from './components/WarrantyPage';
 import { getCurrentUser, onAuthStateChange } from './lib/supabase';
 
 // Protected Route Component
@@ -73,12 +74,14 @@ const DashboardPage = ({ user, onSignOut }: { user: any; onSignOut: () => void }
   const handleShowReceiptScanning = () => navigate('/scan');
   const handleShowProfile = () => navigate('/profile');
   const handleShowLibrary = () => navigate('/library');
+  const handleShowWarranty = () => navigate('/warranty');
   return (
     <Dashboard
       onSignOut={onSignOut}
       onShowReceiptScanning={handleShowReceiptScanning}
       onShowProfile={handleShowProfile}
       onShowLibrary={handleShowLibrary}
+      onShowWarranty={handleShowWarranty}
     />
   );
 };
@@ -103,6 +106,13 @@ const LibraryPage = () => {
   const handleBackToDashboard = () => navigate('/dashboard');
   const handleShowReceiptScanning = () => navigate('/scan');
   return <MyLibrary onBackToDashboard={handleBackToDashboard} onShowReceiptScanning={handleShowReceiptScanning} />;
+};
+
+// Warranty Page Component
+const WarrantyPageComponent = () => {
+  const navigate = useNavigate();
+  const handleBackToDashboard = () => navigate('/dashboard');
+  return <WarrantyPage onBackToDashboard={handleBackToDashboard} />;
 };
 
 function App() {
@@ -193,6 +203,14 @@ function App() {
           element={
             <ProtectedRoute user={user}>
               <LibraryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/warranty"
+          element={
+            <ProtectedRoute user={user}>
+              <WarrantyPageComponent />
             </ProtectedRoute>
           }
         />

@@ -24,6 +24,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { getCurrentUser, supabase, signOut } from '../lib/supabase';
+import NotificationDropdown from './NotificationDropdown';
 
 interface ProfilePageProps {
   onBackToDashboard: () => void;
@@ -59,7 +60,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [alertsCount] = useState(3);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'privacy' | 'data'>('profile');
   
@@ -442,16 +442,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
 
             {/* Header Actions */}
             <div className="flex items-center space-x-4">
-              {/* Alerts */}
-              <button className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
-                <Bell className="h-6 w-6" />
-                {alertsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-accent-red text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
-                    {alertsCount}
-                  </span>
-                )}
-              </button>
-
+              {/* Notifications */}
+              {user && <NotificationDropdown userId={user.id} />}
               {/* User Menu */}
               <div className="relative">
                 <button

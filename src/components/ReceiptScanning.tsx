@@ -27,6 +27,7 @@ import { getCurrentUser, signOut, uploadReceiptImage, testOpenAIConnection, extr
 import { OCRService, OCREngine } from '../services/ocrService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { ExtractedReceiptData } from '../types/receipt';
+import NotificationDropdown from './NotificationDropdown';
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
@@ -53,7 +54,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [success, setSuccess] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [alertsCount] = useState(3);
   const [openaiAvailable, setOpenaiAvailable] = useState<boolean | null>(null);
   const [showExtractedForm, setShowExtractedForm] = useState(false);
   
@@ -447,16 +447,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
 
             {/* Header Actions */}
             <div className="flex items-center space-x-4">
-              {/* Alerts */}
-              <button className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
-                <Bell className="h-6 w-6" />
-                {alertsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-accent-red text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
-                    {alertsCount}
-                  </span>
-                )}
-              </button>
-
+              {/* Notifications */}
+              {user && <NotificationDropdown userId={user.id} />}
               {/* Back Button */}
               <button
                 onClick={onBackToDashboard}
@@ -465,7 +457,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                 <ArrowLeft className="h-4 w-4" />
                 <span className="hidden sm:inline">Back to Dashboard</span>
               </button>
-
               {/* User Menu */}
               <div className="relative">
                 <button

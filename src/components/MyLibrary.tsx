@@ -22,9 +22,15 @@ import {
   SortAsc,
   SortDesc,
   X,
-  Loader2
+  Loader2,
+  Package,
+  ChevronDown,
+  ChevronUp,
+  MapPin,
+  AlertCircle
 } from 'lucide-react';
-import { getCurrentUser, signOut, getUserReceipts, deleteReceipt } from '../lib/supabase';
+import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl } from '../lib/supabase';
+import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 
 interface MyLibraryProps {
   onBackToDashboard: () => void;
@@ -33,14 +39,19 @@ interface MyLibraryProps {
 
 interface Receipt {
   id: string;
-  product_description: string;
-  brand_name: string;
+  type?: 'single' | 'group';
+  product_description?: string;
+  brand_name?: string;
   store_name: string;
   purchase_date: string;
   amount: number;
-  warranty_period: string;
+  warranty_period?: string;
   image_url?: string;
   created_at: string;
+  // For grouped receipts
+  receipts?: any[];
+  receipt_total?: number;
+  product_count?: number;
 }
 
 type ViewMode = 'grid' | 'list';
@@ -86,12 +97,8 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     
     setIsLoading(true);
     try {
-      const { data, error } = await getUserReceipts(user.id);
-      if (error) {
-        console.error('Error loading receipts:', error);
-      } else {
-        setReceipts(data || []);
-      }
+      const groupedReceipts = await MultiProductReceiptService.getGroupedReceipts(user.id);
+      setReceipts(groupedReceipts || []);
     } catch (error) {
       console.error('Error loading receipts:', error);
     } finally {
@@ -104,11 +111,19 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
 
     // Apply search filter
     if (searchQuery) {
-      filtered = receipts.filter(receipt =>
-        receipt.product_description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        receipt.brand_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        receipt.store_name?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      filtered = receipts.filter(receipt => {
+        const query = searchQuery.toLowerCase();
+        return (
+          receipt.product_description?.toLowerCase().includes(query) ||
+          receipt.brand_name?.toLowerCase().includes(query) ||
+          receipt.store_name?.toLowerCase().includes(query) ||
+          // For grouped receipts, search within individual products
+          (receipt.type === 'group' && receipt.receipts?.some(r => 
+            r.product_description?.toLowerCase().includes(query) ||
+            r.brand_name?.toLowerCase().includes(query)
+          ))
+        );
+      });
     }
 
     // Apply sorting
@@ -125,8 +140,8 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
           bValue = b.amount || 0;
           break;
         case 'name':
-          aValue = a.product_description.toLowerCase();
-          bValue = b.product_description.toLowerCase();
+          aValue = a.product_description?.toLowerCase() || '';
+          bValue = b.product_description?.toLowerCase() || '';
           break;
         default:
           aValue = a.created_at;
@@ -153,27 +168,61 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   };
 
   const handleDeleteReceipt = async (receiptId: string) => {
-    if (!user || !confirm('Are you sure you want to delete this receipt?')) return;
-
+    if (!user) return;
+    
     setIsDeleting(receiptId);
     try {
       const { error } = await deleteReceipt(user.id, receiptId);
       if (error) {
         console.error('Error deleting receipt:', error);
-        alert('Failed to delete receipt. Please try again.');
+        alert('Failed to delete receipt');
       } else {
-        // Remove from local state
-        setReceipts(prev => prev.filter(r => r.id !== receiptId));
-        setShowReceiptModal(false);
-        setSelectedReceipt(null);
+        setReceipts(receipts.filter(r => r.id !== receiptId));
       }
     } catch (error) {
       console.error('Error deleting receipt:', error);
-      alert('Failed to delete receipt. Please try again.');
+      alert('Failed to delete receipt');
     } finally {
-      setIsDeleting(null);
+      setIsDeleting(receiptId);
     }
   };
+
+  // Helper function to get signed URL for receipt image
+  const getSignedImageUrl = async (imageUrl: string | undefined): Promise<string | null> => {
+    if (!imageUrl) return null;
+    return await getReceiptImageSignedUrl(imageUrl);
+  };
+
+  // State for signed URLs cache
+  const [signedUrls, setSignedUrls] = useState<{[key: string]: string}>({});
+
+  // Load signed URLs for visible receipts
+  useEffect(() => {
+    const loadSignedUrls = async () => {
+      const urlMap: {[key: string]: string} = {};
+      
+      for (const receipt of receipts) {
+        if (receipt.image_url && !signedUrls[receipt.image_url]) {
+          try {
+            const signedUrl = await getSignedImageUrl(receipt.image_url);
+            if (signedUrl) {
+              urlMap[receipt.image_url] = signedUrl;
+            }
+          } catch (error) {
+            console.warn('Failed to get signed URL for receipt:', receipt.id);
+          }
+        }
+      }
+      
+      if (Object.keys(urlMap).length > 0) {
+        setSignedUrls(prev => ({ ...prev, ...urlMap }));
+      }
+    };
+
+    if (receipts.length > 0) {
+      loadSignedUrls();
+    }
+  }, [receipts]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -208,7 +257,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     const now = new Date();
     const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-    if (daysLeft < 0) return { status: 'expired', color: 'text-red-600', icon: AlertTriangle };
+    if (daysLeft < 0) return { status: 'expired', color: 'text-red-600', icon: AlertCircle };
     if (daysLeft <= 30) return { status: 'expiring', color: 'text-yellow-600', icon: Clock };
     return { status: 'active', color: 'text-green-600', icon: CheckCircle };
   };
@@ -431,7 +480,9 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
         ) : (
           <div className={viewMode === 'grid' ? 'grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6' : 'space-y-4'}>
             {filteredReceipts.map((receipt) => {
-              const warrantyStatus = getWarrantyStatus(receipt.purchase_date, receipt.warranty_period);
+              const warrantyStatus = receipt.warranty_period 
+                ? getWarrantyStatus(receipt.purchase_date, receipt.warranty_period)
+                : { status: 'unknown', color: 'text-gray-500', icon: Clock };
               const StatusIcon = warrantyStatus.icon;
 
               if (viewMode === 'grid') {
@@ -448,25 +499,35 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                     <div className="aspect-square bg-gradient-feature rounded-lg mb-4 flex items-center justify-center overflow-hidden">
                       {receipt.image_url ? (
                         <img
-                          src={receipt.image_url}
-                          alt={receipt.product_description}
-                          className="w-full h-full object-cover"
+                          src={signedUrls[receipt.image_url] || receipt.image_url}
+                          alt={receipt.product_description || 'Receipt'}
+                          className="w-full h-full object-cover object-center"
+                          onError={e => {
+                            (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                          }}
                         />
                       ) : (
-                        <div className="text-primary">
-                          <Tag className="h-12 w-12" />
-                        </div>
+                        <img
+                          src="/receipt-placeholder.svg"
+                          alt="Receipt Placeholder"
+                          className="w-16 h-16 object-contain opacity-60"
+                        />
                       )}
                     </div>
 
                     {/* Receipt Info */}
                     <div className="space-y-2">
                       <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 line-clamp-2">
-                        {receipt.product_description}
+                        {receipt.type === 'group' 
+                          ? `${receipt.product_count} Products` 
+                          : receipt.product_description || 'Receipt'
+                        }
                       </h3>
                       
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-text-secondary">{receipt.brand_name}</span>
+                        <span className="text-text-secondary">
+                          {receipt.type === 'group' ? 'Multiple Brands' : (receipt.brand_name || 'Unknown')}
+                        </span>
                         <div className={`flex items-center space-x-1 ${warrantyStatus.color}`}>
                           <StatusIcon className="h-4 w-4" />
                         </div>
@@ -478,6 +539,13 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                           <span className="font-bold text-text-primary">{formatCurrency(receipt.amount)}</span>
                         )}
                       </div>
+
+                      {receipt.type === 'group' && receipt.receipts && (
+                        <div className="text-xs text-text-secondary bg-blue-50 rounded px-2 py-1 mt-2">
+                          {receipt.receipts.slice(0, 2).map(r => r.product_description).join(', ')}
+                          {receipt.receipts.length > 2 && ` +${receipt.receipts.length - 2} more`}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -496,31 +564,51 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                       <div className="w-16 h-16 bg-gradient-feature rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                         {receipt.image_url ? (
                           <img
-                            src={receipt.image_url}
-                            alt={receipt.product_description}
+                            src={signedUrls[receipt.image_url] || receipt.image_url}
+                            alt={receipt.product_description || 'Receipt'}
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <Tag className="h-8 w-8 text-primary" />
+                          receipt.type === 'group' ? (
+                            <Package className="h-8 w-8 text-primary" />
+                          ) : (
+                            <Tag className="h-8 w-8 text-primary" />
+                          )
                         )}
                       </div>
 
                       {/* Receipt Info */}
                       <div className="flex-1 min-w-0">
                         <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate">
-                          {receipt.product_description}
+                          {receipt.type === 'group' 
+                            ? `${receipt.product_count} Products` 
+                            : receipt.product_description || 'Receipt'
+                          }
                         </h3>
                         <div className="flex items-center space-x-4 text-sm text-text-secondary mt-1">
-                          <span>{receipt.brand_name}</span>
+                          <span>
+                            {receipt.type === 'group' ? 'Multiple Brands' : (receipt.brand_name || 'Unknown')}
+                          </span>
                           <span>{formatDate(receipt.purchase_date)}</span>
                           {receipt.store_name && <span>{receipt.store_name}</span>}
                         </div>
+                        {receipt.type === 'group' && receipt.receipts && (
+                          <div className="text-xs text-text-secondary bg-blue-50 rounded px-2 py-1 mt-2">
+                            Products: {receipt.receipts.slice(0, 3).map(r => r.product_description).join(', ')}
+                            {receipt.receipts.length > 3 && ` +${receipt.receipts.length - 3} more`}
+                          </div>
+                        )}
                       </div>
 
                       {/* Amount and Status */}
                       <div className="flex items-center space-x-4 flex-shrink-0">
                         {receipt.amount && (
-                          <span className="font-bold text-text-primary">{formatCurrency(receipt.amount)}</span>
+                          <div className="text-right">
+                            <span className="font-bold text-text-primary">{formatCurrency(receipt.amount)}</span>
+                            {receipt.type === 'group' && (
+                              <div className="text-xs text-text-secondary">Total</div>
+                            )}
+                          </div>
                         )}
                         <div className={`flex items-center space-x-1 ${warrantyStatus.color}`}>
                           <StatusIcon className="h-5 w-5" />
@@ -562,62 +650,122 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                   <div className="aspect-square bg-gradient-feature rounded-lg flex items-center justify-center overflow-hidden">
                     {selectedReceipt.image_url ? (
                       <img
-                        src={selectedReceipt.image_url}
-                        alt={selectedReceipt.product_description}
-                        className="w-full h-full object-cover"
+                        src={signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url}
+                        alt={selectedReceipt.product_description || 'Receipt'}
+                        className="w-full h-full object-cover object-center"
+                        onError={e => {
+                          (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                        }}
                       />
                     ) : (
-                      <div className="text-center text-text-secondary">
-                        <Tag className="h-16 w-16 mx-auto mb-2" />
-                        <p>No image available</p>
-                      </div>
+                      <img
+                        src="/receipt-placeholder.svg"
+                        alt="Receipt Placeholder"
+                        className="w-24 h-24 object-contain opacity-60"
+                      />
                     )}
                   </div>
                 </div>
 
                 {/* Receipt Details */}
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">Product</label>
-                    <p className="text-text-primary font-medium">{selectedReceipt.product_description}</p>
-                  </div>
+                  {selectedReceipt.type === 'group' ? (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-text-secondary mb-1">Receipt Type</label>
+                        <p className="text-text-primary font-medium">Multi-Product Receipt ({selectedReceipt.product_count} items)</p>
+                      </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">Brand</label>
-                    <p className="text-text-primary">{selectedReceipt.brand_name}</p>
-                  </div>
+                      {selectedReceipt.store_name && (
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Store</label>
+                          <p className="text-text-primary">{selectedReceipt.store_name}</p>
+                        </div>
+                      )}
 
-                  {selectedReceipt.store_name && (
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-1">Store</label>
-                      <p className="text-text-primary">{selectedReceipt.store_name}</p>
-                    </div>
+                      <div>
+                        <label className="block text-sm font-medium text-text-secondary mb-1">Purchase Date</label>
+                        <p className="text-text-primary">{formatDate(selectedReceipt.purchase_date)}</p>
+                      </div>
+
+                      {selectedReceipt.amount && (
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Total Amount</label>
+                          <p className="text-text-primary font-bold">{formatCurrency(selectedReceipt.amount)}</p>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-sm font-medium text-text-secondary mb-1">Products</label>
+                        <div className="space-y-2">
+                          {selectedReceipt.receipts?.map((product, index) => (
+                            <div key={index} className="bg-gray-50 rounded-lg p-3">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <p className="font-medium text-text-primary">{product.product_description}</p>
+                                  <p className="text-sm text-text-secondary">{product.brand_name}</p>
+                                </div>
+                                <p className="font-medium text-text-primary">{formatCurrency(product.amount)}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-text-secondary mb-1">Product</label>
+                        <p className="text-text-primary font-medium">{selectedReceipt.product_description || 'Receipt'}</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-text-secondary mb-1">Brand</label>
+                        <p className="text-text-primary">{selectedReceipt.brand_name || 'Unknown'}</p>
+                      </div>
+
+                      {selectedReceipt.store_name && (
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Store</label>
+                          <p className="text-text-primary">{selectedReceipt.store_name}</p>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-sm font-medium text-text-secondary mb-1">Purchase Date</label>
+                        <p className="text-text-primary">{formatDate(selectedReceipt.purchase_date)}</p>
+                      </div>
+
+                      {selectedReceipt.amount && (
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Amount</label>
+                          <p className="text-text-primary font-bold">{formatCurrency(selectedReceipt.amount)}</p>
+                        </div>
+                      )}
+
+                      {selectedReceipt.warranty_period && (
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Period</label>
+                          <p className="text-text-primary">{selectedReceipt.warranty_period}</p>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Status</label>
+                        {selectedReceipt.warranty_period ? (
+                          <div className={`flex items-center space-x-2 ${getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).color}`}>
+                            {React.createElement(getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).icon, { className: "h-5 w-5" })}
+                            <span className="font-medium capitalize">{getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).status}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-2 text-gray-500">
+                            <Clock className="h-5 w-5" />
+                            <span className="font-medium">No warranty info</span>
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
-
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">Purchase Date</label>
-                    <p className="text-text-primary">{formatDate(selectedReceipt.purchase_date)}</p>
-                  </div>
-
-                  {selectedReceipt.amount && (
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-1">Amount</label>
-                      <p className="text-text-primary font-bold">{formatCurrency(selectedReceipt.amount)}</p>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Period</label>
-                    <p className="text-text-primary">{selectedReceipt.warranty_period}</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Status</label>
-                    <div className={`flex items-center space-x-2 ${getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).color}`}>
-                      {React.createElement(getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).icon, { className: "h-5 w-5" })}
-                      <span className="font-medium capitalize">{getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).status}</span>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>

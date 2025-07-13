@@ -20,11 +20,13 @@ import {
   Loader2,
   Database,
   Brain,
-  Lightbulb
+  Lightbulb,
+  Package
 } from 'lucide-react';
 import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats } from '../lib/supabase';
 import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
+import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 
 interface DashboardProps {
   onSignOut: () => void;
@@ -44,12 +46,16 @@ interface WarrantyAlert {
 
 interface RecentReceipt {
   id: string;
+  type: 'single' | 'group';
   productName: string;
   storeName: string;
   brandName: string;
   date: string;
   amount: number;
   items: number;
+  receipts?: any[]; // For grouped receipts
+  receipt_total?: number; // For grouped receipts
+  product_count?: number; // For grouped receipts
 }
 
 interface SummaryStats {
@@ -138,24 +144,27 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     try {
       setIsLoading(true);
 
-      // Load receipts data using the enhanced function
-      const { data: receipts, error: receiptsError } = await getUserReceipts(userId);
-
-      if (receiptsError) {
-        console.error('Error loading receipts:', receiptsError);
-        return;
-      }
+      // Load grouped receipts using the new service
+      const groupedReceipts = await MultiProductReceiptService.getGroupedReceipts(userId);
 
       // Load receipt statistics using the database function
       const { data: stats, error: statsError } = await getUserReceiptStats(userId);
 
       if (statsError) {
         console.warn('Error loading receipt stats:', statsError);
-        // Use fallback calculation
+        // Use fallback calculation based on grouped receipts
+        const totalReceipts = groupedReceipts.length;
+        const totalAmount = groupedReceipts.reduce((sum, receipt) => {
+          if (receipt.type === 'group') {
+            return sum + (receipt.receipt_total || 0);
+          } else {
+            return sum + (receipt.amount || 0);
+          }
+        }, 0);
         const fallbackStats: SummaryStats = {
-          receiptsScanned: receipts?.length || 0,
-          totalAmount: receipts?.reduce((sum, receipt) => sum + (receipt.amount || 0), 0) || 0,
-          itemsCaptured: receipts?.length || 0,
+          receiptsScanned: totalReceipts,
+          totalAmount: totalAmount,
+          itemsCaptured: totalReceipts,
           warrantiesClaimed: 0
         };
         setSummaryStats(fallbackStats);
@@ -169,22 +178,52 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         setSummaryStats(summaryStats);
       }
 
-      // Process recent receipts with product name and store name
-      const recentReceiptsData: RecentReceipt[] = (receipts || [])
+      // Process recent receipts with proper grouping
+      const recentReceiptsData: RecentReceipt[] = groupedReceipts
         .slice(0, 4)
-        .map(receipt => ({
-          id: receipt.id,
-          productName: receipt.product_description || 'Unknown Product',
-          storeName: receipt.store_name || 'Unknown Store',
-          brandName: receipt.brand_name || 'Unknown Brand',
-          date: receipt.purchase_date,
-          amount: receipt.amount || 0,
-          items: 1 // Assuming 1 item per receipt for now
-        }));
+        .map(receipt => {
+          if (receipt.type === 'group') {
+            // Multi-product receipt group
+            const firstProduct = receipt.receipts[0];
+            return {
+              id: receipt.id,
+              type: 'group',
+              productName: `${receipt.product_count} Products`,
+              storeName: receipt.store_name || 'Unknown Store',
+              brandName: 'Multiple Brands',
+              date: receipt.purchase_date,
+              amount: receipt.receipt_total || 0,
+              items: receipt.product_count || 0,
+              receipts: receipt.receipts,
+              receipt_total: receipt.receipt_total,
+              product_count: receipt.product_count
+            };
+          } else {
+            // Single product receipt
+            return {
+              id: receipt.id,
+              type: 'single',
+              productName: receipt.product_description || 'Unknown Product',
+              storeName: receipt.store_name || 'Unknown Store',
+              brandName: receipt.brand_name || 'Unknown Brand',
+              date: receipt.purchase_date,
+              amount: receipt.amount || 0,
+              items: 1
+            };
+          }
+        });
       setRecentReceipts(recentReceiptsData);
 
-      // Calculate warranty alerts
-      const alerts: WarrantyAlert[] = (receipts || [])
+      // Calculate warranty alerts from all individual receipts (including grouped ones)
+      const allReceipts = groupedReceipts.flatMap(receipt => {
+        if (receipt.type === 'group') {
+          return receipt.receipts;
+        } else {
+          return [receipt];
+        }
+      });
+
+      const alerts: WarrantyAlert[] = allReceipts
         .map(receipt => {
           const warrantyExpiry = calculateWarrantyExpiry(receipt.purchase_date, receipt.warranty_period);
           const daysLeft = Math.ceil((warrantyExpiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
@@ -1030,7 +1069,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                   >
                     <div className="flex items-center space-x-4">
                       <div className="bg-gradient-feature rounded-lg p-3">
-                        <Receipt className="h-5 w-5 text-primary" />
+                        {receipt.type === 'group' ? (
+                          <Package className="h-5 w-5 text-primary" />
+                        ) : (
+                          <Receipt className="h-5 w-5 text-primary" />
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate">
@@ -1042,12 +1085,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                             <span className="truncate">{receipt.storeName}</span>
                           </div>
                           <div className="flex items-center space-x-1">
-                            <span className="font-medium">Brand:</span>
-                            <span className="truncate">{receipt.brandName}</span>
+                            <span className="font-medium">
+                              {receipt.type === 'group' ? 'Products:' : 'Brand:'}
+                            </span>
+                            <span className="truncate">
+                              {receipt.type === 'group' 
+                                ? `${receipt.product_count} items` 
+                                : receipt.brandName
+                              }
+                            </span>
                           </div>
                           <div className="text-xs text-text-secondary">
-                            {formatDate(receipt.date)} • {receipt.items} items
+                            {formatDate(receipt.date)} • {receipt.items} {receipt.items === 1 ? 'item' : 'items'}
                           </div>
+                          {receipt.type === 'group' && receipt.receipts && (
+                            <div className="text-xs text-text-secondary bg-blue-50 rounded px-2 py-1 mt-2">
+                              Products: {receipt.receipts.map(r => r.product_description).join(', ')}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1055,6 +1110,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                       <div className="font-bold text-text-primary">
                         {formatCurrency(receipt.amount)}
                       </div>
+                      {receipt.type === 'group' && (
+                        <div className="text-xs text-text-secondary">
+                          Total Receipt
+                        </div>
+                      )}
                       <ChevronRight className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 ml-auto" />
                     </div>
                   </div>

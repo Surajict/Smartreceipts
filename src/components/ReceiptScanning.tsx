@@ -1,568 +1,330 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import Webcam from 'react-webcam';
 import { 
   Camera, 
   Upload, 
   ArrowLeft, 
-  X, 
+  RotateCcw, 
   Check, 
-  AlertCircle, 
+  X, 
   Loader2, 
+  AlertCircle,
   FileText,
   Zap,
   Brain,
-  Eye,
-  Save,
-  RefreshCw,
   User,
-  LogOut,
-  Bell,
   Edit3,
-  RotateCcw,
-  Plus,
-  Maximize2,
-  Settings
+  Save,
+  Eye,
+  EyeOff,
+  RefreshCw
 } from 'lucide-react';
-import { getCurrentUser, signOut, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT, supabase } from '../lib/supabase';
-import { OCRService, OCREngine } from '../services/ocrService';
+import Webcam from 'react-webcam';
+import { getCurrentUser, extractReceiptDataWithGPT, uploadReceiptImage } from '../lib/supabase';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
-import { ExtractedReceiptData } from '../types/receipt';
+import { OCRService, OCRResult } from '../services/ocrService';
 import { PerplexityValidationService, ValidationResult } from '../services/perplexityValidationService';
 import NotificationDropdown from './NotificationDropdown';
-import * as pdfjsLib from 'pdfjs-dist';
-import mammoth from 'mammoth';
-import html2canvas from 'html2canvas';
-
-// Configure PDF.js worker for Vite (use CDN worker)
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+import Footer from './Footer';
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
 }
 
-// Use the imported type instead of local interface
-type ExtractedData = ExtractedReceiptData;
+type ScanMode = 'camera' | 'upload' | 'manual';
+type ProcessingStep = 'capture' | 'ocr' | 'validation' | 'extraction' | 'saving' | 'complete';
 
-type CaptureMode = 'normal' | 'long';
-type InputMode = 'capture' | 'upload' | 'manual';
+interface ProcessingState {
+  step: ProcessingStep;
+  progress: number;
+  message: string;
+  error?: string;
+}
 
 const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) => {
   const [user, setUser] = useState<any>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
-  const [inputMode, setInputMode] = useState<InputMode>('capture');
-  const [captureMode, setCaptureMode] = useState<CaptureMode>('normal');
-  const [showCamera, setShowCamera] = useState(false);
+  const [scanMode, setScanMode] = useState<ScanMode>('camera');
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processingStep, setProcessingStep] = useState('');
-  const [extractedText, setExtractedText] = useState('');
-  const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
+  const [processingState, setProcessingState] = useState<ProcessingState>({
+    step: 'capture',
+    progress: 0,
+    message: 'Ready to scan'
+  });
+  const [extractedData, setExtractedData] = useState<any>(null);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const [ocrProgress, setOcrProgress] = useState(0);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [openaiAvailable, setOpenaiAvailable] = useState<boolean | null>(null);
-  const [showExtractedForm, setShowExtractedForm] = useState(false);
-  const [isValidating, setIsValidating] = useState(false);
-  
-  // OCR Engine - Always uses Google Cloud Vision
-  const selectedOCREngine: OCREngine = 'google-cloud-vision';
-  
-  // Long receipt capture states
-  const [isCapturingLong, setIsCapturingLong] = useState(false);
-  const [captureProgress, setCaptureProgress] = useState(0);
-  const [capturedFrames, setCapturedFrames] = useState<string[]>([]);
-  const [longCaptureInstructions, setLongCaptureInstructions] = useState('');
-  
+  const [showValidationDetails, setShowValidationDetails] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedData, setEditedData] = useState<any>(null);
+  const [ocrResult, setOcrResult] = useState<OCRResult | null>(null);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+
   const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const captureIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const frameCountRef = useRef(0);
 
   useEffect(() => {
     loadUser();
-    checkOpenAIAvailability();
-    setPreferredOCREngine();
   }, []);
 
-  const setPreferredOCREngine = async () => {
-    try {
-      const preferredEngine = await OCRService.getPreferredEngine();
-      // selectedOCREngine is now a constant, no need to set it
-      console.log('Using OCR engine:', preferredEngine);
-    } catch (error) {
-      console.warn('Failed to check OCR engine:', error);
-      // Always use 'google-cloud-vision'
-    }
-  };
-
   const loadUser = async () => {
-    const currentUser = await getCurrentUser();
-    setUser(currentUser);
-    // Load profile picture if exists
-    if (currentUser?.user_metadata?.avatar_url) {
-      try {
-        const { data, error } = await supabase.storage
-          .from('profile-pictures')
-          .createSignedUrl(currentUser.user_metadata.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
-        if (error) {
-          console.error('Error creating signed URL:', error);
-        } else if (data?.signedUrl) {
-          setProfilePicture(data.signedUrl);
-        }
-      } catch (error) {
-        console.error('Error loading profile picture:', error);
-      }
-    }
-  };
-
-  const checkOpenAIAvailability = async () => {
-    const available = await testOpenAIConnection();
-    setOpenaiAvailable(available);
-    if (!available) {
-      console.warn('OpenAI API not available - AI features will be limited');
-    }
-  };
-
-  const handleSignOut = async () => {
     try {
-      await signOut();
-      window.location.href = '/';
+      const currentUser = await getCurrentUser();
+      if (currentUser) {
+        setUser(currentUser);
+        if (currentUser.user_metadata?.avatar_url) {
+          setProfilePicture(currentUser.user_metadata.avatar_url);
+        }
+      }
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error('Error loading user:', error);
     }
   };
 
-  const capture = useCallback(() => {
-    const imageSrc = webcamRef.current?.getScreenshot();
-    if (imageSrc) {
+  const updateProcessingState = (step: ProcessingStep, progress: number, message: string, error?: string) => {
+    setProcessingState({ step, progress, message, error });
+  };
+
+  const capturePhoto = useCallback(() => {
+    if (webcamRef.current) {
+      const imageSrc = webcamRef.current.getScreenshot();
       setCapturedImage(imageSrc);
-      setShowCamera(false);
     }
   }, [webcamRef]);
 
-  const startLongCapture = useCallback(() => {
-    if (!webcamRef.current) return;
-    
-    setIsCapturingLong(true);
-    setCaptureProgress(0);
-    setCapturedFrames([]);
-    frameCountRef.current = 0;
-    setLongCaptureInstructions('Hold and slowly move camera across the receipt...');
-    
-    // Capture frames every 200ms while button is held
-    captureIntervalRef.current = setInterval(() => {
-      const imageSrc = webcamRef.current?.getScreenshot();
-      if (imageSrc) {
-        setCapturedFrames(prev => [...prev, imageSrc]);
-        frameCountRef.current += 1;
-        setCaptureProgress(Math.min((frameCountRef.current / 15) * 100, 100)); // Max 15 frames
-        
-        if (frameCountRef.current >= 15) {
-          stopLongCapture();
-        }
-      }
-    }, 200);
-  }, [webcamRef]);
-
-  const stopLongCapture = useCallback(() => {
-    if (captureIntervalRef.current) {
-      clearInterval(captureIntervalRef.current);
-      captureIntervalRef.current = null;
-    }
-    
-    setIsCapturingLong(false);
-    setLongCaptureInstructions('Processing captured frames...');
-    
-    // Combine frames into a single long image (simplified approach)
-    if (capturedFrames.length > 0) {
-      // For now, use the middle frame as the best capture
-      // In a real implementation, you'd stitch the frames together
-      const bestFrame = capturedFrames[Math.floor(capturedFrames.length / 2)];
-      setCapturedImage(bestFrame);
-      setShowCamera(false);
-      setCapturedFrames([]);
-      setCaptureProgress(0);
-      setLongCaptureInstructions('');
-    }
-  }, [capturedFrames]);
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
-    setUploadedFile(file);
-    setError(null);
-    setIsProcessing(true);
-    setProcessingStep('Processing file...');
-
-    const fileType = file.type;
-    const fileName = file.name.toLowerCase();
-
-    try {
-      if (fileType.startsWith('image/')) {
-        // Image: proceed as before
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setCapturedImage(e.target?.result as string);
-          setIsProcessing(false);
-          setProcessingStep('');
-        };
-        reader.readAsDataURL(file);
-        return;
-      }
-      if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
-        // PDF: use pdfjs-dist to render first page to image
-        setProcessingStep('Converting PDF to image...');
-        const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
-        const page = await pdf.getPage(1);
-        const viewport = page.getViewport({ scale: 2 });
-        const canvas = document.createElement('canvas');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const context = canvas.getContext('2d');
-        if (!context) throw new Error('Failed to get canvas context');
-        await page.render({ canvasContext: context, viewport }).promise;
-        const dataUrl = canvas.toDataURL('image/png');
-        setCapturedImage(dataUrl);
-        setIsProcessing(false);
-        setProcessingStep('');
-        return;
-      }
-      if (
-        fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-        fileType === 'application/msword' ||
-        fileName.endsWith('.docx') ||
-        fileName.endsWith('.doc')
-      ) {
-        // DOCX: use mammoth to convert to HTML, then html2canvas to render to image
-        setProcessingStep('Converting Word document to image...');
-        const arrayBuffer = await file.arrayBuffer();
-        const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
-        // Create a hidden div to render HTML
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-        tempDiv.style.position = 'fixed';
-        tempDiv.style.left = '-9999px';
-        tempDiv.style.top = '0';
-        tempDiv.style.width = '800px';
-        tempDiv.style.background = 'white';
-        document.body.appendChild(tempDiv);
-        const canvas = await html2canvas(tempDiv, { backgroundColor: '#fff', scale: 2 });
-        document.body.removeChild(tempDiv);
-        const dataUrl = canvas.toDataURL('image/png');
-        setCapturedImage(dataUrl);
-        setIsProcessing(false);
-        setProcessingStep('');
-        return;
-      }
-      setError('Unsupported file type. Please upload an image, PDF, or Word document.');
-      setIsProcessing(false);
-      setProcessingStep('');
-    } catch (err: any) {
-      setError('Failed to process file: ' + (err.message || err));
-      setIsProcessing(false);
-      setProcessingStep('');
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setCapturedImage(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  const dataURLtoBlob = (dataURL: string): Blob => {
-    const arr = dataURL.split(',');
-    const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new Blob([u8arr], { type: mime });
-  };
-
-  const performOCR = async (imageSource: string | File): Promise<string> => {
-    const result = await OCRService.extractText(
-      imageSource,
-      selectedOCREngine,
-      (progress, step) => {
-        setOcrProgress(progress);
-        setProcessingStep(step);
-      }
-    );
-
-    if (result.error) {
-      throw new Error(result.error);
-    }
-
-    console.log(`OCR Engine: ${result.engine}`);
-    console.log('OCR Confidence:', result.confidence);
-    console.log('Processing Time:', `${result.processingTime}ms`);
-    console.log('Extracted text:', result.text);
-
-    return result.text;
-  };
-
-  const fallbackDataExtraction = (text: string): ExtractedData => {
-    console.log('Using fallback data extraction');
-    
-    // Simple pattern matching for common receipt elements
-    const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-    
-    // Try to find amount
-    const amountPattern = /\$?(\d+\.?\d*)/g;
-    const amounts = text.match(amountPattern);
-    const amount = amounts ? parseFloat(amounts[amounts.length - 1].replace('$', '')) : undefined;
-    
-    // Try to find date
-    const datePattern = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/g;
-    const dateMatch = text.match(datePattern);
-    let purchaseDate = new Date().toISOString().split('T')[0];
-    if (dateMatch) {
-      const date = new Date(dateMatch[0]);
-      if (!isNaN(date.getTime())) {
-        purchaseDate = date.toISOString().split('T')[0];
-      }
-    }
-    
-    // Extract potential store name (usually first few lines)
-    const storeName = lines[0] || 'Unknown Store';
-    
-    return {
-      product_description: 'Receipt Item',
-      brand_name: 'Unknown Brand',
-      store_name: storeName,
-      purchase_location: 'Unknown Location',
-      purchase_date: purchaseDate,
-      amount: amount,
-      total_amount: amount || 0,
-      warranty_period: '1 year',
-      extended_warranty: '',
-      model_number: '',
-      country: 'United States'
-    };
+  const retakePhoto = () => {
+    setCapturedImage(null);
+    setExtractedData(null);
+    setValidationResult(null);
+    setOcrResult(null);
+    setProcessingState({
+      step: 'capture',
+      progress: 0,
+      message: 'Ready to scan'
+    });
   };
 
   const processReceipt = async () => {
-    if (!capturedImage && !uploadedFile) {
-      setError('Please capture or upload an image first');
-      return;
-    }
-
-    if (!user) {
-      setError('User not authenticated');
-      return;
-    }
+    if (!capturedImage || !user) return;
 
     setIsProcessing(true);
-    setError(null);
-    setSuccess(false);
-    setOcrProgress(0);
+    setExtractedData(null);
+    setValidationResult(null);
+    setOcrResult(null);
 
     try {
-      // Step 1: Perform OCR
-      // Always use capturedImage if available (this includes converted PDFs/Word docs)
-      // Otherwise use uploadedFile for direct image uploads
-      const imageSource = capturedImage || uploadedFile!;
-      const text = await performOCR(imageSource);
-      setExtractedText(text);
+      // Step 1: OCR Processing
+      updateProcessingState('ocr', 20, 'Extracting text from receipt...');
+      
+      const ocrResult = await OCRService.extractText(capturedImage, 'google-cloud-vision', (progress, step) => {
+        updateProcessingState('ocr', 20 + (progress * 0.3), step);
+      });
 
-      if (!text.trim()) {
-        throw new Error('No text could be extracted from the image');
+      setOcrResult(ocrResult);
+
+      if (ocrResult.error) {
+        throw new Error(`Text extraction failed: ${ocrResult.error}`);
       }
 
-      // Step 2: Structure data with GPT or fallback
-      let structuredData: ExtractedData;
-
-      try {
-        if (openaiAvailable) {
-          setProcessingStep('Extracting receipt data with AI...');
-          const { data: gptData, error: gptError } = await extractReceiptDataWithGPT(text);
-          
-          if (gptError) {
-            throw new Error(gptError.message);
-          }
-          
-          // Cast to ExtractedReceiptData - the service will handle the validation
-          structuredData = gptData as ExtractedReceiptData;
-        } else {
-          throw new Error('OpenAI not available');
-        }
-      } catch (gptError) {
-        console.warn('GPT processing failed, using fallback:', gptError);
-        setProcessingStep('Using fallback processing...');
-        structuredData = fallbackDataExtraction(text);
+      if (!ocrResult.text.trim()) {
+        throw new Error('No text found in the image. Please ensure the receipt is clear and well-lit.');
       }
 
-      // Step 3: Validate data with Perplexity (NEW STEP)
-      setIsValidating(true);
-      const productName = structuredData.product_description || 'product';
-      setProcessingStep(`Validating "${productName}" with Perplexity AI...`);
+      // Step 2: AI Data Extraction
+      updateProcessingState('extraction', 50, 'Analyzing receipt with AI...');
+      
+      const extractionResult = await extractReceiptDataWithGPT(ocrResult.text);
+      
+      if (extractionResult.error) {
+        throw new Error(`AI extraction failed: ${extractionResult.error.message}`);
+      }
+
+      if (!extractionResult.data) {
+        throw new Error('Failed to extract receipt data. Please try manual entry.');
+      }
+
+      setExtractedData(extractionResult.data);
+
+      // Step 3: Validation (Optional)
+      updateProcessingState('validation', 70, 'Validating extracted data...');
       
       try {
-        const validation = await PerplexityValidationService.validateReceiptData(structuredData);
+        const validation = await PerplexityValidationService.validateReceiptData(extractionResult.data);
         setValidationResult(validation);
         
         if (validation.success) {
           setExtractedData(validation.validatedData);
-          setProcessingStep('Data validated and ready for review!');
-          console.log('✅ Validation successful:', validation.validationDetails);
+          updateProcessingState('validation', 90, 'Data validated and improved!');
         } else {
-          console.warn('⚠️ Validation failed, using original data:', validation.error);
-          setExtractedData(structuredData);
-          
-          // Show specific error message based on the type of failure
-          if (validation.error?.includes('API key not configured')) {
-            setProcessingStep('Validation skipped (API key not configured). Please review data carefully.');
-          } else {
-            setProcessingStep(`Validation failed: ${validation.error || 'Unknown error'}. Please review carefully.`);
-          }
+          updateProcessingState('validation', 90, 'Validation skipped - using original data');
         }
       } catch (validationError) {
-        console.error('💥 Validation error:', validationError);
-        setExtractedData(structuredData);
-        setProcessingStep('Validation unavailable. Please review data carefully.');
-        
-        // Set a failed validation result for UI display
-        setValidationResult({
-          success: false,
-          validatedData: structuredData,
-          validationDetails: {
-            productDescription: { original: structuredData.product_description || '', validated: structuredData.product_description || '', confidence: 0, changed: false },
-            brand: { original: structuredData.brand_name || '', validated: structuredData.brand_name || '', confidence: 0, changed: false },
-            storeName: { original: structuredData.store_name || '', validated: structuredData.store_name || '', confidence: 0, changed: false },
-            warrantyPeriod: { original: structuredData.warranty_period || '', validated: structuredData.warranty_period || '', confidence: 0, changed: false }
-          },
-          error: validationError instanceof Error ? validationError.message : 'Unknown validation error'
-        });
-      } finally {
-        setIsValidating(false);
+        console.warn('Validation failed, using original data:', validationError);
+        updateProcessingState('validation', 90, 'Validation skipped - using original data');
       }
 
-      setShowExtractedForm(true);
+      updateProcessingState('complete', 100, 'Receipt processed successfully!');
 
-    } catch (err: any) {
-      console.error('Processing error:', err);
-      setError(err.message || 'Failed to process receipt');
+    } catch (error: any) {
+      console.error('Receipt processing error:', error);
+      updateProcessingState('capture', 0, 'Processing failed', error.message);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const resetForm = () => {
-    setCapturedImage(null);
-    setUploadedFile(null);
-    setExtractedText('');
-    setExtractedData(null);
-    setError(null);
-    setSuccess(false);
-    setOcrProgress(0);
-    setProcessingStep('');
-    setShowExtractedForm(false);
-    setCapturedFrames([]);
-    setCaptureProgress(0);
-    setLongCaptureInstructions('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const cancelAndRetry = () => {
-    setShowExtractedForm(false);
-    setExtractedData(null);
-    setExtractedText('');
-    setError(null);
-    setProcessingStep('');
-  };
-
-  const updateExtractedData = (field: keyof ExtractedData, value: string | number | null | any) => {
-    if (extractedData) {
-      setExtractedData({
-        ...extractedData,
-        [field]: value
-      });
-    }
-  };
-
-  const saveReceiptData = async () => {
-    if (!extractedData || !user) {
-      setError('No data to save');
-      return;
-    }
+  const saveReceipt = async () => {
+    if (!extractedData || !user || !capturedImage) return;
 
     setIsProcessing(true);
-    setError(null);
+    updateProcessingState('saving', 95, 'Saving receipt to your library...');
 
     try {
-      let imageUrl = undefined;
-      // Upload image if we have one
-      if (capturedImage || uploadedFile) {
-        setProcessingStep('Uploading image...');
-        const imageFile = uploadedFile || dataURLtoBlob(capturedImage!);
-        const { data: uploadData, error: uploadError } = await uploadReceiptImage(imageFile, user.id);
-        if (uploadError || !uploadData?.url) {
-          setError('Failed to upload image. Please try again.');
-          setIsProcessing(false);
-          return;
-        } else {
-          imageUrl = uploadData.url;
-        }
-      } else {
-        setError('No image found. Please capture or upload a receipt image.');
-        setIsProcessing(false);
-        return;
+      // Upload image first
+      const imageBlob = await fetch(capturedImage).then(r => r.blob());
+      const uploadResult = await uploadReceiptImage(imageBlob, user.id);
+      
+      if (uploadResult.error) {
+        throw new Error(`Image upload failed: ${uploadResult.error.message}`);
       }
 
-      const productName = extractedData.product_description || 'receipt';
-      setProcessingStep(`Saving "${productName}"...`);
-      const processingMethod = inputMode === 'manual' ? 'manual' : (extractedText ? 'gpt_structured' : 'manual');
-      const ocrConfidence = extractedText ? 0.85 : undefined;
-
-      // Use the new MultiProductReceiptService
-      const result = await MultiProductReceiptService.saveReceipt(
-        extractedData,
+      // Save receipt data
+      const dataToSave = isEditing ? editedData : extractedData;
+      const saveResult = await MultiProductReceiptService.saveReceipt(
+        dataToSave,
         user.id,
-        imageUrl,
-        processingMethod,
-        ocrConfidence,
-        extractedText || undefined
+        uploadResult.data?.url,
+        'gpt_structured',
+        ocrResult?.confidence,
+        ocrResult?.text
       );
 
-      if (!result.receipts || result.receipts.length === 0) {
-        throw new Error(result.error || 'Failed to save receipt');
+      if (!saveResult.success) {
+        throw new Error(saveResult.error || 'Failed to save receipt');
       }
 
-      setSuccess(true);
-      const isMultiProduct = result.receipts.length > 1;
-      setProcessingStep(
-        isMultiProduct 
-          ? `Multi-product receipt saved successfully! (${result.receipts.length} products)`
-          : 'Receipt saved successfully!'
-      );
-      setShowExtractedForm(false);
+      updateProcessingState('complete', 100, 'Receipt saved successfully!');
+      
+      // Reset after a delay
+      setTimeout(() => {
+        retakePhoto();
+        setIsEditing(false);
+        setEditedData(null);
+      }, 2000);
 
-    } catch (err: any) {
-      console.error('Save error:', err);
-      setError(err.message || 'Failed to save receipt');
+    } catch (error: any) {
+      console.error('Save error:', error);
+      updateProcessingState('saving', 0, 'Save failed', error.message);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const startManualEntry = () => {
-    setInputMode('manual');
-    setExtractedData({
-      product_description: '',
-      brand_name: '',
+  const startEditing = () => {
+    setIsEditing(true);
+    setEditedData({ ...extractedData });
+  };
+
+  const saveEdits = () => {
+    setExtractedData({ ...editedData });
+    setIsEditing(false);
+  };
+
+  const cancelEdits = () => {
+    setEditedData(null);
+    setIsEditing(false);
+  };
+
+  const handleManualEntry = () => {
+    const manualData = {
       store_name: '',
-      purchase_location: '',
       purchase_date: new Date().toISOString().split('T')[0],
-      amount: undefined,
-      total_amount: 0,
+      purchase_location: '',
+      country: 'United States',
       warranty_period: '1 year',
       extended_warranty: '',
+      total_amount: 0,
+      product_description: '',
+      brand_name: '',
       model_number: '',
-      country: 'United States'
-    });
-    setShowExtractedForm(true);
+      amount: 0
+    };
+    
+    setExtractedData(manualData);
+    setIsEditing(true);
+    setEditedData({ ...manualData });
+    setScanMode('manual');
+  };
+
+  const renderValidationBadge = (field: any) => {
+    if (!validationResult || !validationResult.success) return null;
+
+    const confidence = field.confidence;
+    const changed = field.changed;
+
+    if (confidence === 0) {
+      return (
+        <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+          Skipped
+        </span>
+      );
+    }
+
+    if (changed) {
+      return (
+        <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+          Improved ({confidence}%)
+        </span>
+      );
+    } else {
+      return (
+        <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+          Verified ({confidence}%)
+        </span>
+      );
+    }
+  };
+
+  const renderDataField = (label: string, value: string, field: string, validationField?: any) => {
+    const currentValue = isEditing ? editedData?.[field] || '' : value;
+    
+    return (
+      <div>
+        <label className="block text-sm font-medium text-text-secondary mb-2 flex items-center">
+          {label}
+          {validationField && renderValidationBadge(validationField)}
+        </label>
+        {isEditing ? (
+          <input
+            type={field === 'purchase_date' ? 'date' : field === 'amount' || field === 'total_amount' ? 'number' : 'text'}
+            step={field === 'amount' || field === 'total_amount' ? '0.01' : undefined}
+            value={currentValue}
+            onChange={(e) => setEditedData(prev => ({ 
+              ...prev, 
+              [field]: field === 'amount' || field === 'total_amount' ? parseFloat(e.target.value) || 0 : e.target.value 
+            }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+          />
+        ) : (
+          <p className="text-text-primary bg-gray-50 px-3 py-2 rounded-lg">
+            {field === 'amount' || field === 'total_amount' 
+              ? `$${parseFloat(value || '0').toFixed(2)}`
+              : value || 'Not specified'
+            }
+          </p>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -570,78 +332,32 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       {/* Header */}
       <header className="bg-white shadow-card border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Logo */}
-            <div className="flex items-center space-x-3">
-              <img 
-                src="/Smart Receipt Logo.png" 
-                alt="Smart Receipts Logo" 
-                className="h-10 w-10 object-contain"
-              />
-              <span className="text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent">
-                Smart Receipts
-              </span>
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={onBackToDashboard}
+                className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+              >
+                <ArrowLeft className="h-5 w-5" />
+                <span>Back to Dashboard</span>
+              </button>
+              <div className="h-6 w-px bg-gray-300"></div>
+              <h1 className="text-2xl font-bold text-text-primary">Scan Receipt</h1>
             </div>
-
-            {/* Header Actions */}
             <div className="flex items-center space-x-4">
               {/* Notifications */}
               {user && <NotificationDropdown userId={user.id} />}
-              {/* Back Button */}
-              <button
-                onClick={onBackToDashboard}
-                className="flex items-center space-x-2 bg-white text-text-primary border-2 border-gray-300 hover:border-primary px-4 py-2 rounded-lg font-medium transition-all duration-200"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Back to Dashboard</span>
-              </button>
-              {/* User Menu */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
-                >
-                  <div className="w-8 h-8 rounded-full overflow-hidden bg-primary flex items-center justify-center">
-                    {profilePicture ? (
-                      <img
-                        src={profilePicture}
-                        alt="Profile"
-                        className="w-full h-full object-cover"
-                        onError={() => setProfilePicture(null)}
-                      />
-                    ) : (
-                      <User className="h-4 w-4 text-white" />
-                    )}
-                  </div>
-                  <span className="text-sm font-medium text-text-primary hidden sm:inline">
-                    {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
-                  </span>
-                </button>
-
-                {/* User Dropdown */}
-                {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
-                    <div className="px-4 py-2 border-b border-gray-200">
-                      <p className="text-sm font-medium text-text-primary">
-                        {user?.user_metadata?.full_name || 'User'}
-                      </p>
-                      <p className="text-xs text-text-secondary">{user?.email}</p>
-                    </div>
-                    <button
-                      onClick={onBackToDashboard}
-                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                      <span>Back to Dashboard</span>
-                    </button>
-                    <button
-                      onClick={handleSignOut}
-                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      <span>Sign Out</span>
-                    </button>
-                  </div>
+              {/* User Avatar */}
+              <div className="w-8 h-8 rounded-full overflow-hidden bg-primary flex items-center justify-center">
+                {profilePicture ? (
+                  <img
+                    src={profilePicture}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                    onError={() => setProfilePicture(null)}
+                  />
+                ) : (
+                  <User className="h-4 w-4 text-white" />
                 )}
               </div>
             </div>
@@ -650,828 +366,425 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       </header>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Page Title */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
-            Add Your Receipt
-          </h1>
-          <p className="text-xl text-text-secondary">
-            Capture, upload, or manually enter your receipt details
-          </p>
-        </div>
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Scan Mode Selection */}
+        {!capturedImage && !extractedData && (
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold text-text-primary mb-4">
+              How would you like to add your receipt?
+            </h2>
+            <p className="text-xl text-text-secondary mb-8">
+              Choose the method that works best for you
+            </p>
 
-        {/* OpenAI Status Warning */}
-        {openaiAvailable === false && (
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-center">
-              <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
-              <p className="text-sm text-yellow-700">
-                OpenAI API not available. AI features will be limited. Manual data entry will be required.
-              </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+              <button
+                onClick={() => setScanMode('camera')}
+                className={`p-8 rounded-2xl border-2 transition-all duration-200 ${
+                  scanMode === 'camera'
+                    ? 'border-primary bg-primary/5 shadow-card-hover'
+                    : 'border-gray-200 hover:border-gray-300 hover:shadow-card'
+                }`}
+              >
+                <Camera className="h-12 w-12 text-primary mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-text-primary mb-2">Take Photo</h3>
+                <p className="text-text-secondary">Use your camera to capture the receipt</p>
+              </button>
+
+              <button
+                onClick={() => setScanMode('upload')}
+                className={`p-8 rounded-2xl border-2 transition-all duration-200 ${
+                  scanMode === 'upload'
+                    ? 'border-primary bg-primary/5 shadow-card-hover'
+                    : 'border-gray-200 hover:border-gray-300 hover:shadow-card'
+                }`}
+              >
+                <Upload className="h-12 w-12 text-secondary mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-text-primary mb-2">Upload Image</h3>
+                <p className="text-text-secondary">Select a receipt image from your device</p>
+              </button>
+
+              <button
+                onClick={handleManualEntry}
+                className={`p-8 rounded-2xl border-2 transition-all duration-200 ${
+                  scanMode === 'manual'
+                    ? 'border-primary bg-primary/5 shadow-card-hover'
+                    : 'border-gray-200 hover:border-gray-300 hover:shadow-card'
+                }`}
+              >
+                <FileText className="h-12 w-12 text-accent-purple mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-text-primary mb-2">Manual Entry</h3>
+                <p className="text-text-secondary">Enter receipt details manually</p>
+              </button>
             </div>
           </div>
         )}
 
-        {/* Success Message */}
-        {success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-            <div className="flex items-center">
-              <Check className="h-5 w-5 text-green-600 mr-2" />
-              <p className="text-sm text-green-700">Receipt saved successfully!</p>
+        {/* Camera Interface */}
+        {scanMode === 'camera' && !capturedImage && !extractedData && (
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 mb-8">
+            <div className="text-center mb-6">
+              <h3 className="text-xl font-bold text-text-primary mb-2">Position Your Receipt</h3>
+              <p className="text-text-secondary">Make sure the entire receipt is visible and well-lit</p>
             </div>
-          </div>
-        )}
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-center">
-              <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Camera Modal */}
-        {showCamera && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-card max-w-2xl w-full">
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h2 className="text-xl font-bold text-text-primary">
-                  {captureMode === 'long' ? 'Capture Long Receipt' : 'Capture Receipt'}
-                </h2>
-                <button
-                  onClick={() => setShowCamera(false)}
-                  className="text-text-secondary hover:text-text-primary transition-colors duration-200"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
+            <div className="relative max-w-md mx-auto">
+              <Webcam
+                ref={webcamRef}
+                audio={false}
+                screenshotFormat="image/jpeg"
+                className="w-full rounded-lg border border-gray-300"
+                videoConstraints={{
+                  facingMode: 'environment'
+                }}
+              />
               
-              <div className="p-6">
-                {/* Capture Mode Toggle */}
-                <div className="flex justify-center mb-4">
-                  <div className="bg-gray-100 rounded-lg p-1 flex">
-                    <button
-                      onClick={() => setCaptureMode('normal')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
-                        captureMode === 'normal'
-                          ? 'bg-white text-primary shadow-sm'
-                          : 'text-text-secondary hover:text-text-primary'
-                      }`}
-                    >
-                      Normal
-                    </button>
-                    <button
-                      onClick={() => setCaptureMode('long')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
-                        captureMode === 'long'
-                          ? 'bg-white text-primary shadow-sm'
-                          : 'text-text-secondary hover:text-text-primary'
-                      }`}
-                    >
-                      Long Receipt
-                    </button>
+              <div className="absolute inset-0 border-2 border-dashed border-primary rounded-lg pointer-events-none opacity-50"></div>
+            </div>
+
+            <div className="text-center mt-6">
+              <button
+                onClick={capturePhoto}
+                className="bg-primary text-white px-8 py-4 rounded-lg hover:bg-primary/90 transition-colors duration-200 shadow-card hover:shadow-card-hover"
+              >
+                <Camera className="h-5 w-5 inline mr-2" />
+                Capture Receipt
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Upload Interface */}
+        {scanMode === 'upload' && !capturedImage && !extractedData && (
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-8 mb-8">
+            <div className="text-center">
+              <Upload className="h-16 w-16 text-secondary mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-text-primary mb-2">Upload Receipt Image</h3>
+              <p className="text-text-secondary mb-6">Select a clear image of your receipt</p>
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-secondary text-white px-8 py-4 rounded-lg hover:bg-secondary/90 transition-colors duration-200 shadow-card hover:shadow-card-hover"
+              >
+                Choose Image File
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Captured Image Preview */}
+        {capturedImage && !extractedData && (
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 mb-8">
+            <div className="text-center mb-6">
+              <h3 className="text-xl font-bold text-text-primary mb-2">Receipt Captured</h3>
+              <p className="text-text-secondary">Review the image and process when ready</p>
+            </div>
+
+            <div className="max-w-md mx-auto mb-6">
+              <img
+                src={capturedImage}
+                alt="Captured receipt"
+                className="w-full rounded-lg border border-gray-300"
+              />
+            </div>
+
+            <div className="flex justify-center space-x-4">
+              <button
+                onClick={retakePhoto}
+                className="flex items-center space-x-2 px-6 py-3 border border-gray-300 text-text-secondary rounded-lg hover:bg-gray-50 transition-colors duration-200"
+              >
+                <RotateCcw className="h-4 w-4" />
+                <span>Retake</span>
+              </button>
+              
+              <button
+                onClick={processReceipt}
+                disabled={isProcessing}
+                className="flex items-center space-x-2 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50"
+              >
+                {isProcessing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4" />
+                )}
+                <span>{isProcessing ? 'Processing...' : 'Process Receipt'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Processing Status */}
+        {isProcessing && (
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 mb-8">
+            <div className="text-center">
+              <div className="mb-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+              </div>
+              <h3 className="text-lg font-bold text-text-primary mb-2">{processingState.message}</h3>
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                <div 
+                  className="bg-primary h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${processingState.progress}%` }}
+                ></div>
+              </div>
+              <p className="text-sm text-text-secondary">{processingState.progress}% complete</p>
+              
+              {processingState.error && (
+                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-center">
+                    <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
+                    <p className="text-red-700">{processingState.error}</p>
                   </div>
                 </div>
+              )}
+            </div>
+          </div>
+        )}
 
-                <div className="relative">
-                  <Webcam
-                    ref={webcamRef}
-                    audio={false}
-                    screenshotFormat="image/jpeg"
-                    className="w-full rounded-lg"
-                    videoConstraints={{
-                      facingMode: 'environment',
-                      width: captureMode === 'long' ? 1920 : 1280,
-                      height: captureMode === 'long' ? 1080 : 720
-                    }}
-                  />
-                  
-                  {captureMode === 'long' && (
-                    <div className="absolute inset-0 border-2 border-dashed border-primary rounded-lg pointer-events-none">
-                      <div className="absolute top-2 left-2 bg-primary text-white px-2 py-1 rounded text-xs">
-                        Long Receipt Mode - Hold button and move slowly
-                      </div>
-                      {isCapturingLong && (
-                        <div className="absolute bottom-2 left-2 right-2">
-                          <div className="bg-black bg-opacity-50 text-white px-3 py-2 rounded text-sm">
-                            {longCaptureInstructions}
-                          </div>
-                          <div className="w-full bg-gray-300 rounded-full h-2 mt-2">
-                            <div 
-                              className="bg-primary h-2 rounded-full transition-all duration-200"
-                              style={{ width: `${captureProgress}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+        {/* Extracted Data Display */}
+        {extractedData && !isProcessing && (
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-text-primary mb-2">
+                  {extractedData.products ? 'Multi-Product Receipt' : 'Receipt Details'}
+                </h3>
+                <p className="text-text-secondary">
+                  {isEditing ? 'Edit the details below' : 'Review and confirm the extracted information'}
+                </p>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                {validationResult && (
+                  <button
+                    onClick={() => setShowValidationDetails(!showValidationDetails)}
+                    className="flex items-center space-x-2 px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200 transition-colors duration-200"
+                  >
+                    <Brain className="h-4 w-4" />
+                    <span>AI Validation</span>
+                    {showValidationDetails ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                )}
                 
-                <div className="flex justify-center mt-6">
-                  {captureMode === 'normal' ? (
+                {!isEditing ? (
+                  <button
+                    onClick={startEditing}
+                    className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-text-primary rounded-lg hover:bg-gray-200 transition-colors duration-200"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                    <span>Edit</span>
+                  </button>
+                ) : (
+                  <div className="flex space-x-2">
                     <button
-                      onClick={capture}
-                      className="bg-primary text-white px-8 py-4 rounded-full font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
+                      onClick={cancelEdits}
+                      className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-text-secondary rounded-lg hover:bg-gray-50 transition-colors duration-200"
                     >
-                      <Camera className="h-5 w-5" />
-                      <span>Capture</span>
+                      <X className="h-4 w-4" />
+                      <span>Cancel</span>
                     </button>
-                  ) : (
                     <button
-                      onMouseDown={startLongCapture}
-                      onMouseUp={stopLongCapture}
-                      onTouchStart={startLongCapture}
-                      onTouchEnd={stopLongCapture}
-                      disabled={isCapturingLong && captureProgress >= 100}
-                      className={`px-8 py-4 rounded-full font-medium transition-colors duration-200 flex items-center space-x-2 ${
-                        isCapturingLong 
-                          ? 'bg-accent-red text-white' 
-                          : 'bg-primary text-white hover:bg-primary/90'
-                      }`}
+                      onClick={saveEdits}
+                      className="flex items-center space-x-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200"
                     >
-                      <Maximize2 className="h-5 w-5" />
-                      <span>
-                        {isCapturingLong ? 'Capturing...' : 'Hold to Capture Long Receipt'}
-                      </span>
+                      <Save className="h-4 w-4" />
+                      <span>Save</span>
                     </button>
-                  )}
-                </div>
-
-                {captureMode === 'long' && (
-                  <div className="mt-4 text-center">
-                    <p className="text-sm text-text-secondary">
-                      Hold the button and slowly move your camera across the entire length of the receipt
-                    </p>
                   </div>
                 )}
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Input Method Selection */}
-        {!capturedImage && !showExtractedForm && (
-          <div className="grid md:grid-cols-3 gap-6 mb-8">
-            {/* Camera Capture */}
-            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-primary/10 to-primary/20 rounded-xl p-4 w-fit mx-auto mb-4">
-                  <Camera className="h-8 w-8 text-primary" />
-                </div>
-                <h3 className="text-lg font-bold text-text-primary mb-2">Take Photo</h3>
-                <p className="text-text-secondary text-sm mb-4">
-                  Use your camera to capture the receipt
-                </p>
-                <button
-                  onClick={() => {
-                    setInputMode('capture');
-                    setShowCamera(true);
-                  }}
-                  className="w-full bg-primary text-white py-3 px-4 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
-                >
-                  Open Camera
-                </button>
-              </div>
-            </div>
-
-            {/* File Upload */}
-            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-secondary/10 to-secondary/20 rounded-xl p-4 w-fit mx-auto mb-4">
-                  <Upload className="h-8 w-8 text-secondary" />
-                </div>
-                <h3 className="text-lg font-bold text-text-primary mb-2">Upload Image</h3>
-                <p className="text-text-secondary text-sm mb-4">
-                  Select an image, PDF, or Word document from your device
-                </p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*,application/pdf,.doc,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => {
-                    setInputMode('upload');
-                    fileInputRef.current?.click();
-                  }}
-                  className="w-full bg-secondary text-white py-3 px-4 rounded-lg font-medium hover:bg-secondary/90 transition-colors duration-200"
-                >
-                  Choose File
-                </button>
-              </div>
-            </div>
-
-            {/* Manual Entry */}
-            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-accent-yellow/10 to-accent-yellow/20 rounded-xl p-4 w-fit mx-auto mb-4">
-                  <Edit3 className="h-8 w-8 text-accent-yellow" />
-                </div>
-                <h3 className="text-lg font-bold text-text-primary mb-2">Manual Entry</h3>
-                <p className="text-text-secondary text-sm mb-4">
-                  Enter receipt details manually
-                </p>
-                <button
-                  onClick={startManualEntry}
-                  className="w-full bg-accent-yellow text-white py-3 px-4 rounded-lg font-medium hover:bg-accent-yellow/90 transition-colors duration-200"
-                >
-                  Enter Manually
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* OCR Engine Selection - Removed since there's only one option */}
-
-        {/* Image Preview and Processing */}
-        {capturedImage && !showExtractedForm && (
-          <div className="grid lg:grid-cols-2 gap-8 mb-8">
-            {/* Left Column - Image Preview */}
-            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
-              <h2 className="text-xl font-bold text-text-primary mb-6">Receipt Image</h2>
-              
-              <div className="relative mb-6">
-                <img
-                  src={capturedImage}
-                  alt="Receipt"
-                  className="w-full rounded-lg shadow-md"
-                />
-                <button
-                  onClick={resetForm}
-                  className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors duration-200"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="flex space-x-3">
-                <button
-                  onClick={processReceipt}
-                  disabled={isProcessing}
-                  className="flex-1 bg-primary text-white p-4 rounded-xl font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-                >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      <span>Processing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="h-5 w-5" />
-                      <span>Process Receipt</span>
-                    </>
-                  )}
-                </button>
-                
-                <button
-                  onClick={resetForm}
-                  className="px-4 py-2 border border-gray-300 text-text-secondary rounded-xl hover:bg-gray-50 transition-colors duration-200"
-                >
-                  <RotateCcw className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Right Column - Processing Status */}
-            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
-              <h2 className="text-xl font-bold text-text-primary mb-6">Processing Status</h2>
-              
-              {isProcessing && (
-                <div className="space-y-4 mb-6">
-                  {/* Progress Bar */}
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-primary h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${ocrProgress}%` }}
-                    ></div>
-                  </div>
-                  
-                  {/* Current Step */}
-                  <div className="flex items-center space-x-2">
-                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                    <span className="text-text-secondary">{processingStep}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Processing Steps */}
-              <div className="space-y-3">
-                <div className={`flex items-center space-x-3 p-3 rounded-lg ${extractedText ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
-                  <div className={`rounded-full p-1 ${extractedText ? 'bg-green-500' : 'bg-gray-300'}`}>
-                    {extractedText ? <Check className="h-3 w-3 text-white" /> : <Eye className="h-3 w-3 text-white" />}
-                  </div>
-                  <span className={`text-sm ${extractedText ? 'text-green-700' : 'text-text-secondary'}`}>
-                    OCR Text Extraction
-                  </span>
-                </div>
-
-                <div className={`flex items-center space-x-3 p-3 rounded-lg ${extractedData && !isValidating ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
-                  <div className={`rounded-full p-1 ${extractedData && !isValidating ? 'bg-green-500' : 'bg-gray-300'}`}>
-                    {extractedData && !isValidating ? <Check className="h-3 w-3 text-white" /> : <Brain className="h-3 w-3 text-white" />}
-                  </div>
-                  <span className={`text-sm ${extractedData && !isValidating ? 'text-green-700' : 'text-text-secondary'}`}>
-                    AI Data Structuring
-                  </span>
-                </div>
-
-                <div className={`flex items-center space-x-3 p-3 rounded-lg ${validationResult ? 'bg-green-50 border border-green-200' : (isValidating ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50')}`}>
-                  <div className={`rounded-full p-1 ${validationResult ? 'bg-green-500' : (isValidating ? 'bg-blue-500' : 'bg-gray-300')}`}>
-                    {validationResult ? <Check className="h-3 w-3 text-white" /> : (isValidating ? <Loader2 className="h-3 w-3 text-white animate-spin" /> : <Zap className="h-3 w-3 text-white" />)}
-                  </div>
-                  <span className={`text-sm ${validationResult ? 'text-green-700' : (isValidating ? 'text-blue-700' : 'text-text-secondary')}`}>
-                    Perplexity Validation
-                  </span>
-                </div>
-
-                <div className={`flex items-center space-x-3 p-3 rounded-lg ${success ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
-                  <div className={`rounded-full p-1 ${success ? 'bg-green-500' : 'bg-gray-300'}`}>
-                    {success ? <Check className="h-3 w-3 text-white" /> : <Save className="h-3 w-3 text-white" />}
-                  </div>
-                  <span className={`text-sm ${success ? 'text-green-700' : 'text-text-secondary'}`}>
-                    Save to Database
-                  </span>
-                </div>
-              </div>
-
-              {/* Validation Summary */}
-              {validationResult && (
-                <div className="mt-6">
-                  <h3 className="font-medium text-text-primary mb-2">Validation Results:</h3>
-                  {validationResult.success ? (
-                    <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-3 rounded-lg space-y-2">
-                      {Object.entries(validationResult.validationDetails).map(([key, detail]) => (
-                        <div key={key} className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs font-medium text-text-primary capitalize">
-                              {key.replace(/([A-Z])/g, ' $1').trim()}:
-                            </span>
-                            {detail.changed ? (
-                              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
-                                Improved
-                              </span>
-                            ) : (
-                              <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                                Verified
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-xs text-text-secondary">
-                            {detail.confidence}% confidence
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-yellow-600">⚠️</span>
-                        <span className="text-xs text-yellow-700">
-                          {validationResult.error || 'Validation was skipped'}
-                        </span>
-                      </div>
-                      {validationResult.error?.includes('API key not configured') && (
-                        <div className="mt-2 text-xs text-yellow-600">
-                          To enable validation, add <code className="bg-yellow-100 px-1 rounded">VITE_PERPLEXITY_API_KEY</code> to your .env.local file
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Extracted Text Preview */}
-              {extractedText && (
-                <div className="mt-6">
-                  <h3 className="font-medium text-text-primary mb-2">Extracted Text:</h3>
-                  <div className="bg-gray-50 p-3 rounded-lg max-h-32 overflow-y-auto">
-                    <pre className="text-xs text-text-secondary whitespace-pre-wrap">{extractedText}</pre>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Extracted Data Form */}
-        {showExtractedForm && extractedData && (
-          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-2xl font-bold text-text-primary mb-1">
-                  {extractedData.product_description || 'Receipt Details'}
-                </h2>
-                <p className="text-sm text-text-secondary">
-                  {inputMode === 'manual' ? 'Enter your receipt details below' : 'Review and edit the extracted information'}
-                </p>
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={cancelAndRetry}
-                  className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200 px-3 py-2 border border-gray-300 rounded-lg"
-                >
-                  <X className="h-4 w-4" />
-                  <span>Cancel</span>
-                </button>
-                <button
-                  onClick={resetForm}
-                  className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200 px-3 py-2 border border-gray-300 rounded-lg"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  <span>Start Over</span>
-                </button>
-              </div>
-            </div>
-
-            {inputMode !== 'manual' && (
+            {/* Validation Details */}
+            {showValidationDetails && validationResult && (
               <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-700">
-                  Please review the extracted information below and make any necessary corrections before saving.
-                </p>
+                <h4 className="font-medium text-blue-800 mb-3">AI Validation Results</h4>
+                {validationResult.success ? (
+                  <div className="space-y-2 text-sm">
+                    <p className="text-blue-700">
+                      ✅ Data has been validated and improved using AI. Fields marked as "Improved" were corrected, 
+                      while "Verified" fields were confirmed as accurate.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 mt-3">
+                      <div>
+                        <span className="font-medium">Product:</span> {validationResult.validationDetails.productDescription.confidence}% confidence
+                      </div>
+                      <div>
+                        <span className="font-medium">Brand:</span> {validationResult.validationDetails.brand.confidence}% confidence
+                      </div>
+                      <div>
+                        <span className="font-medium">Store:</span> {validationResult.validationDetails.storeName.confidence}% confidence
+                      </div>
+                      <div>
+                        <span className="font-medium">Warranty:</span> {validationResult.validationDetails.warrantyPeriod.confidence}% confidence
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-yellow-700">
+                    ⚠️ {validationResult.error || 'Validation was skipped. Original extracted data is being used.'}
+                  </p>
+                )}
               </div>
             )}
 
-            {/* Check if this is a multi-product receipt */}
-            {extractedData.products && extractedData.products.length > 0 ? (
-              /* Multi-Product Receipt Form */
-              <div className="space-y-8">
-                {/* Receipt Header Information */}
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-green-800 mb-2">
-                    Multi-Product Receipt Detected! 🎉
-                  </h3>
-                  <p className="text-sm text-green-700">
-                    Found {extractedData.products.length} products on this receipt. Total amount: ${extractedData.total_amount?.toFixed(2) || '0.00'}
-                  </p>
+            {/* Receipt Data */}
+            <div className="space-y-6">
+              {/* Store Information */}
+              <div>
+                <h4 className="font-bold text-text-primary mb-4">Store Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {renderDataField(
+                    'Store Name', 
+                    extractedData.store_name, 
+                    'store_name',
+                    validationResult?.validationDetails.storeName
+                  )}
+                  {renderDataField('Purchase Location', extractedData.purchase_location, 'purchase_location')}
+                  {renderDataField('Purchase Date', extractedData.purchase_date, 'purchase_date')}
+                  {renderDataField('Country', extractedData.country, 'country')}
                 </div>
+              </div>
 
-                {/* Store Information */}
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-text-primary mb-4">Store Information</h3>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        Store Name
-                      </label>
-                      <input
-                        type="text"
-                        value={extractedData.store_name || ''}
-                        onChange={(e) => updateExtractedData('store_name', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                        placeholder="Enter store name"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        Purchase Location
-                      </label>
-                      <input
-                        type="text"
-                        value={extractedData.purchase_location || ''}
-                        onChange={(e) => updateExtractedData('purchase_location', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                        placeholder="Enter purchase location"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        Purchase Date *
-                      </label>
-                      <input
-                        type="date"
-                        value={extractedData.purchase_date}
-                        onChange={(e) => updateExtractedData('purchase_date', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        Total Amount
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={extractedData.total_amount || ''}
-                        onChange={(e) => updateExtractedData('total_amount', e.target.value ? parseFloat(e.target.value) : null)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                        placeholder="Enter total amount"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        Country *
-                      </label>
-                      <input
-                        type="text"
-                        value={extractedData.country}
-                        onChange={(e) => updateExtractedData('country', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                        placeholder="Enter country"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        Warranty Period *
-                      </label>
-                      <input
-                        type="text"
-                        value={extractedData.warranty_period}
-                        onChange={(e) => updateExtractedData('warranty_period', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                        placeholder="e.g., 1 year, 6 months"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Products List */}
+              {/* Multi-Product Receipt */}
+              {extractedData.products && extractedData.products.length > 0 ? (
                 <div>
-                  <h3 className="text-lg font-semibold text-text-primary mb-4">Products</h3>
+                  <h4 className="font-bold text-text-primary mb-4">Products ({extractedData.products.length} items)</h4>
                   <div className="space-y-4">
-                    {extractedData.products.map((product, index) => (
-                      <div key={index} className="bg-white border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-md font-medium text-text-primary">Product {index + 1}</h4>
-                          <span className="text-sm text-text-secondary">${product.amount?.toFixed(2) || '0.00'}</span>
-                        </div>
-                        
-                        {/* Product Name - Full Width and Prominent */}
-                        <div className="mb-4">
-                          <label className="block text-md font-semibold text-text-primary mb-2 flex items-center">
-                            <Edit3 className="h-4 w-4 mr-2 text-primary" />
-                            Product Name *
-                          </label>
-                          <input
-                            type="text"
-                            value={product.product_description || ''}
-                            onChange={(e) => {
-                              const updatedProducts = [...extractedData.products!];
-                              updatedProducts[index] = { ...product, product_description: e.target.value };
-                              updateExtractedData('products', updatedProducts);
-                            }}
-                            className="w-full px-4 py-3 text-md border-2 border-primary/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200"
-                            placeholder="Enter a short, descriptive product name"
-                          />
-                        </div>
-
-                        <div className="grid md:grid-cols-2 gap-4">
-
-                          <div>
-                            <label className="block text-sm font-medium text-text-primary mb-2">
-                              Brand Name *
-                            </label>
-                            <input
-                              type="text"
-                              value={product.brand_name || ''}
-                              onChange={(e) => {
-                                const updatedProducts = [...extractedData.products!];
-                                updatedProducts[index] = { ...product, brand_name: e.target.value };
-                                updateExtractedData('products', updatedProducts);
-                              }}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                              placeholder="Enter brand name"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-text-primary mb-2">
-                              Model Number
-                            </label>
-                            <input
-                              type="text"
-                              value={product.model_number || ''}
-                              onChange={(e) => {
-                                const updatedProducts = [...extractedData.products!];
-                                updatedProducts[index] = { ...product, model_number: e.target.value };
-                                updateExtractedData('products', updatedProducts);
-                              }}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                              placeholder="Enter model number"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-text-primary mb-2">
-                              Amount
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={product.amount || ''}
-                              onChange={(e) => {
-                                const updatedProducts = [...extractedData.products!];
-                                updatedProducts[index] = { ...product, amount: e.target.value ? parseFloat(e.target.value) : 0 };
-                                updateExtractedData('products', updatedProducts);
-                              }}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                              placeholder="Enter amount"
-                            />
-                          </div>
+                    {extractedData.products.map((product: any, index: number) => (
+                      <div key={index} className="border border-gray-200 rounded-lg p-4">
+                        <h5 className="font-medium text-text-primary mb-3">Product {index + 1}</h5>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {renderDataField('Product Description', product.product_description, `products.${index}.product_description`)}
+                          {renderDataField('Brand', product.brand_name, `products.${index}.brand_name`)}
+                          {renderDataField('Model Number', product.model_number, `products.${index}.model_number`)}
+                          {renderDataField('Amount', product.amount?.toString(), `products.${index}.amount`)}
+                          {renderDataField('Warranty Period', product.warranty_period, `products.${index}.warranty_period`)}
                         </div>
                       </div>
                     ))}
                   </div>
+                  <div className="mt-4">
+                    {renderDataField('Total Amount', extractedData.total_amount?.toString(), 'total_amount')}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              /* Single Product Receipt Form */
-              <div className="space-y-6">
-                {/* Product Name - Full Width and Prominent */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <label className="block text-lg font-semibold text-text-primary mb-3 flex items-center">
-                    <Edit3 className="h-5 w-5 mr-2 text-primary" />
-                    Product Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={extractedData.product_description || ''}
-                    onChange={(e) => updateExtractedData('product_description', e.target.value)}
-                    className="w-full px-4 py-4 text-lg border-2 border-primary/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200 bg-white"
-                    placeholder="Enter a short, descriptive product name"
-                  />
-                  <p className="text-sm text-text-secondary mt-2">
-                    💡 This will be the main identifier for your receipt. Keep it short and clear!
-                  </p>
-                </div>
-
-                {/* Other Product Information */}
-                <div className="grid md:grid-cols-2 gap-6">
-
+              ) : (
+                /* Single Product Receipt */
                 <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    Brand Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={extractedData.brand_name || ''}
-                    onChange={(e) => updateExtractedData('brand_name', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                    placeholder="Enter brand name"
-                  />
+                  <h4 className="font-bold text-text-primary mb-4">Product Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {renderDataField(
+                      'Product Description', 
+                      extractedData.product_description, 
+                      'product_description',
+                      validationResult?.validationDetails.productDescription
+                    )}
+                    {renderDataField(
+                      'Brand Name', 
+                      extractedData.brand_name, 
+                      'brand_name',
+                      validationResult?.validationDetails.brand
+                    )}
+                    {renderDataField('Model Number', extractedData.model_number, 'model_number')}
+                    {renderDataField('Amount', extractedData.amount?.toString(), 'amount')}
+                    {renderDataField(
+                      'Warranty Period', 
+                      extractedData.warranty_period, 
+                      'warranty_period',
+                      validationResult?.validationDetails.warrantyPeriod
+                    )}
+                    {renderDataField('Extended Warranty', extractedData.extended_warranty, 'extended_warranty')}
+                  </div>
                 </div>
+              )}
+            </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    Store Name
-                  </label>
-                  <input
-                    type="text"
-                    value={extractedData.store_name || ''}
-                    onChange={(e) => updateExtractedData('store_name', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                    placeholder="Enter store name"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    Purchase Location
-                  </label>
-                  <input
-                    type="text"
-                    value={extractedData.purchase_location || ''}
-                    onChange={(e) => updateExtractedData('purchase_location', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                    placeholder="Enter purchase location"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    Purchase Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={extractedData.purchase_date}
-                    onChange={(e) => updateExtractedData('purchase_date', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    Amount
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={extractedData.amount || ''}
-                    onChange={(e) => updateExtractedData('amount', e.target.value ? parseFloat(e.target.value) : null)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                    placeholder="Enter amount"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    Warranty Period *
-                  </label>
-                  <input
-                    type="text"
-                    value={extractedData.warranty_period}
-                    onChange={(e) => updateExtractedData('warranty_period', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                    placeholder="e.g., 1 year, 6 months"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    Model Number
-                  </label>
-                  <input
-                    type="text"
-                    value={extractedData.model_number || ''}
-                    onChange={(e) => updateExtractedData('model_number', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                    placeholder="Enter model number"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    Extended Warranty
-                  </label>
-                  <input
-                    type="text"
-                    value={extractedData.extended_warranty || ''}
-                    onChange={(e) => updateExtractedData('extended_warranty', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                    placeholder="Enter extended warranty details"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    Country *
-                  </label>
-                  <input
-                    type="text"
-                    value={extractedData.country}
-                    onChange={(e) => updateExtractedData('country', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                    placeholder="Enter country"
-                  />
-                </div>
+            {/* OCR Information */}
+            {ocrResult && showAdvancedOptions && (
+              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium text-text-secondary mb-2">OCR Information</h4>
+                <div className="text-sm text-text-secondary space-y-1">
+                  <p>Engine: {ocrResult.engine}</p>
+                  <p>Confidence: {Math.round(ocrResult.confidence * 100)}%</p>
+                  <p>Processing Time: {ocrResult.processingTime}ms</p>
+                  {ocrResult.text && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer hover:text-text-primary">View extracted text</summary>
+                      <pre className="mt-2 p-2 bg-white rounded text-xs overflow-auto max-h-32">
+                        {ocrResult.text}
+                      </pre>
+                    </details>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Action Buttons */}
-            <div className="mt-8 flex justify-end space-x-4">
-              <button
-                onClick={cancelAndRetry}
-                className="px-6 py-3 border border-gray-300 text-text-secondary rounded-lg hover:bg-gray-50 transition-colors duration-200 flex items-center space-x-2"
-              >
-                <X className="h-4 w-4" />
-                <span>Cancel</span>
-              </button>
+            {/* Actions */}
+            <div className="flex items-center justify-between pt-6 border-t border-gray-200">
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                  className="text-text-secondary hover:text-text-primary transition-colors duration-200 text-sm"
+                >
+                  {showAdvancedOptions ? 'Hide' : 'Show'} Advanced Options
+                </button>
+              </div>
               
-              <button
-                onClick={saveReceiptData}
-                disabled={isProcessing || success}
-                className="bg-primary text-white px-8 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : success ? (
-                  <>
-                    <Check className="h-5 w-5" />
-                    <span>Saved</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-5 w-5" />
-                    <span>Save Receipt</span>
-                  </>
-                )}
-              </button>
+              <div className="flex space-x-4">
+                <button
+                  onClick={retakePhoto}
+                  className="flex items-center space-x-2 px-6 py-3 border border-gray-300 text-text-secondary rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span>Start Over</span>
+                </button>
+                
+                <button
+                  onClick={saveReceipt}
+                  disabled={isProcessing}
+                  className="flex items-center space-x-2 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50"
+                >
+                  {isProcessing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                  <span>{isProcessing ? 'Saving...' : 'Save Receipt'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tips */}
+        {!extractedData && (
+          <div className="bg-gradient-feature rounded-2xl p-6 border border-gray-100">
+            <h3 className="text-lg font-bold text-text-primary mb-4">📸 Tips for Best Results</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-text-secondary">
+              <div className="space-y-2">
+                <p>• Ensure good lighting</p>
+                <p>• Keep the receipt flat</p>
+                <p>• Include the entire receipt</p>
+              </div>
+              <div className="space-y-2">
+                <p>• Avoid shadows and glare</p>
+                <p>• Hold the camera steady</p>
+                <p>• Make sure text is readable</p>
+              </div>
             </div>
           </div>
         )}
       </main>
 
-      {/* Click outside to close user menu */}
-      {showUserMenu && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setShowUserMenu(false)}
-        />
-      )}
+      <Footer />
     </div>
   );
 };

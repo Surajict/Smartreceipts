@@ -1169,56 +1169,119 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                     )
                   ) : (
                     <>
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">Product</label>
-                        <p className="text-text-primary font-medium">{selectedReceipt.product_description || 'Receipt'}</p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">Brand</label>
-                        <p className="text-text-primary">{selectedReceipt.brand_name || 'Unknown'}</p>
-                      </div>
-
-                      {selectedReceipt.store_name && (
-                        <div>
-                          <label className="block text-sm font-medium text-text-secondary mb-1">Store</label>
-                          <p className="text-text-primary">{selectedReceipt.store_name}</p>
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">Purchase Date</label>
-                        <p className="text-text-primary">{formatDate(selectedReceipt.purchase_date)}</p>
-                      </div>
-
-                      {selectedReceipt.amount && (
-                        <div>
-                          <label className="block text-sm font-medium text-text-secondary mb-1">Amount</label>
-                          <p className="text-text-primary font-bold">{formatCurrency(selectedReceipt.amount)}</p>
-                        </div>
-                      )}
-
-                      {selectedReceipt.warranty_period && (
-                        <div>
-                          <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Period</label>
-                          <p className="text-text-primary">{selectedReceipt.warranty_period}</p>
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Status</label>
-                        {selectedReceipt.warranty_period ? (
-                          <div className={`flex items-center space-x-2 ${getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).color}`}>
-                            {React.createElement(getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).icon, { className: "h-5 w-5" })}
-                            <span className="font-medium capitalize">{getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).status}</span>
+                      {/* Check if this is a multi-product receipt */}
+                      {selectedReceipt.type === 'group' && selectedReceipt.receipts ? (
+                        <>
+                          {/* Store and Purchase Info */}
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Store</label>
+                            <p className="text-text-primary font-medium">{selectedReceipt.store_name}</p>
                           </div>
-                        ) : (
-                          <div className="flex items-center space-x-2 text-gray-500">
-                            <Clock className="h-5 w-5" />
-                            <span className="font-medium">No warranty info</span>
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Purchase Date</label>
+                            <p className="text-text-primary">{formatDate(selectedReceipt.purchase_date)}</p>
                           </div>
-                        )}
-                      </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Total Amount</label>
+                            <p className="text-text-primary font-bold">{formatCurrency(selectedReceipt.amount)}</p>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Products ({selectedReceipt.product_count})</label>
+                            <div className="space-y-4 mt-2">
+                              {selectedReceipt.receipts.map((product: any, index: number) => (
+                                <div key={product.id || index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                      <label className="block text-xs font-medium text-text-secondary mb-1">Product</label>
+                                      <p className="text-sm text-text-primary font-medium">{product.product_description || 'Unknown Product'}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-text-secondary mb-1">Brand</label>
+                                      <p className="text-sm text-text-primary">{product.brand_name || 'Unknown'}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-text-secondary mb-1">Amount</label>
+                                      <p className="text-sm text-text-primary font-bold">{formatCurrency(product.amount || 0)}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-text-secondary mb-1">Warranty Status</label>
+                                      {product.warranty_period ? (
+                                        <div className={`flex items-center space-x-2 ${getWarrantyStatus(selectedReceipt.purchase_date, product.warranty_period).color}`}>
+                                          {React.createElement(getWarrantyStatus(selectedReceipt.purchase_date, product.warranty_period).icon, { className: "h-4 w-4" })}
+                                          <span className="text-xs font-medium capitalize">{getWarrantyStatus(selectedReceipt.purchase_date, product.warranty_period).status}</span>
+                                          <span className="text-xs text-text-secondary">({product.warranty_period})</span>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center space-x-2 text-gray-500">
+                                          <Clock className="h-4 w-4" />
+                                          <span className="text-xs font-medium">No warranty info</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {/* Single Product Receipt */}
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Product</label>
+                            <p className="text-text-primary font-medium">{selectedReceipt.product_description || 'Receipt'}</p>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Brand</label>
+                            <p className="text-text-primary">{selectedReceipt.brand_name || 'Unknown'}</p>
+                          </div>
+
+                          {selectedReceipt.store_name && (
+                            <div>
+                              <label className="block text-sm font-medium text-text-secondary mb-1">Store</label>
+                              <p className="text-text-primary">{selectedReceipt.store_name}</p>
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Purchase Date</label>
+                            <p className="text-text-primary">{formatDate(selectedReceipt.purchase_date)}</p>
+                          </div>
+
+                          {selectedReceipt.amount && (
+                            <div>
+                              <label className="block text-sm font-medium text-text-secondary mb-1">Amount</label>
+                              <p className="text-text-primary font-bold">{formatCurrency(selectedReceipt.amount)}</p>
+                            </div>
+                          )}
+
+                          {selectedReceipt.warranty_period && (
+                            <div>
+                              <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Period</label>
+                              <p className="text-text-primary">{selectedReceipt.warranty_period}</p>
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Status</label>
+                            {selectedReceipt.warranty_period ? (
+                              <div className={`flex items-center space-x-2 ${getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).color}`}>
+                                {React.createElement(getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).icon, { className: "h-5 w-5" })}
+                                <span className="font-medium capitalize">{getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).status}</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center space-x-2 text-gray-500">
+                                <Clock className="h-5 w-5" />
+                                <span className="font-medium">No warranty info</span>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
                 </div>

@@ -972,7 +972,7 @@ For SINGLE PRODUCT receipts, return JSON with these fields:
 - purchase_location (string): Store location/address
 - purchase_date (string): Date in YYYY-MM-DD format
 - amount (number): Total amount paid (numeric only, no currency symbol)
-- warranty_period (string): Warranty duration (e.g., "1 year", "6 months")
+- warranty_period (string): Warranty duration for this specific product (e.g., "1 year", "6 months")
 - extended_warranty (string): Extended warranty info if any
 - model_number (string): Product model number if available
 - country (string): Country where purchase was made
@@ -982,7 +982,6 @@ For MULTI-PRODUCT receipts, return JSON with these fields:
 - purchase_location (string): Store location/address
 - purchase_date (string): Date in YYYY-MM-DD format
 - total_amount (number): Total amount paid for all products
-- warranty_period (string): Default warranty duration for the receipt
 - extended_warranty (string): Extended warranty info if any
 - country (string): Country where purchase was made
 - products (array): Array of product objects, each with:
@@ -990,7 +989,7 @@ For MULTI-PRODUCT receipts, return JSON with these fields:
   - brand_name (string): Brand name
   - model_number (string): Model number if available
   - amount (number): Individual product price
-  - warranty_period (string): Individual product warranty period
+  - warranty_period (string): Individual product warranty period (REQUIRED for each product)
 
 If a field is missing, set its value to null. Return ONLY valid JSON, no extra text.
 
@@ -1053,7 +1052,6 @@ Return only valid JSON:`;
         purchase_location: extractedData.purchase_location || null,
         purchase_date: extractedData.purchase_date || new Date().toISOString().split('T')[0],
         total_amount: extractedData.total_amount || null,
-        warranty_period: extractedData.warranty_period || '1 year',
         extended_warranty: extractedData.extended_warranty || null,
         country: extractedData.country || 'United States'
       };
@@ -1064,7 +1062,7 @@ Return only valid JSON:`;
         brand_name: product.brand_name || 'Unknown Brand',
         model_number: product.model_number || null,
         amount: typeof product.amount === 'number' ? product.amount : null,
-        warranty_period: product.warranty_period || '1 year' // Ensure warranty_period is included
+        warranty_period: product.warranty_period || '1 year' // Each product must have its own warranty
       }));
 
       // Ensure date is in correct format

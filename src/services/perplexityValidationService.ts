@@ -35,7 +35,7 @@ export interface ValidationResult {
 export class PerplexityValidationService {
   private static readonly PERPLEXITY_API_URL = 'https://api.perplexity.ai/chat/completions';
   
-  /**
+    /**
    * Validate extracted receipt data using Perplexity AI
    */
   static async validateReceiptData(extractedData: ExtractedReceiptData): Promise<ValidationResult> {
@@ -52,101 +52,126 @@ export class PerplexityValidationService {
           productDescription: { original: extractedData.product_description || '', validated: extractedData.product_description || '', confidence: 0, changed: false },
           brand: { original: extractedData.brand_name || '', validated: extractedData.brand_name || '', confidence: 0, changed: false },
           storeName: { original: extractedData.store_name || '', validated: extractedData.store_name || '', confidence: 0, changed: false },
-          warrantyPeriod: { original: extractedData.warranty_period || '', validated: extractedData.warranty_period || '', confidence: 0, changed: false }
+          warrantyPeriod: { original: extractedData.warranty_period || '1 year', validated: extractedData.warranty_period || '1 year', confidence: 0, changed: false }
         },
         error: 'Perplexity API key not configured. Please add VITE_PERPLEXITY_API_KEY to your .env.local file'
       };
     }
     
     try {
-      console.log('📋 Validating fields:', {
-        product: extractedData.product_description,
-        brand: extractedData.brand_name,
-        store: extractedData.store_name,
-        warranty: extractedData.warranty_period
-      });
-      
-      // Prepare validation requests for each field
-      const validationPromises = [
-        this.validateProductDescription(extractedData.product_description || ''),
-        this.validateBrand(extractedData.brand_name || ''),
-        this.validateStoreName(extractedData.store_name || ''),
-        this.validateWarrantyPeriod(extractedData.warranty_period || '', extractedData.product_description || '')
-      ];
-      
-      // Execute all validations in parallel
-      console.log('⏳ Running validation requests in parallel...');
-      const [productResult, brandResult, storeResult, warrantyResult] = await Promise.all(validationPromises);
-      
-      console.log('📊 Validation results:', {
-        product: productResult,
-        brand: brandResult,
-        store: storeResult,
-        warranty: warrantyResult
-      });
-      
-      // Create validated data object
-      const validatedData: ExtractedReceiptData = {
-        ...extractedData,
-        product_description: productResult.validated,
-        brand_name: brandResult.validated,
-        store_name: storeResult.validated,
-        warranty_period: warrantyResult.validated,
-        country: this.expandCountryCode(extractedData.country)
-      };
-      
-      // If this is a multi-product receipt, validate each product
+      // Check if this is a single product or multi-product receipt
       if (extractedData.products && extractedData.products.length > 0) {
-        console.log('🔄 Validating multi-product receipt...');
+        // Multi-product receipt - validate each product's warranty individually
+        console.log('📋 Validating multi-product receipt fields:', {
+          store: extractedData.store_name,
+          products: extractedData.products.length
+        });
+        
+        // Validate store name
+        const storeResult = await this.validateStoreName(extractedData.store_name || '');
+        
+        // Validate each product individually
         const validatedProducts = await Promise.all(
           extractedData.products.map(async (product, index) => {
-            console.log(`Validating product ${index + 1}:`, product.product_description);
-            const [prodResult, brandResult, warrantyResult] = await Promise.all([
+            console.log(`🔍 Validating product ${index + 1}:`, product.product_description);
+            
+            const [productResult, brandResult, warrantyResult] = await Promise.all([
               this.validateProductDescription(product.product_description || ''),
               this.validateBrand(product.brand_name || ''),
-              this.validateWarrantyPeriod(product.warranty_period || '', product.product_description || '')
+              this.validateWarrantyPeriod(product.warranty_period || '1 year', product.product_description || '')
             ]);
             
             return {
               ...product,
-              product_description: prodResult.validated,
+              product_description: productResult.validated,
               brand_name: brandResult.validated,
               warranty_period: warrantyResult.validated
             };
           })
         );
         
-        validatedData.products = validatedProducts;
+        // Create validated data object for multi-product
+        const validatedData: ExtractedReceiptData = {
+          ...extractedData,
+          store_name: storeResult.validated,
+          country: this.expandCountryCode(extractedData.country),
+          products: validatedProducts
+        };
+        
+        console.log('✅ Multi-product validation completed');
+        return {
+          success: true,
+          validatedData,
+          validationDetails: {
+            productDescription: { original: 'Multi-product', validated: 'Multi-product', confidence: 100, changed: false },
+            brand: { original: 'Multiple brands', validated: 'Multiple brands', confidence: 100, changed: false },
+            storeName: storeResult,
+            warrantyPeriod: { original: 'Individual warranties', validated: 'Individual warranties', confidence: 100, changed: false }
+          }
+        };
+      } else {
+        // Single product receipt - validate as before
+        console.log('📋 Validating single product fields:', {
+          product: extractedData.product_description,
+          brand: extractedData.brand_name,
+          store: extractedData.store_name,
+          warranty: extractedData.warranty_period || '1 year'
+        });
+        
+        // Prepare validation requests for each field
+        const validationPromises = [
+          this.validateProductDescription(extractedData.product_description || ''),
+          this.validateBrand(extractedData.brand_name || ''),
+          this.validateStoreName(extractedData.store_name || ''),
+          this.validateWarrantyPeriod(extractedData.warranty_period || '1 year', extractedData.product_description || '')
+        ];
+        
+        // Execute all validations in parallel
+        console.log('⏳ Running validation requests in parallel...');
+        const [productResult, brandResult, storeResult, warrantyResult] = await Promise.all(validationPromises);
+        
+        console.log('📊 Validation results:', {
+          product: productResult,
+          brand: brandResult,
+          store: storeResult,
+          warranty: warrantyResult
+        });
+        
+        // Create validated data object for single product
+        const validatedData: ExtractedReceiptData = {
+          ...extractedData,
+          product_description: productResult.validated,
+          brand_name: brandResult.validated,
+          store_name: storeResult.validated,
+          warranty_period: warrantyResult.validated,
+          country: this.expandCountryCode(extractedData.country)
+        };
+
+        // Return validation result for single product
+        return {
+          success: true,
+          validatedData,
+          validationDetails: {
+            productDescription: productResult,
+            brand: brandResult,
+            storeName: storeResult,
+            warrantyPeriod: warrantyResult
+          }
+        };
       }
       
-      const validationDetails = {
-        productDescription: productResult,
-        brand: brandResult,
-        storeName: storeResult,
-        warrantyPeriod: warrantyResult
-      };
-      
-      console.log('✅ Perplexity validation completed successfully');
-      
-      return {
-        success: true,
-        validatedData,
-        validationDetails
-      };
-      
-    } catch (error) {
-      console.error('❌ Perplexity validation failed:', error);
-      
+    } catch (error: any) {
+      console.error('💥 Perplexity validation error:', error);
       return {
         success: false,
-        validatedData: extractedData, // Return original data on error
+        validatedData: extractedData,
         validationDetails: {
           productDescription: { original: extractedData.product_description || '', validated: extractedData.product_description || '', confidence: 0, changed: false },
           brand: { original: extractedData.brand_name || '', validated: extractedData.brand_name || '', confidence: 0, changed: false },
           storeName: { original: extractedData.store_name || '', validated: extractedData.store_name || '', confidence: 0, changed: false },
-          warrantyPeriod: { original: extractedData.warranty_period || '', validated: extractedData.warranty_period || '', confidence: 0, changed: false }
+          warrantyPeriod: { original: extractedData.warranty_period || '1 year', validated: extractedData.warranty_period || '1 year', confidence: 0, changed: false }
         },
-        error: error instanceof Error ? error.message : 'Unknown validation error'
+        error: error.message || 'Unknown validation error'
       };
     }
   }

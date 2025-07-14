@@ -260,18 +260,21 @@ export class MultiProductReceiptService {
           // Find the first receipt with an image_url, or use the first receipt's image_url
           const firstReceiptWithImage = groupReceipts.find(r => r.image_url && r.image_url.trim() !== '') || groupReceipts[0];
           
+          // Calculate total amount from all products in the group
+          const calculatedTotal = groupReceipts.reduce((sum, r) => sum + (r.amount || 0), 0);
+          
           groupedReceipts.push({
             id: receipt.receipt_group_id,
             type: 'group',
             receipts: groupReceipts,
             store_name: receipt.store_name,
             purchase_date: receipt.purchase_date,
-            receipt_total: receipt.receipt_total,
+            receipt_total: calculatedTotal, // Use calculated total
             product_count: groupReceipts.length,
             image_url: firstReceiptWithImage?.image_url || null,
             created_at: receipt.created_at,
             // Add amount as the total for display consistency
-            amount: receipt.receipt_total
+            amount: calculatedTotal
           });
           processedGroups.add(receipt.receipt_group_id);
         }

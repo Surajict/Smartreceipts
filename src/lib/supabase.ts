@@ -7,7 +7,8 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    flowType: 'pkce'
   }
 })
 
@@ -509,6 +510,37 @@ export const updateReceipt = async (userId: string, receiptId: string, updateDat
     };
   }
 };
+
+// Google sign in function
+export const signInWithGoogle = async () => {
+  try {
+    console.log('Starting Google sign in process')
+    
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/dashboard`
+      }
+    })
+    
+    if (error) {
+      console.error('Google SignIn error:', error)
+      return { data: null, error }
+    }
+    
+    console.log('Google SignIn initiated:', data)
+    return { data, error: null }
+  } catch (err: any) {
+    console.error('Unexpected Google signin error:', err)
+    return { 
+      data: null, 
+      error: { 
+        message: 'An unexpected error occurred during Google signin. Please try again.',
+        details: err
+      } 
+    }
+  }
+}
 
 // Auth helper functions with improved error handling
 export const signUp = async (email: string, password: string, fullName: string) => {

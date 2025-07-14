@@ -27,6 +27,7 @@ import { getCurrentUser, signOut, uploadReceiptImage, testOpenAIConnection, extr
 import { OCRService, OCREngine } from '../services/ocrService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { ExtractedReceiptData } from '../types/receipt';
+import { PerplexityValidationService, ValidationResult } from '../services/perplexityValidationService';
 import NotificationDropdown from './NotificationDropdown';
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
@@ -57,12 +58,14 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [processingStep, setProcessingStep] = useState('');
   const [extractedText, setExtractedText] = useState('');
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [openaiAvailable, setOpenaiAvailable] = useState<boolean | null>(null);
   const [showExtractedForm, setShowExtractedForm] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   
   // OCR Engine - Always uses Google Cloud Vision
   const selectedOCREngine: OCREngine = 'google-cloud-vision';
@@ -371,7 +374,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
 
       try {
         if (openaiAvailable) {
-          setProcessingStep('Processing with AI...');
+          setProcessingStep('Extracting receipt data with AI...');
           const { data: gptData, error: gptError } = await extractReceiptDataWithGPT(text);
           
           if (gptError) {
@@ -389,9 +392,52 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         structuredData = fallbackDataExtraction(text);
       }
 
-      setExtractedData(structuredData);
+      // Step 3: Validate data with Perplexity (NEW STEP)
+      setIsValidating(true);
+      const productName = structuredData.product_description || 'product';
+      setProcessingStep(`Validating "${productName}" with Perplexity AI...`);
+      
+      try {
+        const validation = await PerplexityValidationService.validateReceiptData(structuredData);
+        setValidationResult(validation);
+        
+        if (validation.success) {
+          setExtractedData(validation.validatedData);
+          setProcessingStep('Data validated and ready for review!');
+          console.log('✅ Validation successful:', validation.validationDetails);
+        } else {
+          console.warn('⚠️ Validation failed, using original data:', validation.error);
+          setExtractedData(structuredData);
+          
+          // Show specific error message based on the type of failure
+          if (validation.error?.includes('API key not configured')) {
+            setProcessingStep('Validation skipped (API key not configured). Please review data carefully.');
+          } else {
+            setProcessingStep(`Validation failed: ${validation.error || 'Unknown error'}. Please review carefully.`);
+          }
+        }
+      } catch (validationError) {
+        console.error('💥 Validation error:', validationError);
+        setExtractedData(structuredData);
+        setProcessingStep('Validation unavailable. Please review data carefully.');
+        
+        // Set a failed validation result for UI display
+        setValidationResult({
+          success: false,
+          validatedData: structuredData,
+          validationDetails: {
+            productDescription: { original: structuredData.product_description || '', validated: structuredData.product_description || '', confidence: 0, changed: false },
+            brand: { original: structuredData.brand_name || '', validated: structuredData.brand_name || '', confidence: 0, changed: false },
+            storeName: { original: structuredData.store_name || '', validated: structuredData.store_name || '', confidence: 0, changed: false },
+            warrantyPeriod: { original: structuredData.warranty_period || '', validated: structuredData.warranty_period || '', confidence: 0, changed: false }
+          },
+          error: validationError instanceof Error ? validationError.message : 'Unknown validation error'
+        });
+      } finally {
+        setIsValidating(false);
+      }
+
       setShowExtractedForm(true);
-      setProcessingStep('Data extracted successfully! Please review and edit as needed.');
 
     } catch (err: any) {
       console.error('Processing error:', err);
@@ -465,7 +511,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         return;
       }
 
-      setProcessingStep('Saving receipt...');
+      const productName = extractedData.product_description || 'receipt';
+      setProcessingStep(`Saving "${productName}"...`);
       const processingMethod = inputMode === 'manual' ? 'manual' : (extractedText ? 'gpt_structured' : 'manual');
       const ocrConfidence = extractedText ? 0.85 : undefined;
 
@@ -925,12 +972,21 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                   </span>
                 </div>
 
-                <div className={`flex items-center space-x-3 p-3 rounded-lg ${extractedData ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
-                  <div className={`rounded-full p-1 ${extractedData ? 'bg-green-500' : 'bg-gray-300'}`}>
-                    {extractedData ? <Check className="h-3 w-3 text-white" /> : <Brain className="h-3 w-3 text-white" />}
+                <div className={`flex items-center space-x-3 p-3 rounded-lg ${extractedData && !isValidating ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                  <div className={`rounded-full p-1 ${extractedData && !isValidating ? 'bg-green-500' : 'bg-gray-300'}`}>
+                    {extractedData && !isValidating ? <Check className="h-3 w-3 text-white" /> : <Brain className="h-3 w-3 text-white" />}
                   </div>
-                  <span className={`text-sm ${extractedData ? 'text-green-700' : 'text-text-secondary'}`}>
+                  <span className={`text-sm ${extractedData && !isValidating ? 'text-green-700' : 'text-text-secondary'}`}>
                     AI Data Structuring
+                  </span>
+                </div>
+
+                <div className={`flex items-center space-x-3 p-3 rounded-lg ${validationResult ? 'bg-green-50 border border-green-200' : (isValidating ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50')}`}>
+                  <div className={`rounded-full p-1 ${validationResult ? 'bg-green-500' : (isValidating ? 'bg-blue-500' : 'bg-gray-300')}`}>
+                    {validationResult ? <Check className="h-3 w-3 text-white" /> : (isValidating ? <Loader2 className="h-3 w-3 text-white animate-spin" /> : <Zap className="h-3 w-3 text-white" />)}
+                  </div>
+                  <span className={`text-sm ${validationResult ? 'text-green-700' : (isValidating ? 'text-blue-700' : 'text-text-secondary')}`}>
+                    Perplexity Validation
                   </span>
                 </div>
 
@@ -943,6 +999,52 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                   </span>
                 </div>
               </div>
+
+              {/* Validation Summary */}
+              {validationResult && (
+                <div className="mt-6">
+                  <h3 className="font-medium text-text-primary mb-2">Validation Results:</h3>
+                  {validationResult.success ? (
+                    <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-3 rounded-lg space-y-2">
+                      {Object.entries(validationResult.validationDetails).map(([key, detail]) => (
+                        <div key={key} className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs font-medium text-text-primary capitalize">
+                              {key.replace(/([A-Z])/g, ' $1').trim()}:
+                            </span>
+                            {detail.changed ? (
+                              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                                Improved
+                              </span>
+                            ) : (
+                              <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                                Verified
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-text-secondary">
+                            {detail.confidence}% confidence
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-yellow-600">⚠️</span>
+                        <span className="text-xs text-yellow-700">
+                          {validationResult.error || 'Validation was skipped'}
+                        </span>
+                      </div>
+                      {validationResult.error?.includes('API key not configured') && (
+                        <div className="mt-2 text-xs text-yellow-600">
+                          To enable validation, add <code className="bg-yellow-100 px-1 rounded">VITE_PERPLEXITY_API_KEY</code> to your .env.local file
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Extracted Text Preview */}
               {extractedText && (
@@ -961,9 +1063,14 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         {showExtractedForm && extractedData && (
           <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-text-primary">
-                {inputMode === 'manual' ? 'Enter Receipt Details' : 'Review & Edit Details'}
-              </h2>
+              <div>
+                <h2 className="text-2xl font-bold text-text-primary mb-1">
+                  {extractedData.product_description || 'Receipt Details'}
+                </h2>
+                <p className="text-sm text-text-secondary">
+                  {inputMode === 'manual' ? 'Enter your receipt details below' : 'Review and edit the extracted information'}
+                </p>
+              </div>
               <div className="flex items-center space-x-2">
                 <button
                   onClick={cancelAndRetry}
@@ -1099,23 +1206,26 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                           <span className="text-sm text-text-secondary">${product.amount?.toFixed(2) || '0.00'}</span>
                         </div>
                         
+                        {/* Product Name - Full Width and Prominent */}
+                        <div className="mb-4">
+                          <label className="block text-md font-semibold text-text-primary mb-2 flex items-center">
+                            <Edit3 className="h-4 w-4 mr-2 text-primary" />
+                            Product Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={product.product_description || ''}
+                            onChange={(e) => {
+                              const updatedProducts = [...extractedData.products!];
+                              updatedProducts[index] = { ...product, product_description: e.target.value };
+                              updateExtractedData('products', updatedProducts);
+                            }}
+                            className="w-full px-4 py-3 text-md border-2 border-primary/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200"
+                            placeholder="Enter a short, descriptive product name"
+                          />
+                        </div>
+
                         <div className="grid md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-text-primary mb-2">
-                              Product Description *
-                            </label>
-                            <input
-                              type="text"
-                              value={product.product_description || ''}
-                              onChange={(e) => {
-                                const updatedProducts = [...extractedData.products!];
-                                updatedProducts[index] = { ...product, product_description: e.target.value };
-                                updateExtractedData('products', updatedProducts);
-                              }}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                              placeholder="Enter product description"
-                            />
-                          </div>
 
                           <div>
                             <label className="block text-sm font-medium text-text-primary mb-2">
@@ -1176,20 +1286,27 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
               </div>
             ) : (
               /* Single Product Receipt Form */
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Product Information */}
-                <div>
-                  <label className="block text-sm font-medium text-text-primary mb-2">
-                    Product Description *
+              <div className="space-y-6">
+                {/* Product Name - Full Width and Prominent */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <label className="block text-lg font-semibold text-text-primary mb-3 flex items-center">
+                    <Edit3 className="h-5 w-5 mr-2 text-primary" />
+                    Product Name *
                   </label>
                   <input
                     type="text"
                     value={extractedData.product_description || ''}
                     onChange={(e) => updateExtractedData('product_description', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                    placeholder="Enter product description"
+                    className="w-full px-4 py-4 text-lg border-2 border-primary/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200 bg-white"
+                    placeholder="Enter a short, descriptive product name"
                   />
+                  <p className="text-sm text-text-secondary mt-2">
+                    💡 This will be the main identifier for your receipt. Keep it short and clear!
+                  </p>
                 </div>
+
+                {/* Other Product Information */}
+                <div className="grid md:grid-cols-2 gap-6">
 
                 <div>
                   <label className="block text-sm font-medium text-text-primary mb-2">
@@ -1306,6 +1423,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
                     placeholder="Enter country"
                   />
+                </div>
                 </div>
               </div>
             )}

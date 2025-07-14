@@ -1337,7 +1337,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate">
+                        <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate max-w-xs" title={receipt.productName}>
                           {receipt.productName}
                         </h3>
                         <div className="text-sm text-text-secondary space-y-1">

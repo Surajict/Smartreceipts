@@ -41,12 +41,14 @@ export interface ExtractedReceiptData {
   purchase_date: string;
   purchase_location: string;
   country: string;
-  warranty_period: string;
   extended_warranty: string;
   
   // For multi-product receipts
   products?: ExtractedProduct[];
   total_amount: number;
+  
+  // For single-product receipts (backward compatibility)
+  warranty_period?: string;
   
   // For single-product receipts (backward compatibility)
   product_description?: string;
@@ -60,7 +62,7 @@ export interface ExtractedProduct {
   brand_name: string;
   model_number: string;
   amount: number;
-  warranty_period?: string;
+  warranty_period: string; // Made required since each product needs its own warranty
   category?: string;
 }
 

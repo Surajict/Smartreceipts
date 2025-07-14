@@ -18,8 +18,11 @@ Smart Receipts is an intelligent receipt management application that uses AI to 
 - Remembers when your warranties expire and reminds you before they do
 - Organizes all your purchases in one easy-to-find place
 - Works on any device with a camera and internet connection
+- **NEW**: Handles multi-product receipts (like shopping at electronics stores with multiple items)
+- **NEW**: Tracks warranty periods for each individual product separately
+- **NEW**: Uses AI to validate and correct receipt data automatically
 
-**Example:** You buy a new coffee machine for $299 with a 2-year warranty. Just snap a photo of the receipt with Smart Receipts, and it automatically knows it's a "Keurig K-Elite Coffee Maker, purchased on December 15, 2024, with warranty until December 15, 2026." The app will remind you 30 days before your warranty expires!
+**Example:** You buy a laptop ($1,299, 3-year warranty), a mouse ($29, 1-year warranty), and a keyboard ($79, 2-year warranty) from Best Buy. Smart Receipts automatically knows these are three separate products with different warranty periods and will remind you about each one individually!
 
 ## 🎯 Key Features
 
@@ -28,30 +31,49 @@ Smart Receipts is an intelligent receipt management application that uses AI to 
 - **File Upload**: Upload existing receipt images from your device
 - **Long Receipt Support**: Special mode for capturing extra-long receipts
 - **Manual Entry**: Backup option for damaged or unclear receipts
+- **Multi-Product Support**: Handles receipts with multiple items automatically
+- **Single & Multi-Product Modes**: Choose between single or multiple product entry
 
 ### 🤖 **AI-Powered Data Extraction**
 - **OCR Technology**: Reads text from receipt images using Tesseract.js and Google Cloud Vision
 - **GPT-4o Integration**: Intelligently extracts structured data from receipt text
+- **Multi-Product Detection**: Automatically identifies when a receipt contains multiple products
 - **Automatic Organization**: Categorizes products, brands, dates, and warranty information
 - **Smart Error Correction**: Handles unclear text and missing information
+- **Perplexity AI Validation**: Validates and corrects extracted data for accuracy
 
-### 🔔 **Warranty Management**
-- **Automatic Tracking**: Calculates warranty expiration dates
+### 🔔 **Advanced Warranty Management**
+- **Per-Product Warranty Tracking**: Each product has its own warranty period (NEW!)
+- **Automatic Tracking**: Calculates warranty expiration dates for each item
 - **Smart Alerts**: Reminds you before warranties expire
+- **Multi-Product Warranty Support**: Tracks different warranty periods for items on the same receipt
 - **Extended Warranty Support**: Tracks both standard and extended warranties
 - **Country-Specific Rules**: Adapts to different warranty regulations
+
+### 🔍 **AI-Powered Smart Search**
+- **Vector Search**: Uses AI embeddings for semantic search capabilities
+- **RAG (Retrieval-Augmented Generation)**: Answers complex questions about your receipts
+- **Natural Language Queries**: Ask questions like "How much did I spend on electronics?"
+- **Fallback Search**: Automatically falls back to text search if AI search fails
+- **Real-time Results**: Shows search results with relevance scores
+- **Conversational Interface**: Get detailed answers about your purchase history
 
 ### 👤 **User Management**
 - **Secure Authentication**: Email/password registration and login
 - **Personal Dashboard**: Overview of all your receipts and upcoming expirations
 - **Profile Management**: Update personal information and preferences
+- **Notification Settings**: Customize warranty alerts and system notifications
+- **Privacy Controls**: Manage data collection and privacy preferences
 - **Data Privacy**: Your receipts are private and secure
 
-### 📊 **Receipt Library**
-- **Search & Filter**: Find receipts by product, brand, date, or amount
+### 📊 **Enhanced Receipt Library**
+- **Grouped Display**: Multi-product receipts are grouped together visually
+- **Individual Product Search**: Find specific products within multi-product receipts
+- **Advanced Search & Filter**: Find receipts by product, brand, date, or amount
 - **Sort Options**: Organize by date, price, or warranty status
 - **Detailed View**: See all extracted information for each receipt
 - **Edit Capability**: Manually correct or update receipt data
+- **Export Options**: Export receipt data for record-keeping
 
 ## 🛠 Technology Stack
 
@@ -64,13 +86,21 @@ Smart Receipts is an intelligent receipt management application that uses AI to 
 
 ### **Backend & Services**
 - **Supabase** - Backend-as-a-Service platform
-  - PostgreSQL database
+  - PostgreSQL database with pgvector extension
   - Authentication & user management
   - File storage for receipt images
   - Real-time subscriptions
-- **OpenAI GPT-4o** - AI-powered data extraction
+  - Edge functions for AI processing
+- **OpenAI GPT-4o** - AI-powered data extraction and RAG
+- **Perplexity AI** - Data validation and correction
 - **Tesseract.js 5.0.4** - OCR text recognition
 - **Google Cloud Vision** - Enhanced OCR capabilities
+
+### **AI & Machine Learning**
+- **Vector Embeddings**: 384-dimension embeddings for semantic search
+- **RAG (Retrieval-Augmented Generation)**: Intelligent question answering
+- **Multi-Model AI**: OpenAI for extraction, Perplexity for validation
+- **Semantic Search**: pgvector for fast similarity search
 
 ### **Development Tools**
 - **ESLint** - Code linting and formatting
@@ -108,8 +138,11 @@ Before you begin, ensure you have the following installed:
    VITE_SUPABASE_URL=https://napulczxrrnsjtmaixzp.supabase.co
    VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
    
-   # OpenAI Configuration (for AI data extraction)
+   # OpenAI Configuration (for AI data extraction and RAG)
    VITE_OPENAI_API_KEY=your_openai_api_key_here
+   
+   # Perplexity AI Configuration (for data validation)
+   VITE_PERPLEXITY_API_KEY=your_perplexity_api_key_here
    
    # Google Cloud Vision (for enhanced OCR)
    VITE_GOOGLE_CLOUD_VISION_API_KEY=your_google_cloud_vision_key_here
@@ -139,6 +172,11 @@ Before you begin, ensure you have the following installed:
 #### **OpenAI Setup** (Required for AI features)
 1. Create an account at [openai.com](https://openai.com)
 2. Generate an API key from the API section
+3. Add the key to your `.env.local` file
+
+#### **Perplexity AI Setup** (Required for validation)
+1. Create an account at [perplexity.ai](https://perplexity.ai)
+2. Go to Settings → API and create an API key
 3. Add the key to your `.env.local` file
 
 #### **Google Cloud Vision** (Optional - enhances OCR)
@@ -174,17 +212,21 @@ Smart_Receipts_Suraj_V5/
 │   └── vite.svg               # Vite logo
 ├── src/
 │   ├── components/            # React components
-│   │   ├── Dashboard.tsx      # Main user dashboard
+│   │   ├── Dashboard.tsx      # Main user dashboard with smart search
 │   │   ├── ReceiptScanning.tsx # Core scanning functionality
 │   │   ├── MyLibrary.tsx      # Receipt library view
 │   │   ├── ProfilePage.tsx    # User profile management
+│   │   ├── WarrantyPage.tsx   # Warranty management
 │   │   ├── Login.tsx          # Authentication
 │   │   ├── SignUp.tsx         # User registration
 │   │   └── ...               # Additional UI components
 │   ├── lib/
 │   │   └── supabase.ts       # Supabase client configuration
 │   ├── services/
-│   │   └── ocrService.ts     # OCR processing logic
+│   │   ├── ocrService.ts     # OCR processing logic
+│   │   ├── multiProductReceiptService.ts # Multi-product receipt handling
+│   │   ├── perplexityValidationService.ts # AI validation service
+│   │   └── ragService.ts     # RAG (Retrieval-Augmented Generation)
 │   ├── types/                # TypeScript type definitions
 │   ├── utils/                # Utility functions
 │   ├── App.tsx               # Main app component
@@ -192,7 +234,7 @@ Smart_Receipts_Suraj_V5/
 │   └── index.css             # Global styles
 ├── supabase/
 │   ├── migrations/           # Database migrations
-│   └── functions/            # Edge functions
+│   └── functions/            # Edge functions (smart-search, etc.)
 ├── package.json              # Dependencies and scripts
 ├── tailwind.config.js        # Tailwind CSS configuration
 ├── tsconfig.json             # TypeScript configuration
@@ -213,45 +255,100 @@ Smart_Receipts_Suraj_V5/
 - Choose your input method:
   - **Camera**: Take a photo directly
   - **Upload**: Select an image file
-  - **Manual**: Enter details manually
+  - **Manual Single**: Enter single product details
+  - **Manual Multi**: Enter multiple product details
 
-### **3. Review Extracted Data**
+### **3. Review and Validate Extracted Data**
 - The AI will automatically extract product information
-- Review and edit any incorrect details
+- Perplexity AI will validate and correct the data
+- Review confidence scores and any corrections made
+- Edit any remaining incorrect details
 - Add additional notes if needed
 - Save the receipt to your library
 
-### **4. Manage Your Receipts**
+### **4. Manage Multi-Product Receipts**
+- Add/remove products using the "Add Product" and "Remove" buttons
+- Convert single products to multi-product format
+- Each product can have its own warranty period
+- Total amount is automatically calculated
+
+### **5. Use Smart Search**
+- Go to the Dashboard and find the "Smart Search" section
+- Ask natural language questions like:
+  - "How much did I spend on electronics this year?"
+  - "Show me all Apple products I bought"
+  - "What warranties expire in the next 30 days?"
+- Get AI-powered answers with relevant receipts
+
+### **6. Track Warranties**
+- Check your dashboard for warranty alerts
+- View individual product warranty periods
+- Get notifications before warranties expire
+- Access detailed warranty information in "My Library"
+
+### **7. Organize Your Library**
 - Access "My Library" to view all receipts
 - Use search and filters to find specific items
+- View grouped multi-product receipts
 - Edit receipt details anytime
-- Track warranty expiration dates
-
-### **5. Stay Updated**
-- Check your dashboard for warranty alerts
-- Update your profile settings for preferences
 - Export receipt data when needed
 
 ## 🔧 Configuration
 
 ### **MCP Server Setup (Cursor IDE Users)**
 
-To fix Supabase MCP server connectivity, create `.cursor/mcp.json`:
+Create `.cursor/mcp.json` for enhanced development experience:
 
 ```json
 {
   "mcpServers": {
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "env": {}
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "your_brave_api_key"
+      }
+    },
+    "github-mcp-server": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "ghcr.io/github/github-mcp-server"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "your_github_token"
+      }
+    },
+    "perplexity-ask": {
+      "command": "npx",
+      "args": ["-y", "server-perplexity-ask"],
+      "env": {
+        "PERPLEXITY_API_KEY": "your_perplexity_api_key"
+      }
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {}
+    },
     "supabase": {
       "command": "npx",
       "args": [
-        "-y",
-        "@supabase/mcp-server-supabase@latest",
-        "--read-only",
-        "--project-ref=napulczxrrnsjtmaixzp"
+        "-y", "@supabase/mcp-server-supabase@latest",
+        "--read-only", "--project-ref=napulczxrrnsjtmaixzp"
       ],
       "env": {
         "SUPABASE_ACCESS_TOKEN": "your_supabase_access_token"
       }
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
     }
   }
 }
@@ -260,15 +357,53 @@ To fix Supabase MCP server connectivity, create `.cursor/mcp.json`:
 ### **Database Schema**
 
 The app uses PostgreSQL with the following main tables:
-- **receipts**: Stores receipt data and extracted information
+- **receipts**: Stores receipt data with multi-product support
+- **users**: User profiles and settings
+- **user_notification_settings**: Notification preferences
+- **user_privacy_settings**: Privacy controls
 - **auth.users**: Supabase authentication (built-in)
 - **storage.objects**: Receipt image storage (built-in)
 
 Key fields in the receipts table:
 - `product_description`, `brand_name`, `model_number`
-- `purchase_date`, `amount`, `country`
-- `warranty_period`, `extended_warranty`
-- `image_path`, `user_id`
+- `purchase_date`, `amount`, `receipt_total`
+- `warranty_period` (per product), `extended_warranty`
+- `receipt_group_id`, `is_group_receipt` (for multi-product support)
+- `embedding` (for vector search)
+- `image_url`, `user_id`
+
+## 🆕 Latest Features (2024-2025)
+
+### **Multi-Product Receipt Support**
+- **Automatic Detection**: AI automatically detects when a receipt contains multiple products
+- **Grouped Display**: Multi-product receipts are visually grouped in the interface
+- **Individual Product Management**: Add, remove, and edit individual products
+- **Flexible Conversion**: Convert between single and multi-product formats
+- **Accurate Totals**: Automatic calculation of receipt totals
+
+### **Warranty Per Product**
+- **Individual Tracking**: Each product has its own warranty period
+- **Separate Alerts**: Get notifications for each product's warranty expiration
+- **Real-World Accuracy**: Matches how warranties actually work in stores
+- **Database Migration**: Seamless upgrade from receipt-level to product-level warranties
+
+### **AI Validation with Perplexity**
+- **Automatic Correction**: Fixes OCR errors and improves data accuracy
+- **Confidence Scoring**: Shows how confident the AI is in corrections
+- **Multi-Field Validation**: Validates product names, brands, stores, and warranty periods
+- **Parallel Processing**: Fast validation using concurrent API calls
+
+### **RAG-Powered Smart Search**
+- **Natural Language**: Ask questions in plain English
+- **Intelligent Answers**: Get detailed responses about your purchase history
+- **Context-Aware**: Understands the context of your questions
+- **Fallback Support**: Automatically falls back to regular search if needed
+
+### **Enhanced User Experience**
+- **Improved Dashboard**: Better organization and visual design
+- **Notification System**: Real-time alerts for warranty expirations
+- **Profile Management**: Comprehensive user settings and preferences
+- **Error Handling**: Better error messages and recovery options
 
 ## 🤝 Contributing
 
@@ -288,7 +423,13 @@ We welcome contributions! Here's how to get started:
    - Validate all user inputs
    - Follow security best practices
 
-3. **Before Contributing**
+3. **Testing**
+   - Test multi-product receipt flows
+   - Verify warranty tracking accuracy
+   - Test AI validation features
+   - Ensure search functionality works
+
+4. **Before Contributing**
    ```bash
    # Fork the repository
    # Create a new branch
@@ -321,85 +462,43 @@ Found a bug or have a feature request?
 The project includes comprehensive database migrations in `supabase/migrations/`. Key migrations include:
 
 - **Receipt storage** - Main receipts table with RLS policies
-- **User authentication** - Supabase auth integration
+- **Multi-product support** - Grouping columns and indexes
+- **Warranty per product** - Product-level warranty tracking
+- **Vector search** - pgvector extension and embedding support
+- **User management** - Profile and settings tables
 - **File storage** - Receipt image storage with security policies
-- **Indexes** - Performance optimization
-- **Triggers** - Automatic timestamp updates
+- **Performance optimization** - Indexes and triggers
 
 To apply migrations:
 ```bash
 supabase db push
 ```
 
-> **Note:** As of July 2024, all smart search and AI embedding features require 384-dimension embeddings. Make sure your database function and edge function are updated as described in the 'Smart Search & Embedding Setup' section.
+## 🧠 Smart Search & AI Features Setup
 
-## 🧠 Smart Search & Embedding Setup (2024-07)
+### **Vector Search Setup**
+1. **Enable pgvector extension** in your Supabase project
+2. **Run the vector search migration** to create embedding columns
+3. **Deploy the smart-search edge function** for AI-powered search
+4. **Generate embeddings** for existing receipts
 
-### Why this matters
-- The AI-powered smart search now uses 384-dimension embeddings for all queries and receipts.
-- The database function for vector search **must** use `vector(384)` as the parameter type.
-- This ensures natural language queries (like "Have I purchased any Nintendo product?") work reliably and securely.
+### **Edge Functions**
+Deploy the smart-search edge function:
+```bash
+supabase functions deploy smart-search
+```
 
-### How to update your database
-1. **Open Supabase SQL Editor**
-2. **Run this migration:**
-   ```sql
-   DROP FUNCTION IF EXISTS match_receipts_simple(vector(384), double precision, int, uuid);
-   DROP FUNCTION IF EXISTS match_receipts_simple(vector(1536), double precision, int, uuid);
+### **Embedding Generation**
+The app automatically generates embeddings for new receipts. For existing receipts:
+1. Go to the Dashboard
+2. Look for the "Index Receipts" button
+3. Click to generate embeddings for all receipts
 
-   CREATE OR REPLACE FUNCTION match_receipts_simple(
-     query_embedding vector(384),
-     match_threshold double precision DEFAULT 0.3,
-     match_count int DEFAULT 10,
-     user_id uuid DEFAULT NULL
-   )
-   RETURNS TABLE(
-     id uuid,
-     product_description text,
-     brand_name text,
-     model_number text,
-     purchase_date date,
-     amount decimal,
-     warranty_period text,
-     store_name text,
-     purchase_location text,
-     similarity double precision
-   )
-   LANGUAGE plpgsql
-   AS $$
-   BEGIN
-     RETURN QUERY
-     SELECT
-       r.id,
-       r.product_description,
-       r.brand_name,
-       r.model_number,
-       r.purchase_date,
-       r.amount,
-       r.warranty_period,
-       r.store_name,
-       r.purchase_location,
-       1 - (r.embedding <=> query_embedding) as similarity
-     FROM receipts r
-     WHERE r.embedding IS NOT NULL
-       AND r.user_id = match_receipts_simple.user_id
-       AND 1 - (r.embedding <=> query_embedding) > match_threshold
-     ORDER BY r.embedding <=> query_embedding
-     LIMIT match_count;
-   END;
-   $$;
-
-   GRANT EXECUTE ON FUNCTION match_receipts_simple TO authenticated;
-   GRANT EXECUTE ON FUNCTION match_receipts_simple TO anon;
-   ```
-3. **Edge Function**: Ensure `supabase/functions/smart-search/index.ts` uses `dimensions: 384` for all embedding generation.
-
-### Troubleshooting
-- If smart search returns no results for natural language queries, check that both your embeddings and the database function use **384 dimensions**.
-- If you previously used 1536-dimension embeddings, re-index your receipts with 384-dimension embeddings.
-- Only your own receipts will ever be shown in search results (privacy enforced).
-
----
+### **AI Model Configuration**
+- **Embeddings**: OpenAI text-embedding-3-small (384 dimensions)
+- **Data Extraction**: GPT-4o for receipt processing
+- **Validation**: Perplexity AI for data correction
+- **RAG**: GPT-4o for question answering
 
 ## 🔐 Security & Privacy
 
@@ -408,6 +507,8 @@ supabase db push
 - **Encrypted Storage**: Receipt images stored securely in Supabase Storage
 - **API Key Protection**: All sensitive keys stored in environment variables
 - **Input Validation**: All user inputs are validated and sanitized
+- **Privacy Controls**: Users can manage data collection preferences
+- **AI Data Handling**: Receipt data is processed securely and not stored by AI providers
 
 ## 📱 Browser Compatibility
 
@@ -415,6 +516,7 @@ supabase db push
 - **Firefox**: Full support
 - **Safari**: Full support
 - **Mobile browsers**: Responsive design works on all major mobile browsers
+- **PWA Support**: Can be installed as a Progressive Web App
 
 ## 🐛 Troubleshooting
 
@@ -430,14 +532,29 @@ supabase db push
    - Keep receipt flat and in focus
    - Try the manual entry option as backup
 
-3. **Build errors**
+3. **AI validation not working**
+   - Check that `VITE_PERPLEXITY_API_KEY` is set in `.env.local`
+   - Verify the API key is correct (starts with `pplx-`)
+   - Check browser console for error messages
+
+4. **Smart search returning no results**
+   - Ensure receipts have embeddings generated
+   - Check that the smart-search edge function is deployed
+   - Verify OpenAI API key is configured
+
+5. **Multi-product receipts not grouping**
+   - Check that the database migration was applied
+   - Verify `receipt_group_id` and `is_group_receipt` columns exist
+   - Review the MultiProductReceiptService logs
+
+6. **Build errors**
    ```bash
    # Clear cache and reinstall
    rm -rf node_modules package-lock.json
    npm install
    ```
 
-4. **Database connection issues**
+7. **Database connection issues**
    - Verify Supabase URL and keys in `.env.local`
    - Check if Supabase project is active
    - Ensure migrations are applied
@@ -472,7 +589,17 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 VITE_SUPABASE_URL=your_production_supabase_url
 VITE_SUPABASE_ANON_KEY=your_production_supabase_key
 VITE_OPENAI_API_KEY=your_openai_api_key
+VITE_PERPLEXITY_API_KEY=your_perplexity_api_key
 VITE_GOOGLE_CLOUD_VISION_API_KEY=your_google_cloud_key
+```
+
+### **Edge Functions Deployment**
+```bash
+# Deploy all edge functions
+supabase functions deploy
+
+# Or deploy specific function
+supabase functions deploy smart-search
 ```
 
 ---
@@ -483,13 +610,40 @@ VITE_GOOGLE_CLOUD_VISION_API_KEY=your_google_cloud_key
 - [ ] Clone the repository
 - [ ] Install dependencies with `npm install`
 - [ ] Set up Supabase project and get API keys
-- [ ] Create `.env.local` with required keys
 - [ ] Get OpenAI API key for AI features
+- [ ] Get Perplexity API key for validation
+- [ ] Create `.env.local` with all required keys
+- [ ] Run database migrations with `supabase db push`
+- [ ] Deploy edge functions with `supabase functions deploy`
 - [ ] Run `npm run dev` to start development
 - [ ] Open `http://localhost:5173` in your browser
 - [ ] Create an account and scan your first receipt!
 
 **Need help?** [Create an issue](https://github.com/Surajict/Smartreceipts/issues) or contact the development team.
+
+---
+
+## 🔄 Version History
+
+### **v5.0.0 (2025-01-15) - Major AI & Multi-Product Update**
+- ✨ **Multi-product receipt support** with automatic detection
+- 🔧 **Warranty per product tracking** instead of per receipt
+- 🤖 **Perplexity AI validation** for data accuracy
+- 🔍 **RAG-powered smart search** with natural language queries
+- 📊 **Enhanced dashboard** with better organization
+- 🛡️ **Improved security** and privacy controls
+
+### **v4.0.0 (2024-07-01) - Smart Search & Embedding**
+- 🔍 Vector search with 384-dimension embeddings
+- 🧠 AI-powered smart search functionality
+- 📈 Performance optimizations
+- 🔒 Enhanced security policies
+
+### **v3.0.0 (2024-06-01) - Enhanced Features**
+- 📱 Improved mobile experience
+- 🎨 Better UI/UX design
+- 🔔 Notification system
+- 👤 User profile management
 
 ---
 

@@ -15,6 +15,7 @@ import ReceiptScanning from './components/ReceiptScanning';
 import ProfilePage from './components/ProfilePage';
 import MyLibrary from './components/MyLibrary';
 import WarrantyPage from './components/WarrantyPage';
+import VideoDemo from './components/VideoDemo';
 import { getCurrentUser, onAuthStateChange } from './lib/supabase';
 
 // Protected Route Component
@@ -172,6 +173,9 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage user={user} />} />
         <Route path="/signup" element={<SignUpPage user={user} />} />
+
+        {/* Video Demo Route */}
+        <Route path="/video" element={<VideoDemo />} />
 
         {/* Protected Routes */}
         <Route

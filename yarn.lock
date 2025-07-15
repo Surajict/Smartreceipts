@@ -1118,6 +1118,16 @@
     estree-walker "^2.0.2"
     picomatch "^4.0.2"
 
+"@rollup/rollup-linux-x64-gnu@4.44.2":
+  version "4.44.2"
+  resolved "https://registry.npmjs.org/@rollup/rollup-linux-x64-gnu/-/rollup-linux-x64-gnu-4.44.2.tgz"
+  integrity sha512-/bXb0bEsWMyEkIsUL2Yt5nFB5naLAwyOWMEviQfQY1x3l5WsLKgvZf66TM7UTfED6erckUVUJQ/jJ1FSpm3pRQ==
+
+"@rollup/rollup-linux-x64-musl@4.44.2":
+  version "4.44.2"
+  resolved "https://registry.npmjs.org/@rollup/rollup-linux-x64-musl/-/rollup-linux-x64-musl-4.44.2.tgz"
+  integrity sha512-3D3OB1vSSBXmkGEZR27uiMRNiwN08/RVAcBKwhUYPaiZ8bcvdeEwWPvbnXvvXHY+A/7xluzcN+kaiOFNiOZwWg==
+
 "@supabase/auth-js@2.70.0":
   version "2.70.0"
   resolved "https://registry.npmjs.org/@supabase/auth-js/-/auth-js-2.70.0.tgz"

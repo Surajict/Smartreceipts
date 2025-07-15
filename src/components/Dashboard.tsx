@@ -394,18 +394,29 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       return new Date('2099-12-31');
     }
     
+    // Extract years
     const years = period.match(/(\d+)\s*year/);
-    const months = period.match(/(\d+)\s*month/);
-    
     if (years) {
       purchase.setFullYear(purchase.getFullYear() + parseInt(years[1]));
-    } else if (months) {
-      purchase.setMonth(purchase.getMonth() + parseInt(months[1]));
-    } else {
-      // Default to 1 year if no specific period found
-      purchase.setFullYear(purchase.getFullYear() + 1);
+      return purchase;
     }
     
+    // Extract months
+    const months = period.match(/(\d+)\s*month/);
+    if (months) {
+      purchase.setMonth(purchase.getMonth() + parseInt(months[1]));
+      return purchase;
+    }
+    
+    // Extract days (THIS WAS MISSING!)
+    const days = period.match(/(\d+)\s*day/);
+    if (days) {
+      purchase.setDate(purchase.getDate() + parseInt(days[1]));
+      return purchase;
+    }
+    
+    // Default to 1 year if no specific period found
+    purchase.setFullYear(purchase.getFullYear() + 1);
     return purchase;
   };
 

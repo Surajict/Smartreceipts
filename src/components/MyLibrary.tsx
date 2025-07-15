@@ -403,14 +403,26 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     const period = warrantyPeriod.toLowerCase();
     
     let expiryDate = new Date(purchase);
-    if (period.includes('year')) {
-      const years = parseInt(period.match(/(\d+)/)?.[1] || '1');
-      expiryDate.setFullYear(expiryDate.getFullYear() + years);
-    } else if (period.includes('month')) {
-      const months = parseInt(period.match(/(\d+)/)?.[1] || '12');
-      expiryDate.setMonth(expiryDate.getMonth() + months);
+    
+    // Extract years
+    const years = period.match(/(\d+)\s*year/);
+    if (years) {
+      expiryDate.setFullYear(expiryDate.getFullYear() + parseInt(years[1]));
     } else {
-      expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+      // Extract months
+      const months = period.match(/(\d+)\s*month/);
+      if (months) {
+        expiryDate.setMonth(expiryDate.getMonth() + parseInt(months[1]));
+      } else {
+        // Extract days (THIS WAS MISSING!)
+        const days = period.match(/(\d+)\s*day/);
+        if (days) {
+          expiryDate.setDate(expiryDate.getDate() + parseInt(days[1]));
+        } else {
+          // Default to 1 year
+          expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+        }
+      }
     }
 
     const now = new Date();

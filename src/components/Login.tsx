@@ -109,15 +109,17 @@ const Login: React.FC<LoginProps> = ({ onBackToHome, onShowSignUp }) => {
     try {
       setIsGoogleLoading(true);
       setErrors({});
-      
+      console.log('Initiating Google sign-in...');
+
       const { error } = await signInWithGoogle();
       
       if (error) {
         console.error('Google sign in error:', error);
         setErrors({ general: error.message || 'Failed to sign in with Google' });
+      } else {
+        console.log('Google sign-in initiated successfully');
+        // No need to handle success case as the user will be redirected
       }
-      
-      // No need to handle success case as the user will be redirected
     } catch (err: any) {
       console.error('Unexpected Google sign in error:', err);
       setErrors({ general: 'An unexpected error occurred. Please try again.' });

@@ -3,12 +3,19 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY!
 
+// Configure Supabase client with Google OAuth options
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: 'pkce'
+    flowType: 'pkce',
+    // Configure Google OAuth provider
+    providers: {
+      google: {
+        clientId: '751272252597-eh4q33q5qevsrse3m0a7p6dtsnse8ocm.apps.googleusercontent.com'
+      }
+    }
   }
 })
 
@@ -515,19 +522,23 @@ export const updateReceipt = async (userId: string, receiptId: string, updateDat
 export const signInWithGoogle = async () => {
   try {
     console.log('Starting Google sign in process')
-    
+
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/dashboard`
+        redirectTo: `${window.location.origin}/dashboard`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent'
+        }
       }
     })
-    
+
     if (error) {
       console.error('Google SignIn error:', error)
       return { data: null, error }
     }
-    
+
     console.log('Google SignIn initiated:', data)
     return { data, error: null }
   } catch (err: any) {

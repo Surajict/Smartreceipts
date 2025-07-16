@@ -3,6 +3,9 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY!
 
+// Get the current site URL for redirects
+const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'
+
 // Configure Supabase client with Google OAuth options
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
@@ -523,10 +526,17 @@ export const signInWithGoogle = async () => {
   try {
     console.log('Starting Google sign in process')
 
+    // Get the current site URL for redirect
+    const redirectTo = typeof window !== 'undefined' 
+      ? `${window.location.origin}/dashboard`
+      : 'http://localhost:5173/dashboard'
+
+    console.log('Using redirect URL:', redirectTo)
+
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/dashboard`,
+        redirectTo,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent'

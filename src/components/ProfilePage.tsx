@@ -93,8 +93,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
 
   useEffect(() => {
     loadUserProfile();
-    loadUserSettings();
   }, []);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadUserSettings();
+    }
+  }, [user?.id]);
 
   const loadUserProfile = async () => {
     try {
@@ -135,6 +140,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   };
 
   const loadUserSettings = async () => {
+    if (!user?.id) return;
+    
     try {
       setIsLoadingSettings(true);
       
@@ -142,7 +149,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       const { data: notificationData, error: notificationError } = await supabase
         .from('user_notification_settings')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .single();
 
       if (notificationError && notificationError.code !== 'PGRST116') {
@@ -159,7 +166,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       const { data: privacyData, error: privacyError } = await supabase
         .from('user_privacy_settings')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .single();
 
       if (privacyError && privacyError.code !== 'PGRST116') {

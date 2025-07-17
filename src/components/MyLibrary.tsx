@@ -30,7 +30,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt, getUserNotifications, archiveNotification, archiveAllNotifications, cleanupDuplicateNotifications, Notification, supabase } from '../lib/supabase';
+import { signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt, getUserNotifications, archiveNotification, archiveAllNotifications, cleanupDuplicateNotifications, Notification, supabase } from '../lib/supabase';
+import { useUser } from '../contexts/UserContext';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import Footer from './Footer';
 
@@ -63,8 +64,7 @@ type SortOrder = 'asc' | 'desc';
 
 const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptScanning }) => {
   const location = useLocation();
-  const [user, setUser] = useState<any>(null);
-  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const { user, profilePicture } = useUser();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,10 +86,6 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
-
-  useEffect(() => {
-    loadUser();
-  }, []);
 
   useEffect(() => {
     if (user) {
@@ -116,25 +112,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     }
   }, [location.state, receipts]);
 
-  const loadUser = async () => {
-    const currentUser = await getCurrentUser();
-    setUser(currentUser);
-    // Load profile picture if exists
-    if (currentUser?.user_metadata?.avatar_url) {
-      try {
-        const { data, error } = await supabase.storage
-          .from('profile-pictures')
-          .createSignedUrl(currentUser.user_metadata.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
-        if (error) {
-          console.error('Error creating signed URL:', error);
-        } else if (data?.signedUrl) {
-          setProfilePicture(data.signedUrl);
-        }
-      } catch (error) {
-        console.error('Error loading profile picture:', error);
-      }
-    }
-  };
+  // No longer needed - user data comes from context
 
   const loadReceipts = async () => {
     if (!user) return;
@@ -718,7 +696,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                         src={profilePicture}
                         alt="Profile"
                         className="w-full h-full object-cover"
-                        onError={() => setProfilePicture(null)}
+                        onError={() => {}}
                       />
                     ) : (
                       <User className="h-4 w-4 text-white" />

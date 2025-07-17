@@ -23,11 +23,14 @@ import {
   Maximize2,
   Settings
 } from 'lucide-react';
-import { getCurrentUser, signOut, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT, supabase } from '../lib/supabase';
+import { signOut, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT, supabase } from '../lib/supabase';
+import { useUser } from '../contexts/UserContext';
 import { OCRService, OCREngine } from '../services/ocrService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { ExtractedReceiptData } from '../types/receipt';
 import { PerplexityValidationService, ValidationResult } from '../services/perplexityValidationService';
+import { DuplicateDetectionService, DuplicateMatch } from '../services/duplicateDetectionService';
+import DuplicateWarningModal from './DuplicateWarningModal';
 import NotificationDropdown from './NotificationDropdown';
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
@@ -47,8 +50,7 @@ type CaptureMode = 'normal' | 'long';
 type InputMode = 'capture' | 'upload' | 'manual';
 
 const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) => {
-  const [user, setUser] = useState<any>(null);
-  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const { user, profilePicture } = useUser();
   const [inputMode, setInputMode] = useState<InputMode>('capture');
   const [captureMode, setCaptureMode] = useState<CaptureMode>('normal');
   const [showCamera, setShowCamera] = useState(false);
@@ -67,6 +69,18 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [showExtractedForm, setShowExtractedForm] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   
+  // Duplicate detection states
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatch[]>([]);
+  const [duplicateConfidence, setDuplicateConfidence] = useState(0);
+  const [pendingSaveData, setPendingSaveData] = useState<{
+    extractedData: ExtractedData;
+    imageUrl: string;
+    processingMethod: string;
+    ocrConfidence?: number;
+    extractedText?: string;
+  } | null>(null);
+  
   // OCR Engine - Always uses Google Cloud Vision
   const selectedOCREngine: OCREngine = 'google-cloud-vision';
   
@@ -82,7 +96,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const frameCountRef = useRef(0);
 
   useEffect(() => {
-    loadUser();
     checkOpenAIAvailability();
     setPreferredOCREngine();
   }, []);
@@ -98,25 +111,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     }
   };
 
-  const loadUser = async () => {
-    const currentUser = await getCurrentUser();
-    setUser(currentUser);
-    // Load profile picture if exists
-    if (currentUser?.user_metadata?.avatar_url) {
-      try {
-        const { data, error } = await supabase.storage
-          .from('profile-pictures')
-          .createSignedUrl(currentUser.user_metadata.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
-        if (error) {
-          console.error('Error creating signed URL:', error);
-        } else if (data?.signedUrl) {
-          setProfilePicture(data.signedUrl);
-        }
-      } catch (error) {
-        console.error('Error loading profile picture:', error);
-      }
-    }
-  };
+  // No longer needed - user data comes from context
 
   const checkOpenAIAvailability = async () => {
     const available = await testOpenAIConnection();
@@ -512,13 +507,59 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       }
 
       const productName = extractedData.product_description || 'receipt';
-      setProcessingStep(`Saving "${productName}"...`);
       const processingMethod = inputMode === 'manual' ? 'manual' : (extractedText ? 'gpt_structured' : 'manual');
       const ocrConfidence = extractedText ? 0.85 : undefined;
 
+      // Check for duplicates before saving
+      setProcessingStep('Checking for duplicates...');
+      const duplicateResult = await DuplicateDetectionService.checkForDuplicates(
+        extractedData,
+        user.id
+      );
+
+      if (duplicateResult.isDuplicate) {
+        // Show duplicate warning modal
+        setDuplicateMatches(duplicateResult.matches);
+        setDuplicateConfidence(duplicateResult.confidence);
+        setPendingSaveData({
+          extractedData,
+          imageUrl,
+          processingMethod,
+          ocrConfidence,
+          extractedText: extractedText || undefined
+        });
+        setShowDuplicateWarning(true);
+        setIsProcessing(false);
+        return;
+      }
+
+      // No duplicates found, proceed with save
+      await performSave(extractedData, imageUrl, processingMethod, ocrConfidence, extractedText);
+
+    } catch (err: any) {
+      console.error('Save error:', err);
+      setError(err.message || 'Failed to save receipt');
+      setIsProcessing(false);
+    }
+  };
+
+  const performSave = async (
+    data: ExtractedData,
+    imageUrl: string,
+    processingMethod: string,
+    ocrConfidence?: number,
+    extractedText?: string
+  ) => {
+    if (!user) return;
+
+    try {
+      setIsProcessing(true);
+      const productName = data.product_description || 'receipt';
+      setProcessingStep(`Saving "${productName}"...`);
+
       // Use the new MultiProductReceiptService
       const result = await MultiProductReceiptService.saveReceipt(
-        extractedData,
+        data,
         user.id,
         imageUrl,
         processingMethod,
@@ -545,6 +586,32 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleDuplicateProceed = async () => {
+    if (!pendingSaveData) return;
+
+    setShowDuplicateWarning(false);
+    await performSave(
+      pendingSaveData.extractedData,
+      pendingSaveData.imageUrl,
+      pendingSaveData.processingMethod,
+      pendingSaveData.ocrConfidence,
+      pendingSaveData.extractedText
+    );
+    
+    // Clear pending data
+    setPendingSaveData(null);
+    setDuplicateMatches([]);
+    setDuplicateConfidence(0);
+  };
+
+  const handleDuplicateCancel = () => {
+    setShowDuplicateWarning(false);
+    setPendingSaveData(null);
+    setDuplicateMatches([]);
+    setDuplicateConfidence(0);
+    setIsProcessing(false);
   };
 
   // Helper functions for managing multiple products
@@ -734,7 +801,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                         src={profilePicture}
                         alt="Profile"
                         className="w-full h-full object-cover"
-                        onError={() => setProfilePicture(null)}
+                        onError={() => {}}
                       />
                     ) : (
                       <User className="h-4 w-4 text-white" />
@@ -1623,6 +1690,15 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           onClick={() => setShowUserMenu(false)}
         />
       )}
+
+      {/* Duplicate Warning Modal */}
+      <DuplicateWarningModal
+        isOpen={showDuplicateWarning}
+        matches={duplicateMatches}
+        confidence={duplicateConfidence}
+        onProceed={handleDuplicateProceed}
+        onCancel={handleDuplicateCancel}
+      />
     </div>
   );
 };

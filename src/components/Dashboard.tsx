@@ -23,7 +23,8 @@ import {
   Lightbulb,
   Package
 } from 'lucide-react';
-import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
+import { signOut, supabase, getUserReceipts, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
+import { useUser } from '../contexts/UserContext';
 import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
@@ -86,8 +87,7 @@ interface RAGResult {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning, onShowProfile, onShowLibrary, onShowWarranty }) => {
-  const [user, setUser] = useState<any>(null);
-  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const { user, profilePicture } = useUser();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [alertsCount, setAlertsCount] = useState(0);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -116,35 +116,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const navigate = useNavigate();
 
   useEffect(() => {
-    const loadUser = async () => {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-      
-      // Load profile picture if exists
-      if (currentUser?.user_metadata?.avatar_url) {
-        try {
-          const { data, error } = await supabase.storage
-            .from('profile-pictures')
-            .createSignedUrl(currentUser.user_metadata.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
-          if (error) {
-            console.error('Error creating signed URL:', error);
-          } else if (data?.signedUrl) {
-            setProfilePicture(data.signedUrl);
-          }
-        } catch (error) {
-          console.error('Error loading profile picture:', error);
-        }
-      }
+    // Load actual data from database when user is available
+    if (user) {
+      loadDashboardData(user.id);
+      loadEmbeddingStatus(user.id);
+      loadNotifications(user.id);
+    }
+  }, [user]);
 
-      // Load actual data from database
-      if (currentUser) {
-        await loadDashboardData(currentUser.id);
-        await loadEmbeddingStatus(currentUser.id);
-        await loadNotifications(currentUser.id); // Load notifications on user load
-      }
-    };
-    loadUser();
-
+  useEffect(() => {
     // Update time every minute
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -553,6 +533,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
   // Fallback local search
   const performLocalSearch = async (query: string) => {
+    if (!user) return;
     try {
       const { data: receipts, error } = await supabase
         .from('receipts')
@@ -987,7 +968,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                         src={profilePicture}
                         alt="Profile"
                         className="w-full h-full object-cover"
-                        onError={() => setProfilePicture(null)}
+                        onError={() => {}}
                       />
                     ) : (
                       <User className="h-4 w-4 text-white" />

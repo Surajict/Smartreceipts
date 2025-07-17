@@ -20,7 +20,8 @@ import {
   SortDesc,
   User
 } from 'lucide-react';
-import { getCurrentUser, getReceiptImageSignedUrl, supabase } from '../lib/supabase';
+import { getReceiptImageSignedUrl, supabase } from '../lib/supabase';
+import { useUser } from '../contexts/UserContext';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { useLocation } from 'react-router-dom';
 import Footer from './Footer';
@@ -51,8 +52,7 @@ type FilterType = 'all' | 'active' | 'expiring' | 'expired';
 type SortType = 'daysLeft' | 'purchaseDate' | 'itemName' | 'amount';
 
 const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
-  const [user, setUser] = useState<any>(null);
-  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const { user, profilePicture } = useUser();
   const [warrantyItems, setWarrantyItems] = useState<WarrantyItem[]>([]);
   const [filteredItems, setFilteredItems] = useState<WarrantyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,35 +66,10 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
   const selectedId = location.state?.id;
 
   useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await getCurrentUser();
-        if (currentUser) {
-          setUser(currentUser);
-          // Load profile picture if exists
-          if (currentUser.user_metadata?.avatar_url) {
-            try {
-              const { data, error } = await supabase.storage
-                .from('profile-pictures')
-                .createSignedUrl(currentUser.user_metadata.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
-              if (error) {
-                console.error('Error creating signed URL:', error);
-              } else if (data?.signedUrl) {
-                setProfilePicture(data.signedUrl);
-              }
-            } catch (error) {
-              console.error('Error loading profile picture:', error);
-            }
-          }
-          await loadWarrantyData(currentUser.id);
-        }
-      } catch (error) {
-        console.error('Error loading user:', error);
-      }
-    };
-
-    loadUser();
-  }, []);
+    if (user) {
+      loadWarrantyData(user.id);
+    }
+  }, [user]);
 
   useEffect(() => {
     applyFiltersAndSort();
@@ -439,7 +414,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
                     src={profilePicture}
                     alt="Profile"
                     className="w-full h-full object-cover"
-                    onError={() => setProfilePicture(null)}
+                                            onError={() => {}}
                   />
                 ) : (
                   <User className="h-4 w-4 text-white" />

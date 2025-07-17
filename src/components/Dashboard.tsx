@@ -717,7 +717,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </p>
           <div className="text-sm text-text-secondary space-y-1 max-w-sm mx-auto">
             <p>• "How much did I spend on electronics?"</p>
-            <p>• "Show me all Apple receipts from 2023"</p>
+            <p>• "Show me all Apple receipts from 2024"</p>
             <p>• "What warranties expire soon?"</p>
           </div>
         </div>

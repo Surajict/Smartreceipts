@@ -117,6 +117,23 @@ Before you begin, ensure you have the following installed:
 - **npm** or **yarn** package manager
 - **Git** for version control
 
+### **Google Authentication Setup**
+
+To enable Google Sign-In:
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Navigate to "APIs & Services" > "Credentials"
+4. Click "Create Credentials" > "OAuth client ID"
+5. Select "Web application" as the application type
+6. Add your app's domain to the "Authorized JavaScript origins"
+7. Add your app's domain + `/auth/v1/callback` to "Authorized redirect URIs"
+   - For local development: `http://localhost:5173/auth/v1/callback`
+   - For production: `https://yourdomain.com/auth/v1/callback`
+8. Click "Create" and note your Client ID and Client Secret
+9. In your Supabase dashboard, go to Authentication > Providers
+10. Enable Google provider and enter your Client ID and Client Secret
+
 ### **Environment Setup**
 
 1. **Clone the repository**

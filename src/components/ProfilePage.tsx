@@ -93,13 +93,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
 
   useEffect(() => {
     loadUserProfile();
-    loadUserSettings();
   }, []);
+
+  useEffect(() => {
+    if (user?.id) {
+      console.log('User ID available, loading settings:', user.id);
+      loadUserSettings();
+    }
+  }, [user?.id]);
 
   const loadUserProfile = async () => {
     try {
+      console.log('Loading user profile...');
       const currentUser = await getCurrentUser();
       if (currentUser) {
+        console.log('User found, setting profile data');
         const userProfile: UserProfile = {
           id: currentUser.id,
           email: currentUser.email || '',
@@ -135,6 +143,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   };
 
   const loadUserSettings = async () => {
+    if (!user?.id) return;
+    console.log('Loading user settings for ID:', user.id);
+
     try {
       setIsLoadingSettings(true);
       
@@ -142,13 +153,17 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       const { data: notificationData, error: notificationError } = await supabase
         .from('user_notification_settings')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .single();
 
       if (notificationError && notificationError.code !== 'PGRST116') {
         console.error('Error loading notification settings:', notificationError);
+      } else if (notificationData) {
+        console.log('Notification settings loaded successfully');
+        setNotificationSettings(notificationData);
       } else {
-        setNotificationSettings(notificationData || {
+        console.log('No notification settings found, using defaults');
+        setNotificationSettings({
           warranty_alerts: true,
           auto_system_update: true,
           marketing_notifications: false
@@ -159,13 +174,17 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       const { data: privacyData, error: privacyError } = await supabase
         .from('user_privacy_settings')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .single();
 
       if (privacyError && privacyError.code !== 'PGRST116') {
         console.error('Error loading privacy settings:', privacyError);
+      } else if (privacyData) {
+        console.log('Privacy settings loaded successfully');
+        setPrivacySettings(privacyData);
       } else {
-        setPrivacySettings(privacyData || {
+        console.log('No privacy settings found, using defaults');
+        setPrivacySettings({
           data_collection: true,
           data_analysis: 'allowed',
           biometric_login: false,

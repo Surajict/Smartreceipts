@@ -956,6 +956,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                 )}
               </div>
 
+              {/* Settings Button */}
+              <button
+                onClick={() => {
+                  onShowProfile();
+                }}
+                className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                title="Settings"
+              >
+                <Settings className="h-6 w-6" />
+              </button>
+
               {/* User Menu */}
               <div className="relative">
                 <button
@@ -1054,15 +1065,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </button>
 
           <button 
-            onClick={onShowProfile}
-            className="group bg-gradient-to-br from-accent-yellow to-yellow-500 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+            onClick={onShowWarranty}
+            className="group bg-gradient-to-br from-red-500 to-orange-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
           >
             <div className="flex flex-col items-center text-center">
               <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
-                <Settings className="h-8 w-8" />
+                <Shield className="h-8 w-8" />
               </div>
-              <h3 className="text-xl font-bold mb-2">Settings</h3>
-              <p className="text-white/90">Manage your profile and preferences</p>
+              <h3 className="text-xl font-bold mb-2">Warranty Manager</h3>
+              <p className="text-white/90">Track and manage your product warranties</p>
             </div>
           </button>
         </div>

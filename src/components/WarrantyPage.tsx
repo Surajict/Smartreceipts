@@ -19,9 +19,11 @@ import {
   SortAsc,
   SortDesc,
   User,
-  FileText
+  FileText,
+  Bell,
+  LogOut
 } from 'lucide-react';
-import { getReceiptImageSignedUrl, supabase } from '../lib/supabase';
+import { getReceiptImageSignedUrl, supabase, signOut } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { useLocation } from 'react-router-dom';
@@ -63,6 +65,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [showFilters, setShowFilters] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const location = useLocation();
   const selectedId = location.state?.id;
 
@@ -404,6 +407,15 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
 
   const filterCounts = getFilterCounts();
 
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -418,44 +430,111 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-white shadow-card border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex justify-between items-center h-16">
+            {/* Logo */}
+            <div className="flex items-center space-x-3">
+              <img 
+                src="/Smart Receipt Logo.png" 
+                alt="Smart Receipts Logo" 
+                className="h-10 w-10 object-contain"
+              />
+              <span className="text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent">
+                Smart Receipts
+              </span>
+            </div>
+
+            {/* Header Actions */}
             <div className="flex items-center space-x-4">
+              {/* Notifications */}
+              <div className="relative">
+                <button className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
+                  <Bell className="h-6 w-6" />
+                </button>
+              </div>
+
+              {/* Back Button */}
               <button
                 onClick={onBackToDashboard}
-                className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                className="flex items-center space-x-2 bg-white text-text-primary border-2 border-gray-300 hover:border-primary px-4 py-2 rounded-lg font-medium transition-all duration-200"
               >
-                <ArrowLeft className="h-5 w-5" />
-                <span>Back to Dashboard</span>
+                <ArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Back to Dashboard</span>
               </button>
-              <div className="h-6 w-px bg-gray-300"></div>
-              <h1 className="text-2xl font-bold text-text-primary">Warranty Management</h1>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Shield className="h-6 w-6 text-primary" />
-              <span className="text-sm text-text-secondary">
-                {filteredItems.length} of {warrantyItems.length} items
-              </span>
-              {/* User Avatar */}
-              <div className="ml-4 w-8 h-8 rounded-full overflow-hidden bg-primary flex items-center justify-center">
-                {profilePicture ? (
-                  <img
-                    src={profilePicture}
-                    alt="Profile"
-                    className="w-full h-full object-cover"
-                                            onError={() => {}}
-                  />
-                ) : (
-                  <User className="h-4 w-4 text-white" />
+
+              {/* User Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+                >
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-primary flex items-center justify-center">
+                    {profilePicture ? (
+                      <img
+                        src={profilePicture}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                        onError={() => {}}
+                      />
+                    ) : (
+                      <User className="h-4 w-4 text-white" />
+                    )}
+                  </div>
+                  <span className="text-sm font-medium text-text-primary hidden sm:inline">
+                    {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
+                  </span>
+                </button>
+
+                {/* User Dropdown */}
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-200">
+                      <p className="text-sm font-medium text-text-primary">
+                        {user?.user_metadata?.full_name || 'User'}
+                      </p>
+                      <p className="text-xs text-text-secondary">{user?.email}</p>
+                    </div>
+                    <button
+                      onClick={onBackToDashboard}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      <span>Back to Dashboard</span>
+                    </button>
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Page Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
+          <div>
+            <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-2">
+              Warranty Management
+            </h1>
+            <div className="flex items-center space-x-4 text-text-secondary">
+              <div className="flex items-center space-x-2">
+                <Shield className="h-5 w-5 text-primary" />
+                <span>
+                  {filteredItems.length} of {warrantyItems.length} items
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Search and Filter Controls */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
@@ -721,6 +800,14 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
         )}
       </div>
       <Footer />
+
+      {/* Click outside to close user menu */}
+      {showUserMenu && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowUserMenu(false)}
+        />
+      )}
     </div>
   );
 };

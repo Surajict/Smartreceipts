@@ -68,6 +68,8 @@ Smart Receipts is an intelligent receipt management application that uses AI to 
 
 ### 📊 **Enhanced Receipt Library**
 - **Grouped Display**: Multi-product receipts are grouped together visually
+- **PDF Document Support**: Proper viewing of PDF receipts with attractive viewer component
+- **Mixed File Type Support**: Handles both image and PDF receipt files seamlessly
 - **Individual Product Search**: Find specific products within multi-product receipts
 - **Advanced Search & Filter**: Find receipts by product, brand, date, or amount
 - **Sort Options**: Organize by date, price, or warranty status
@@ -80,9 +82,10 @@ Smart Receipts is an intelligent receipt management application that uses AI to 
 ### **Frontend**
 - **React 18.3.1** - Modern UI framework
 - **TypeScript 5.5.3** - Type-safe JavaScript
-- **Vite** - Fast build tool and development server
+- **Vite** - Fast build tool and development server with PWA plugin
 - **Tailwind CSS 3.4.1** - Utility-first CSS framework
 - **Lucide React** - Beautiful icon library
+- **PWA Support** - Progressive Web App with service worker and offline capabilities
 
 ### **Backend & Services**
 - **Supabase** - Backend-as-a-Service platform
@@ -305,6 +308,7 @@ Smart_Receipts_Suraj_V5/
 
 ### **7. Organize Your Library**
 - Access "My Library" to view all receipts
+- View both image and PDF receipts with proper display
 - Use search and filters to find specific items
 - View grouped multi-product receipts
 - Edit receipt details anytime
@@ -406,6 +410,7 @@ Key fields in the receipts table:
 
 ### **AI Validation with Perplexity**
 - **Automatic Correction**: Fixes OCR errors and improves data accuracy
+- **Enhanced Brand Validation**: Returns clean brand names instead of verbose explanations
 - **Confidence Scoring**: Shows how confident the AI is in corrections
 - **Multi-Field Validation**: Validates product names, brands, stores, and warranty periods
 - **Parallel Processing**: Fast validation using concurrent API calls
@@ -416,11 +421,26 @@ Key fields in the receipts table:
 - **Context-Aware**: Understands the context of your questions
 - **Fallback Support**: Automatically falls back to regular search if needed
 
-### **Enhanced User Experience**
-- **Improved Dashboard**: Better organization and visual design
+### **Enhanced User Experience & UI/UX Improvements**
+- **Improved Dashboard**: Better organization with streamlined Quick Access tiles
+- **Consistent Header Design**: Unified header across all pages with Smart Receipts branding
+- **Settings Integration**: Settings moved to header for better accessibility
+- **Warranty Manager Tile**: Direct access to warranty management from dashboard
 - **Notification System**: Real-time alerts for warranty expirations
 - **Profile Management**: Comprehensive user settings and preferences
 - **Error Handling**: Better error messages and recovery options
+
+### **PDF Document Support**
+- **PDF Viewing**: Proper display of PDF receipts with attractive viewer component
+- **Automatic Detection**: Smart detection of PDF vs image files
+- **Fallback Support**: Graceful handling of different file types
+- **Enhanced Library**: Better organization of mixed PDF and image receipts
+
+### **Progressive Web App (PWA) Enhancements**
+- **Custom Favicon**: Smart Receipts branded SVG favicon with gradient design
+- **Installable App**: Full PWA support for mobile and desktop installation
+- **Offline Capability**: Service worker for offline functionality
+- **Native App Experience**: Standalone mode with custom branding
 
 ## 🤝 Contributing
 
@@ -548,11 +568,13 @@ The app automatically generates embeddings for new receipts. For existing receip
    - Ensure good lighting when taking photos
    - Keep receipt flat and in focus
    - Try the manual entry option as backup
+   - For PDF receipts, ensure they contain extractable text (not just images)
 
 3. **AI validation not working**
    - Check that `VITE_PERPLEXITY_API_KEY` is set in `.env.local`
    - Verify the API key is correct (starts with `pplx-`)
    - Check browser console for error messages
+   - Ensure brand validation returns clean names (not verbose explanations)
 
 4. **Smart search returning no results**
    - Ensure receipts have embeddings generated
@@ -635,12 +657,23 @@ supabase functions deploy smart-search
 - [ ] Run `npm run dev` to start development
 - [ ] Open `http://localhost:5173` in your browser
 - [ ] Create an account and scan your first receipt!
+- [ ] Test PDF receipt upload functionality
+- [ ] Explore the warranty management features
 
 **Need help?** [Create an issue](https://github.com/Surajict/Smartreceipts/issues) or contact the development team.
 
 ---
 
 ## 🔄 Version History
+
+### **v5.1.0 (2025-01-16) - UI/UX & Document Support Update**
+- 🎨 **Consistent header design** across all pages with Smart Receipts branding
+- 📱 **Dashboard improvements** with streamlined Quick Access tiles and settings in header
+- 🆕 **Warranty Manager tile** for direct access to warranty management
+- 📄 **PDF document support** with proper viewing in MyLibrary and WarrantyPage
+- 🎯 **Custom favicon** with Smart Receipts branding for PWA experience
+- 🔧 **Enhanced brand validation** returning clean brand names instead of verbose responses
+- 📱 **PWA enhancements** with improved installability and offline capabilities
 
 ### **v5.0.0 (2025-01-15) - Major AI & Multi-Product Update**
 - ✨ **Multi-product receipt support** with automatic detection

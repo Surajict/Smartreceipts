@@ -280,7 +280,7 @@ Please:
 Return only the corrected brand name, nothing else.`;
 
       const response = await this.callPerplexityAPI(prompt);
-      const validated = response.trim();
+      const validated = this.extractBrandName(response.trim());
       
       return {
         original: brandName,
@@ -536,6 +536,65 @@ IMPORTANT: Return ONLY the corrected warranty period in simple format (e.g., "3 
           !trimmed.includes('not the official') && 
           !trimmed.includes('format') &&
           !trimmed.includes('Therefore') &&
+          !trimmed.includes('corrected')) {
+        return trimmed;
+      }
+    }
+    
+    // Last resort: take first 50 characters
+    return cleaned.substring(0, 50).trim();
+  }
+
+  /**
+   * Extract clean brand name from potentially verbose response
+   */
+  private static extractBrandName(response: string): string {
+    // Remove citations like [1], [2], etc.
+    let cleaned = response.replace(/\[[\d,\s]+\]/g, '').trim();
+    
+    // Look for patterns that indicate the final answer
+    const patterns = [
+      // Look for "standardized brand name is:" followed by the answer
+      /standardized\s+brand\s+name\s+is:\s*\*?\*?([^*\n]+)\*?\*?/i,
+      // Look for "commonly referred to as" followed by the answer
+      /commonly\s+referred\s+to\s+as\s*\*?\*?([^*\n]+)\*?\*?/i,
+      // Look for "Therefore, the corrected" followed by the answer
+      /Therefore,\s+the\s+corrected[^:]*:\s*\*?\*?([^*\n]+)\*?\*?/i,
+      // Look for text in **bold** formatting (most common pattern)
+      /\*\*([^*]+)\*\*/,
+      // Look for "should be:" followed by the answer
+      /should be:\s*\*?\*?([^*\n]+)\*?\*?/i,
+      // Look for the last line that doesn't contain explanatory text
+      /^([A-Za-z0-9\s&.-]+)$/m
+    ];
+    
+    for (const pattern of patterns) {
+      const match = cleaned.match(pattern);
+      if (match && match[1]) {
+        const extracted = match[1].trim();
+        // Make sure it's a reasonable brand name (not too long and doesn't contain explanatory text)
+        if (extracted.length <= 50 && 
+            !extracted.includes('format') && 
+            !extracted.includes('standardized') &&
+            !extracted.includes('corrected') &&
+            !extracted.includes('However') &&
+            !extracted.includes('Therefore') &&
+            !extracted.includes('commonly')) {
+          return extracted;
+        }
+      }
+    }
+    
+    // If no pattern matches, try to get the first reasonable line
+    const lines = cleaned.split('\n').filter(line => line.trim());
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.length <= 50 && 
+          !trimmed.includes('not the official') && 
+          !trimmed.includes('format') &&
+          !trimmed.includes('Therefore') &&
+          !trimmed.includes('However') &&
+          !trimmed.includes('commonly') &&
           !trimmed.includes('corrected')) {
         return trimmed;
       }

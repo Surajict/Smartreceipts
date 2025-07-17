@@ -27,10 +27,12 @@ import {
   ChevronDown,
   ChevronUp,
   MapPin,
-  AlertCircle
+  AlertCircle,
+  FileText
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt, getUserNotifications, archiveNotification, archiveAllNotifications, cleanupDuplicateNotifications, Notification, supabase } from '../lib/supabase';
+import { signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt, getUserNotifications, archiveNotification, archiveAllNotifications, cleanupDuplicateNotifications, Notification, supabase } from '../lib/supabase';
+import { useUser } from '../contexts/UserContext';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import Footer from './Footer';
 
@@ -63,8 +65,7 @@ type SortOrder = 'asc' | 'desc';
 
 const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptScanning }) => {
   const location = useLocation();
-  const [user, setUser] = useState<any>(null);
-  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const { user, profilePicture } = useUser();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,10 +87,6 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
-
-  useEffect(() => {
-    loadUser();
-  }, []);
 
   useEffect(() => {
     if (user) {
@@ -116,25 +113,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     }
   }, [location.state, receipts]);
 
-  const loadUser = async () => {
-    const currentUser = await getCurrentUser();
-    setUser(currentUser);
-    // Load profile picture if exists
-    if (currentUser?.user_metadata?.avatar_url) {
-      try {
-        const { data, error } = await supabase.storage
-          .from('profile-pictures')
-          .createSignedUrl(currentUser.user_metadata.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
-        if (error) {
-          console.error('Error creating signed URL:', error);
-        } else if (data?.signedUrl) {
-          setProfilePicture(data.signedUrl);
-        }
-      } catch (error) {
-        console.error('Error loading profile picture:', error);
-      }
-    }
-  };
+  // No longer needed - user data comes from context
 
   const loadReceipts = async () => {
     if (!user) return;
@@ -584,6 +563,35 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     setEditForm(null);
   };
 
+  // Add PDF detection utility function after the imports
+  const isPdfFile = (url: string): boolean => {
+    if (!url) return false;
+    const lowerUrl = url.toLowerCase();
+    return lowerUrl.includes('.pdf') || 
+           lowerUrl.includes('application/pdf') ||
+           lowerUrl.includes('content-type=application/pdf') ||
+           lowerUrl.includes('mimetype=application/pdf');
+  };
+
+  // Add PDF viewer component
+  const PDFViewer: React.FC<{ url: string; alt: string; className?: string }> = ({ url, alt, className }) => {
+    return (
+      <div className={`bg-gradient-to-br from-red-50 to-red-100 rounded-lg flex flex-col items-center justify-center p-4 border-2 border-red-200 ${className}`}>
+        <FileText className="h-12 w-12 text-red-500 mb-2" />
+        <span className="text-sm text-gray-700 text-center font-medium mb-2">{alt}</span>
+        <span className="text-xs text-gray-600 mb-3">PDF Document</span>
+        <a 
+          href={url} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-xs bg-red-500 text-white px-3 py-1 rounded-full hover:bg-red-600 transition-colors duration-200"
+        >
+          Open PDF
+        </a>
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -718,7 +726,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                         src={profilePicture}
                         alt="Profile"
                         className="w-full h-full object-cover"
-                        onError={() => setProfilePicture(null)}
+                        onError={() => {}}
                       />
                     ) : (
                       <User className="h-4 w-4 text-white" />
@@ -901,19 +909,27 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                     {/* Receipt Image or Placeholder */}
                     <div className="aspect-square bg-gradient-feature rounded-lg mb-4 flex items-center justify-center overflow-hidden">
                       {receipt.image_url ? (
-                        <img
-                          src={signedUrls[receipt.image_url] || receipt.image_url}
-                          alt={receipt.product_description || 'Receipt'}
-                          className="w-full h-full object-cover object-center"
-                          onError={(e) => {
-                            console.error(`Failed to load image for receipt ${receipt.id}:`, receipt.image_url);
-                            console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
-                            (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
-                          }}
-                          onLoad={() => {
-                            console.log(`✓ Image loaded successfully for receipt ${receipt.id}`);
-                          }}
-                        />
+                        isPdfFile(receipt.image_url) ? (
+                          <PDFViewer
+                            url={signedUrls[receipt.image_url] || receipt.image_url}
+                            alt={receipt.product_description || 'Receipt'}
+                            className="w-full h-full"
+                          />
+                        ) : (
+                          <img
+                            src={signedUrls[receipt.image_url] || receipt.image_url}
+                            alt={receipt.product_description || 'Receipt'}
+                            className="w-full h-full object-cover object-center"
+                            onError={(e) => {
+                              console.error(`Failed to load image for receipt ${receipt.id}:`, receipt.image_url);
+                              console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
+                              (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                            }}
+                            onLoad={() => {
+                              console.log(`✓ Image loaded successfully for receipt ${receipt.id}`);
+                            }}
+                          />
+                        )
                       ) : (
                         <img
                           src="/receipt-placeholder.svg"
@@ -971,19 +987,27 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                       {/* Receipt Image or Placeholder */}
                       <div className="w-16 h-16 bg-gradient-feature rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                         {receipt.image_url ? (
-                          <img
-                            src={signedUrls[receipt.image_url] || receipt.image_url}
-                            alt={receipt.product_description || 'Receipt'}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              console.error(`Failed to load image for receipt ${receipt.id} (list view):`, receipt.image_url);
-                              console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
-                              (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
-                            }}
-                            onLoad={() => {
-                              console.log(`✓ Image loaded successfully for receipt ${receipt.id} (list view)`);
-                            }}
-                          />
+                          isPdfFile(receipt.image_url) ? (
+                            <PDFViewer
+                              url={signedUrls[receipt.image_url] || receipt.image_url}
+                              alt={receipt.product_description || 'Receipt'}
+                              className="w-full h-full"
+                            />
+                          ) : (
+                            <img
+                              src={signedUrls[receipt.image_url] || receipt.image_url}
+                              alt={receipt.product_description || 'Receipt'}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                console.error(`Failed to load image for receipt ${receipt.id} (list view):`, receipt.image_url);
+                                console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
+                                (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                              }}
+                              onLoad={() => {
+                                console.log(`✓ Image loaded successfully for receipt ${receipt.id} (list view)`);
+                              }}
+                            />
+                          )
                         ) : (
                           receipt.type === 'group' ? (
                             <Package className="h-8 w-8 text-primary" />
@@ -1066,19 +1090,29 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                   <h3 className="font-medium text-text-primary mb-3">Receipt Image</h3>
                   <div className="aspect-square bg-gradient-feature rounded-lg flex items-center justify-center overflow-hidden">
                     {selectedReceipt.image_url ? (
-                      <img
-                        src={signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url}
-                        alt={selectedReceipt.product_description || 'Receipt'}
-                        className="w-full h-full object-cover object-center"
-                        onError={(e) => {
-                          console.error(`Failed to load image for receipt ${selectedReceipt.id} (modal):`, selectedReceipt.image_url);
-                          console.error('Tried URLs:', selectedReceipt.image_url ? (signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url) : 'No image URL');
-                          (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
-                        }}
-                        onLoad={() => {
-                          console.log(`✓ Image loaded successfully for receipt ${selectedReceipt.id} (modal)`);
-                        }}
-                      />
+                      isPdfFile(selectedReceipt.image_url) ? (
+                        <div className="w-full h-full">
+                          <PDFViewer
+                            url={signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url}
+                            alt={selectedReceipt.product_description || 'Receipt'}
+                            className="w-full h-full"
+                          />
+                        </div>
+                      ) : (
+                        <img
+                          src={signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url}
+                          alt={selectedReceipt.product_description || 'Receipt'}
+                          className="w-full h-full object-cover object-center"
+                          onError={(e) => {
+                            console.error(`Failed to load image for receipt ${selectedReceipt.id} (modal):`, selectedReceipt.image_url);
+                            console.error('Tried URLs:', selectedReceipt.image_url ? (signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url) : 'No image URL');
+                            (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                          }}
+                          onLoad={() => {
+                            console.log(`✓ Image loaded successfully for receipt ${selectedReceipt.id} (modal)`);
+                          }}
+                        />
+                      )
                     ) : (
                       <img
                         src="/receipt-placeholder.svg"

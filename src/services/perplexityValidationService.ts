@@ -41,7 +41,25 @@ export class PerplexityValidationService {
   static async validateReceiptData(extractedData: ExtractedReceiptData): Promise<ValidationResult> {
     console.log('🔍 Starting Perplexity validation for extracted data...');
     
-    // Check if API key is available first
+    // Check if receipt is from Australia or New Zealand
+    const isAustralianOrNZReceipt = this.isAustralianOrNewZealandReceipt(extractedData);
+    
+    if (!isAustralianOrNZReceipt) {
+      console.log('🌏 Receipt is not from Australia or New Zealand - skipping AI validation');
+      return {
+        success: false,
+        validatedData: extractedData,
+        validationDetails: {
+          productDescription: { original: extractedData.product_description || '', validated: extractedData.product_description || '', confidence: 0, changed: false },
+          brand: { original: extractedData.brand_name || '', validated: extractedData.brand_name || '', confidence: 0, changed: false },
+          storeName: { original: extractedData.store_name || '', validated: extractedData.store_name || '', confidence: 0, changed: false },
+          warrantyPeriod: { original: extractedData.warranty_period || '1 year', validated: extractedData.warranty_period || '1 year', confidence: 0, changed: false }
+        },
+        error: 'AI Receipt validation is only available for Australian and New Zealand receipts. We will gradually launch other regions soon.'
+      };
+    }
+    
+    // Check if API key is available
     const apiKey = import.meta.env.VITE_PERPLEXITY_API_KEY;
     if (!apiKey) {
       console.warn('⚠️ Perplexity API key not configured - skipping validation');
@@ -195,14 +213,14 @@ export class PerplexityValidationService {
     }
     
     try {
-      const prompt = `Create a short, clean product name from this receipt description: "${productDescription}"
+      const prompt = `Create a short, clean product name from this Australian or New Zealand receipt description: "${productDescription}"
 
 Please:
 1. Keep the brand name and main product type
 2. Include the model number if important
 3. Remove unnecessary technical specifications and marketing text
 4. Make it concise and readable (maximum 60 characters)
-5. Use standard formatting (e.g., "Brand Model Product Type")
+5. Use standard formatting for products sold in AU/NZ markets (e.g., "Brand Model Product Type")
 
 Examples:
 - "Apple iPhone 14 Pro Max 256GB Space Black with..." → "Apple iPhone 14 Pro Max"
@@ -301,15 +319,17 @@ Return only the corrected brand name, nothing else.`;
     }
     
     try {
-      const prompt = `Validate and correct this store name from a receipt: "${storeName}"
+      const prompt = `Validate and correct this store name from an Australian or New Zealand receipt: "${storeName}"
 
 Please:
-1. Check if the store name is spelled correctly
-2. Use the official store name format
+1. Check if the store name is spelled correctly for Australian/New Zealand retailers
+2. Use the official store name format for AU/NZ stores
 3. Correct any OCR errors
-4. Return the standardized store name
+4. Return the standardized store name for Australian/New Zealand market
 
-IMPORTANT: Return ONLY the corrected store name (e.g., "Amazon Australia", "Walmart", "Target"). Do not include explanations, citations, or additional text.`;
+Examples of common AU/NZ stores: Woolworths, Coles, ALDI, Bunnings, JB Hi-Fi, Harvey Norman, The Warehouse, Countdown, New World, etc.
+
+IMPORTANT: Return ONLY the corrected store name (e.g., "Woolworths", "JB Hi-Fi", "The Warehouse"). Do not include explanations, citations, or additional text.`;
 
       const response = await this.callPerplexityAPI(prompt);
       const validated = this.extractStoreName(response.trim());
@@ -353,11 +373,14 @@ IMPORTANT: Return ONLY the corrected store name (e.g., "Amazon Australia", "Walm
     try {
       const prompt = `Validate and correct this warranty period for the product "${productDescription}": "${warrantyPeriod}"
 
-Please:
-1. Check if the warranty period is reasonable for this type of product
-2. Correct the format to be standardized (e.g., "1 year", "6 months", "90 days")
-3. Verify if this warranty period is typical for this product category
-4. If the warranty seems incorrect, provide the standard warranty for this product type
+This is for an Australian or New Zealand receipt. Please consider:
+1. Australian Consumer Law (ACL) and New Zealand Consumer Guarantees Act standards
+2. Standard manufacturer warranty periods for this product category in AU/NZ markets
+3. Check if the warranty period is reasonable for this type of product in Australia/New Zealand
+4. Correct the format to be standardized (e.g., "1 year", "6 months", "90 days")
+5. If the warranty seems incorrect, provide the typical warranty period for this product type sold in Australia/New Zealand
+
+Context: Australian Consumer Law provides additional protections beyond manufacturer warranties, and New Zealand has similar consumer guarantee provisions.
 
 IMPORTANT: Return ONLY the corrected warranty period in simple format (e.g., "3 years", "1 year", "6 months"). Do not include any explanations, citations, or additional text.`;
 
@@ -520,6 +543,68 @@ IMPORTANT: Return ONLY the corrected warranty period in simple format (e.g., "3 
     
     // Last resort: take first 50 characters
     return cleaned.substring(0, 50).trim();
+  }
+
+  /**
+   * Check if receipt is from Australia or New Zealand
+   */
+  private static isAustralianOrNewZealandReceipt(extractedData: ExtractedReceiptData): boolean {
+    // Check country field first
+    if (extractedData.country) {
+      const country = extractedData.country.trim().toUpperCase();
+      if (country === 'AU' || country === 'AUSTRALIA' || 
+          country === 'NZ' || country === 'NEW ZEALAND') {
+        return true;
+      }
+    }
+    
+    // Check store name for Australian/NZ retailers
+    const storeName = (extractedData.store_name || '').toLowerCase();
+    const australianStores = [
+      'woolworths', 'coles', 'aldi', 'iga', 'bunnings', 'kmart', 'target', 'big w',
+      'harvey norman', 'jb hi-fi', 'officeworks', 'chemist warehouse', 'priceline',
+      'myer', 'david jones', 'rebel sport', 'supercheap auto', 'bcf', 'spotlight',
+      'fantastic furniture', 'the good guys', 'dick smith', 'jaycar', 'mitre 10',
+      'masters', 'reject shop', 'cashies', 'cash converters', 'gumtree'
+    ];
+    
+    const newZealandStores = [
+      'countdown', 'new world', 'pak n save', 'four square', 'the warehouse',
+      'warehouse stationery', 'noel leeming', 'harvey norman nz', 'briscoes',
+      'farmers', 'smiths city', 'bond & bond', 'dick smith nz', 'mitre 10 mega',
+      'bunnings nz', 'trade depot', 'placemakers', 'repco', 'supercheap auto nz'
+    ];
+    
+    const allStores = [...australianStores, ...newZealandStores];
+    
+    for (const store of allStores) {
+      if (storeName.includes(store)) {
+        return true;
+      }
+    }
+    
+    // Check purchase location for Australian/NZ patterns
+    const address = (extractedData.purchase_location || '').toLowerCase();
+    const australianPatterns = [
+      'australia', 'nsw', 'vic', 'qld', 'wa', 'sa', 'tas', 'nt', 'act',
+      'sydney', 'melbourne', 'brisbane', 'perth', 'adelaide', 'hobart', 'darwin', 'canberra'
+    ];
+    
+    const newZealandPatterns = [
+      'new zealand', 'auckland', 'wellington', 'christchurch', 'hamilton', 'dunedin',
+      'tauranga', 'palmerston north', 'napier', 'nelson', 'rotorua'
+    ];
+    
+    const allPatterns = [...australianPatterns, ...newZealandPatterns];
+    
+    for (const pattern of allPatterns) {
+      if (address.includes(pattern)) {
+        return true;
+      }
+    }
+    
+    // If no clear indicators, default to false (not AU/NZ)
+    return false;
   }
 
   /**

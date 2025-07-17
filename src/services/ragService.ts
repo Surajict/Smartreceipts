@@ -162,12 +162,19 @@ export class RAGService {
    * Get system prompt based on query type
    */
   private static getSystemPrompt(queryType: 'search' | 'summary' | 'question'): string {
+    const currentDate = new Date().toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+    
     const basePrompt = `You are a helpful assistant that answers questions about receipt data. You should:
 - Only use the receipt data provided to answer questions
 - Be concise and accurate
 - If you can't answer based on the provided data, say so
 - Format monetary amounts clearly (e.g., $123.45)
-- Use bullet points or tables when appropriate`;
+- Use bullet points or tables when appropriate
+- IMPORTANT: Today's date is ${currentDate}. Use this date for all warranty calculations and time-based queries`;
 
     switch (queryType) {
       case 'summary':

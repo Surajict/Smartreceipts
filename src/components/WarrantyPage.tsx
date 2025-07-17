@@ -18,7 +18,8 @@ import {
   ChevronUp,
   SortAsc,
   SortDesc,
-  User
+  User,
+  FileText
 } from 'lucide-react';
 import { getReceiptImageSignedUrl, supabase } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
@@ -64,6 +65,35 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const location = useLocation();
   const selectedId = location.state?.id;
+
+  // Add PDF detection utility function
+  const isPdfFile = (url: string): boolean => {
+    if (!url) return false;
+    const lowerUrl = url.toLowerCase();
+    return lowerUrl.includes('.pdf') || 
+           lowerUrl.includes('application/pdf') ||
+           lowerUrl.includes('content-type=application/pdf') ||
+           lowerUrl.includes('mimetype=application/pdf');
+  };
+
+  // Add PDF viewer component
+  const PDFViewer: React.FC<{ url: string; alt: string; className?: string }> = ({ url, alt, className }) => {
+    return (
+      <div className={`bg-gradient-to-br from-red-50 to-red-100 rounded-lg flex flex-col items-center justify-center p-4 border-2 border-red-200 ${className}`}>
+        <FileText className="h-12 w-12 text-red-500 mb-2" />
+        <span className="text-sm text-gray-700 text-center font-medium mb-2">{alt}</span>
+        <span className="text-xs text-gray-600 mb-3">PDF Document</span>
+        <a 
+          href={url} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-xs bg-red-500 text-white px-3 py-1 rounded-full hover:bg-red-600 transition-colors duration-200"
+        >
+          Open PDF
+        </a>
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (user) {
@@ -667,11 +697,19 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
                       {item.imageUrl && (
                         <div className="mt-6">
                           <h4 className="font-medium text-text-primary mb-3">Receipt Image</h4>
-                          <img
-                            src={item.imageUrl}
-                            alt="Receipt"
-                            className="max-w-xs h-auto rounded-lg border border-gray-200 shadow-sm"
-                          />
+                          {isPdfFile(item.imageUrl) ? (
+                            <PDFViewer
+                              url={item.imageUrl}
+                              alt="Receipt"
+                              className="max-w-xs h-auto rounded-lg border border-gray-200 shadow-sm"
+                            />
+                          ) : (
+                            <img
+                              src={item.imageUrl}
+                              alt="Receipt"
+                              className="max-w-xs h-auto rounded-lg border border-gray-200 shadow-sm"
+                            />
+                          )}
                         </div>
                       )}
                     </div>

@@ -636,6 +636,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
               <div
                 key={result.id}
                 className="flex items-start justify-between p-4 rounded-lg border border-gray-200 hover:border-primary/30 hover:bg-gray-50 transition-all duration-200 cursor-pointer group"
+                onClick={() => {
+                  // Navigate to MyLibrary with the specific receipt ID
+                  navigate('/library', { state: { openReceiptId: result.id } });
+                }}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center space-x-3 mb-2">
@@ -676,7 +680,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                   </div>
                 </div>
                 
-                <button className="ml-4 text-text-secondary group-hover:text-primary transition-colors duration-200">
+                <button 
+                  className="ml-4 text-text-secondary group-hover:text-primary transition-colors duration-200"
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent card click event
+                    navigate('/library', { state: { openReceiptId: result.id } });
+                  }}
+                >
                   <ChevronRight className="h-5 w-5" />
                 </button>
               </div>

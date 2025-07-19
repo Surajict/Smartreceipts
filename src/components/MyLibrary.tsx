@@ -28,7 +28,8 @@ import {
   ChevronUp,
   MapPin,
   AlertCircle,
-  FileText
+  FileText,
+  Settings
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt, getUserNotifications, archiveNotification, archiveAllNotifications, cleanupDuplicateNotifications, Notification, supabase } from '../lib/supabase';
@@ -705,6 +706,18 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                 )}
               </div>
 
+              {/* Settings Button */}
+              <button
+                onClick={() => {
+                  // Navigate to profile settings - for now using onBackToDashboard as placeholder
+                  onBackToDashboard();
+                }}
+                className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                title="Settings"
+              >
+                <Settings className="h-6 w-6" />
+              </button>
+
               {/* Back Button */}
               <button
                 onClick={onBackToDashboard}
@@ -746,6 +759,17 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                       </p>
                       <p className="text-xs text-text-secondary">{user?.email}</p>
                     </div>
+                    <button
+                      onClick={() => {
+                        // Navigate to profile settings - for now using onBackToDashboard as placeholder
+                        onBackToDashboard();
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <User className="h-4 w-4" />
+                      <span>Profile Settings</span>
+                    </button>
                     <button
                       onClick={onBackToDashboard}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"

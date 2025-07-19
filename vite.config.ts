@@ -9,6 +9,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      includeAssets: ['favicon.svg', 'Smart Receipt Logo.png'],
       manifest: {
         name: 'Smart Receipts',
         short_name: 'Receipts',
@@ -38,6 +39,10 @@ export default defineConfig({
           }
         ]
       },
+      // Enable push notifications in service worker
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,jpg,jpeg,woff2}'],
         runtimeCaching: [

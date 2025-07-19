@@ -30,6 +30,7 @@ import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { useNavigate } from 'react-router-dom';
 import Footer from './Footer';
+import PushNotificationSetup from './PushNotificationSetup';
 
 interface DashboardProps {
   onSignOut: () => void;
@@ -862,6 +863,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           if (!alreadyExists && !wasDismissed) {
             const message = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days.`;
             await createNotification(user.id, 'warranty_alert', message);
+            
+            // Also send push notification for Android notification center
+            try {
+              const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push-notification`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  userId: user.id,
+                  title: 'Warranty Alert - Smart Receipts',
+                  body: message,
+                  data: { 
+                    type: 'warranty_alert', 
+                    receiptId: alert.id,
+                    url: '/warranty'
+                  }
+                })
+              });
+              
+              if (!response.ok) {
+                console.warn('Failed to send push notification:', await response.text());
+              }
+            } catch (error) {
+              console.error('Error sending push notification:', error);
+            }
           }
         }
         
@@ -1045,6 +1073,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             Ready to manage your receipts and warranties smartly?
           </p>
         </div>
+
+        {/* Push Notification Setup */}
+        <PushNotificationSetup onSetupComplete={(enabled) => {
+          console.log('Push notifications:', enabled ? 'enabled' : 'disabled');
+        }} />
 
         {/* Quick Access Tiles */}
         <div className="grid md:grid-cols-3 gap-6 mb-12">

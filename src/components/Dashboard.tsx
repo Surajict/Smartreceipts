@@ -23,12 +23,14 @@ import {
   Lightbulb,
   Package
 } from 'lucide-react';
-import { signOut, getCurrentUser, supabase, getUserReceipts, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
+import { signOut, supabase, getUserReceipts, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
+import { useUser } from '../contexts/UserContext';
 import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { useNavigate } from 'react-router-dom';
 import Footer from './Footer';
+import PushNotificationSetup from './PushNotificationSetup';
 
 interface DashboardProps {
   onSignOut: () => void;
@@ -86,8 +88,7 @@ interface RAGResult {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning, onShowProfile, onShowLibrary, onShowWarranty }) => {
-  const [user, setUser] = useState<any>(null);
-  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const { user, profilePicture } = useUser();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [alertsCount, setAlertsCount] = useState(0);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -116,35 +117,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const navigate = useNavigate();
 
   useEffect(() => {
-    const loadUser = async () => {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-      
-      // Load profile picture if exists
-      if (currentUser?.user_metadata?.avatar_url) {
-        try {
-          const { data, error } = await supabase.storage
-            .from('profile-pictures')
-            .createSignedUrl(currentUser.user_metadata.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
-          if (error) {
-            console.error('Error creating signed URL:', error);
-          } else if (data?.signedUrl) {
-            setProfilePicture(data.signedUrl);
-          }
-        } catch (error) {
-          console.error('Error loading profile picture:', error);
-        }
-      }
+    // Load actual data from database when user is available
+    if (user) {
+      loadDashboardData(user.id);
+      loadEmbeddingStatus(user.id);
+      loadNotifications(user.id);
+    }
+  }, [user]);
 
-      // Load actual data from database
-      if (currentUser) {
-        await loadDashboardData(currentUser.id);
-        await loadEmbeddingStatus(currentUser.id);
-        await loadNotifications(currentUser.id); // Load notifications on user load
-      }
-    };
-    loadUser();
-
+  useEffect(() => {
     // Update time every minute
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -394,18 +375,29 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       return new Date('2099-12-31');
     }
     
+    // Extract years
     const years = period.match(/(\d+)\s*year/);
-    const months = period.match(/(\d+)\s*month/);
-    
     if (years) {
       purchase.setFullYear(purchase.getFullYear() + parseInt(years[1]));
-    } else if (months) {
-      purchase.setMonth(purchase.getMonth() + parseInt(months[1]));
-    } else {
-      // Default to 1 year if no specific period found
-      purchase.setFullYear(purchase.getFullYear() + 1);
+      return purchase;
     }
     
+    // Extract months
+    const months = period.match(/(\d+)\s*month/);
+    if (months) {
+      purchase.setMonth(purchase.getMonth() + parseInt(months[1]));
+      return purchase;
+    }
+    
+    // Extract days (THIS WAS MISSING!)
+    const days = period.match(/(\d+)\s*day/);
+    if (days) {
+      purchase.setDate(purchase.getDate() + parseInt(days[1]));
+      return purchase;
+    }
+    
+    // Default to 1 year if no specific period found
+    purchase.setFullYear(purchase.getFullYear() + 1);
     return purchase;
   };
 
@@ -542,6 +534,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
   // Fallback local search
   const performLocalSearch = async (query: string) => {
+    if (!user) return;
     try {
       const { data: receipts, error } = await supabase
         .from('receipts')
@@ -644,6 +637,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
               <div
                 key={result.id}
                 className="flex items-start justify-between p-4 rounded-lg border border-gray-200 hover:border-primary/30 hover:bg-gray-50 transition-all duration-200 cursor-pointer group"
+                onClick={() => {
+                  // Navigate to MyLibrary with the specific receipt ID
+                  navigate('/library', { state: { openReceiptId: result.id } });
+                }}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center space-x-3 mb-2">
@@ -684,7 +681,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                   </div>
                 </div>
                 
-                <button className="ml-4 text-text-secondary group-hover:text-primary transition-colors duration-200">
+                <button 
+                  className="ml-4 text-text-secondary group-hover:text-primary transition-colors duration-200"
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent card click event
+                    navigate('/library', { state: { openReceiptId: result.id } });
+                  }}
+                >
                   <ChevronRight className="h-5 w-5" />
                 </button>
               </div>
@@ -706,7 +709,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </p>
           <div className="text-sm text-text-secondary space-y-1 max-w-sm mx-auto">
             <p>• "How much did I spend on electronics?"</p>
-            <p>• "Show me all Apple receipts from 2023"</p>
+            <p>• "Show me all Apple receipts from 2024"</p>
             <p>• "What warranties expire soon?"</p>
           </div>
         </div>
@@ -860,6 +863,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           if (!alreadyExists && !wasDismissed) {
             const message = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days.`;
             await createNotification(user.id, 'warranty_alert', message);
+            
+            // Also send push notification for Android notification center
+            try {
+              const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push-notification`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  userId: user.id,
+                  title: 'Warranty Alert - Smart Receipts',
+                  body: message,
+                  data: { 
+                    type: 'warranty_alert', 
+                    receiptId: alert.id,
+                    url: '/warranty'
+                  }
+                })
+              });
+              
+              if (!response.ok) {
+                console.warn('Failed to send push notification:', await response.text());
+              }
+            } catch (error) {
+              console.error('Error sending push notification:', error);
+            }
           }
         }
         
@@ -964,6 +994,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                 )}
               </div>
 
+              {/* Settings Button */}
+              <button
+                onClick={() => {
+                  onShowProfile();
+                }}
+                className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                title="Settings"
+              >
+                <Settings className="h-6 w-6" />
+              </button>
+
               {/* User Menu */}
               <div className="relative">
                 <button
@@ -976,7 +1017,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                         src={profilePicture}
                         alt="Profile"
                         className="w-full h-full object-cover"
-                        onError={() => setProfilePicture(null)}
+                        onError={() => {}}
                       />
                     ) : (
                       <User className="h-4 w-4 text-white" />
@@ -1033,6 +1074,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </p>
         </div>
 
+        {/* Push Notification Setup */}
+        <PushNotificationSetup onSetupComplete={(enabled) => {
+          console.log('Push notifications:', enabled ? 'enabled' : 'disabled');
+        }} />
+
         {/* Quick Access Tiles */}
         <div className="grid md:grid-cols-3 gap-6 mb-12">
           <button 
@@ -1062,15 +1108,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </button>
 
           <button 
-            onClick={onShowProfile}
-            className="group bg-gradient-to-br from-accent-yellow to-yellow-500 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+            onClick={onShowWarranty}
+            className="group bg-gradient-to-br from-red-500 to-orange-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
           >
             <div className="flex flex-col items-center text-center">
               <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
-                <Settings className="h-8 w-8" />
+                <Shield className="h-8 w-8" />
               </div>
-              <h3 className="text-xl font-bold mb-2">Settings</h3>
-              <p className="text-white/90">Manage your profile and preferences</p>
+              <h3 className="text-xl font-bold mb-2">Warranty Manager</h3>
+              <p className="text-white/90">Track and manage your product warranties</p>
             </div>
           </button>
         </div>

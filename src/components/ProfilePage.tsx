@@ -23,7 +23,8 @@ import {
   Trash2,
   RefreshCw
 } from 'lucide-react';
-import { getCurrentUser, supabase, signOut } from '../lib/supabase';
+import { supabase, signOut } from '../lib/supabase';
+import { useUser } from '../contexts/UserContext';
 import NotificationDropdown from './NotificationDropdown';
 
 interface ProfilePageProps {
@@ -52,8 +53,7 @@ interface PrivacySettings {
 }
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const { user, profilePicture, refreshUser, updateProfilePicture } = useUser();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
@@ -92,49 +92,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    loadUserProfile();
-    loadUserSettings();
-  }, []);
-
-  const loadUserProfile = async () => {
-    try {
-      const currentUser = await getCurrentUser();
-      if (currentUser) {
-        const userProfile: UserProfile = {
-          id: currentUser.id,
-          email: currentUser.email || '',
-          full_name: currentUser.user_metadata?.full_name || '',
-          avatar_url: currentUser.user_metadata?.avatar_url,
-          created_at: currentUser.created_at || ''
-        };
-        
-        setUser(userProfile);
-        setEditedName(userProfile.full_name);
-        setNewEmail(userProfile.email);
-        
-        // Load profile picture if exists
-        if (userProfile.avatar_url) {
-          try {
-            const { data, error } = await supabase.storage
-              .from('profile-pictures')
-              .createSignedUrl(userProfile.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
-            
-            if (error) {
-              console.error('Error creating signed URL:', error);
-            } else if (data?.signedUrl) {
-              setProfilePicture(data.signedUrl);
-            }
-          } catch (error) {
-            console.error('Error loading profile picture:', error);
-          }
-        }
+    if (user) {
+      setEditedName(user.full_name);
+      setNewEmail(user.email);
+      
+      if (user.id) {
+        console.log('User ID available, loading settings:', user.id);
+        loadUserSettings();
       }
-    } catch (error) {
-      console.error('Error loading user profile:', error);
     }
-  };
+  }, [user]);
 
   const loadUserSettings = async () => {
+    if (!user?.id) return;
+    console.log('Loading user settings for ID:', user.id);
+
     try {
       setIsLoadingSettings(true);
       
@@ -142,13 +114,17 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       const { data: notificationData, error: notificationError } = await supabase
         .from('user_notification_settings')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .single();
 
       if (notificationError && notificationError.code !== 'PGRST116') {
         console.error('Error loading notification settings:', notificationError);
+      } else if (notificationData) {
+        console.log('Notification settings loaded successfully');
+        setNotificationSettings(notificationData);
       } else {
-        setNotificationSettings(notificationData || {
+        console.log('No notification settings found, using defaults');
+        setNotificationSettings({
           warranty_alerts: true,
           auto_system_update: true,
           marketing_notifications: false
@@ -159,13 +135,17 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       const { data: privacyData, error: privacyError } = await supabase
         .from('user_privacy_settings')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .single();
 
       if (privacyError && privacyError.code !== 'PGRST116') {
         console.error('Error loading privacy settings:', privacyError);
+      } else if (privacyData) {
+        console.log('Privacy settings loaded successfully');
+        setPrivacySettings(privacyData);
       } else {
-        setPrivacySettings(privacyData || {
+        console.log('No privacy settings found, using defaults');
+        setPrivacySettings({
           data_collection: true,
           data_analysis: 'allowed',
           biometric_login: false,
@@ -251,10 +231,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       }
 
       // Update the profile picture display
-      setProfilePicture(urlData.signedUrl);
+      updateProfilePicture(urlData.signedUrl);
       
       // Reload user profile to ensure consistency
-      await loadUserProfile();
+      await refreshUser();
       
       setUploadSuccess(true);
       setTimeout(() => setUploadSuccess(false), 3000);
@@ -279,8 +259,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
 
       if (error) throw error;
 
-      // Update local state
-      setUser(prev => prev ? { ...prev, full_name: editedName.trim() } : null);
+      // Refresh user data to get updated info
+      await refreshUser();
       setIsEditing(false);
     } catch (error: any) {
       console.error('Error updating name:', error);
@@ -333,8 +313,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       setIsEditingEmail(false);
       setCurrentPassword('');
       
-      // Update local state
-      setUser(prev => prev ? { ...prev, email: newEmail } : null);
+      // Refresh user data to get updated info
+      await refreshUser();
       
       // Clear success message after 5 seconds
       setTimeout(() => setEmailUpdateSuccess(false), 5000);
@@ -467,7 +447,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
                         src={profilePicture}
                         alt="Profile"
                         className="w-full h-full object-cover"
-                        onError={() => setProfilePicture(null)}
+                        onError={() => updateProfilePicture('')}
                       />
                     ) : (
                       <User className="h-4 w-4 text-white" />

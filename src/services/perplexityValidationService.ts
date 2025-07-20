@@ -35,13 +35,31 @@ export interface ValidationResult {
 export class PerplexityValidationService {
   private static readonly PERPLEXITY_API_URL = 'https://api.perplexity.ai/chat/completions';
   
-  /**
+    /**
    * Validate extracted receipt data using Perplexity AI
    */
   static async validateReceiptData(extractedData: ExtractedReceiptData): Promise<ValidationResult> {
     console.log('🔍 Starting Perplexity validation for extracted data...');
     
-    // Check if API key is available first
+    // Check if receipt is from Australia or New Zealand
+    const isAustralianOrNZReceipt = this.isAustralianOrNewZealandReceipt(extractedData);
+    
+    if (!isAustralianOrNZReceipt) {
+      console.log('🌏 Receipt is not from Australia or New Zealand - skipping AI validation');
+      return {
+        success: false,
+        validatedData: extractedData,
+        validationDetails: {
+          productDescription: { original: extractedData.product_description || '', validated: extractedData.product_description || '', confidence: 0, changed: false },
+          brand: { original: extractedData.brand_name || '', validated: extractedData.brand_name || '', confidence: 0, changed: false },
+          storeName: { original: extractedData.store_name || '', validated: extractedData.store_name || '', confidence: 0, changed: false },
+          warrantyPeriod: { original: extractedData.warranty_period || '1 year', validated: extractedData.warranty_period || '1 year', confidence: 0, changed: false }
+        },
+        error: 'AI Receipt validation is only available for Australian and New Zealand receipts. We will gradually launch other regions soon.'
+      };
+    }
+    
+    // Check if API key is available
     const apiKey = import.meta.env.VITE_PERPLEXITY_API_KEY;
     if (!apiKey) {
       console.warn('⚠️ Perplexity API key not configured - skipping validation');
@@ -52,101 +70,126 @@ export class PerplexityValidationService {
           productDescription: { original: extractedData.product_description || '', validated: extractedData.product_description || '', confidence: 0, changed: false },
           brand: { original: extractedData.brand_name || '', validated: extractedData.brand_name || '', confidence: 0, changed: false },
           storeName: { original: extractedData.store_name || '', validated: extractedData.store_name || '', confidence: 0, changed: false },
-          warrantyPeriod: { original: extractedData.warranty_period || '', validated: extractedData.warranty_period || '', confidence: 0, changed: false }
+          warrantyPeriod: { original: extractedData.warranty_period || '1 year', validated: extractedData.warranty_period || '1 year', confidence: 0, changed: false }
         },
         error: 'Perplexity API key not configured. Please add VITE_PERPLEXITY_API_KEY to your .env.local file'
       };
     }
     
     try {
-      console.log('📋 Validating fields:', {
-        product: extractedData.product_description,
-        brand: extractedData.brand_name,
-        store: extractedData.store_name,
-        warranty: extractedData.warranty_period
-      });
-      
-      // Prepare validation requests for each field
-      const validationPromises = [
-        this.validateProductDescription(extractedData.product_description || ''),
-        this.validateBrand(extractedData.brand_name || ''),
-        this.validateStoreName(extractedData.store_name || ''),
-        this.validateWarrantyPeriod(extractedData.warranty_period || '', extractedData.product_description || '')
-      ];
-      
-      // Execute all validations in parallel
-      console.log('⏳ Running validation requests in parallel...');
-      const [productResult, brandResult, storeResult, warrantyResult] = await Promise.all(validationPromises);
-      
-      console.log('📊 Validation results:', {
-        product: productResult,
-        brand: brandResult,
-        store: storeResult,
-        warranty: warrantyResult
-      });
-      
-      // Create validated data object
-      const validatedData: ExtractedReceiptData = {
-        ...extractedData,
-        product_description: productResult.validated,
-        brand_name: brandResult.validated,
-        store_name: storeResult.validated,
-        warranty_period: warrantyResult.validated,
-        country: this.expandCountryCode(extractedData.country)
-      };
-      
-      // If this is a multi-product receipt, validate each product
+      // Check if this is a single product or multi-product receipt
       if (extractedData.products && extractedData.products.length > 0) {
-        console.log('🔄 Validating multi-product receipt...');
+        // Multi-product receipt - validate each product's warranty individually
+        console.log('📋 Validating multi-product receipt fields:', {
+          store: extractedData.store_name,
+          products: extractedData.products.length
+        });
+        
+        // Validate store name
+        const storeResult = await this.validateStoreName(extractedData.store_name || '');
+        
+        // Validate each product individually
         const validatedProducts = await Promise.all(
           extractedData.products.map(async (product, index) => {
-            console.log(`Validating product ${index + 1}:`, product.product_description);
-            const [prodResult, brandResult, warrantyResult] = await Promise.all([
+            console.log(`🔍 Validating product ${index + 1}:`, product.product_description);
+            
+            const [productResult, brandResult, warrantyResult] = await Promise.all([
               this.validateProductDescription(product.product_description || ''),
               this.validateBrand(product.brand_name || ''),
-              this.validateWarrantyPeriod(product.warranty_period || '', product.product_description || '')
+              this.validateWarrantyPeriod(product.warranty_period || '1 year', product.product_description || '')
             ]);
             
             return {
               ...product,
-              product_description: prodResult.validated,
+              product_description: productResult.validated,
               brand_name: brandResult.validated,
               warranty_period: warrantyResult.validated
             };
           })
         );
         
-        validatedData.products = validatedProducts;
+        // Create validated data object for multi-product
+        const validatedData: ExtractedReceiptData = {
+          ...extractedData,
+          store_name: storeResult.validated,
+          country: this.expandCountryCode(extractedData.country),
+          products: validatedProducts
+        };
+        
+        console.log('✅ Multi-product validation completed');
+        return {
+          success: true,
+          validatedData,
+          validationDetails: {
+            productDescription: { original: 'Multi-product', validated: 'Multi-product', confidence: 100, changed: false },
+            brand: { original: 'Multiple brands', validated: 'Multiple brands', confidence: 100, changed: false },
+            storeName: storeResult,
+            warrantyPeriod: { original: 'Individual warranties', validated: 'Individual warranties', confidence: 100, changed: false }
+          }
+        };
+      } else {
+        // Single product receipt - validate as before
+        console.log('📋 Validating single product fields:', {
+          product: extractedData.product_description,
+          brand: extractedData.brand_name,
+          store: extractedData.store_name,
+          warranty: extractedData.warranty_period || '1 year'
+        });
+        
+        // Prepare validation requests for each field
+        const validationPromises = [
+          this.validateProductDescription(extractedData.product_description || ''),
+          this.validateBrand(extractedData.brand_name || ''),
+          this.validateStoreName(extractedData.store_name || ''),
+          this.validateWarrantyPeriod(extractedData.warranty_period || '1 year', extractedData.product_description || '')
+        ];
+        
+        // Execute all validations in parallel
+        console.log('⏳ Running validation requests in parallel...');
+        const [productResult, brandResult, storeResult, warrantyResult] = await Promise.all(validationPromises);
+        
+        console.log('📊 Validation results:', {
+          product: productResult,
+          brand: brandResult,
+          store: storeResult,
+          warranty: warrantyResult
+        });
+        
+        // Create validated data object for single product
+        const validatedData: ExtractedReceiptData = {
+          ...extractedData,
+          product_description: productResult.validated,
+          brand_name: brandResult.validated,
+          store_name: storeResult.validated,
+          warranty_period: warrantyResult.validated,
+          country: this.expandCountryCode(extractedData.country)
+        };
+
+        // Return validation result for single product
+        return {
+          success: true,
+          validatedData,
+          validationDetails: {
+            productDescription: productResult,
+            brand: brandResult,
+            storeName: storeResult,
+            warrantyPeriod: warrantyResult
+          }
+        };
       }
       
-      const validationDetails = {
-        productDescription: productResult,
-        brand: brandResult,
-        storeName: storeResult,
-        warrantyPeriod: warrantyResult
-      };
-      
-      console.log('✅ Perplexity validation completed successfully');
-      
-      return {
-        success: true,
-        validatedData,
-        validationDetails
-      };
-      
-    } catch (error) {
-      console.error('❌ Perplexity validation failed:', error);
-      
+    } catch (error: any) {
+      console.error('💥 Perplexity validation error:', error);
       return {
         success: false,
-        validatedData: extractedData, // Return original data on error
+        validatedData: extractedData,
         validationDetails: {
           productDescription: { original: extractedData.product_description || '', validated: extractedData.product_description || '', confidence: 0, changed: false },
           brand: { original: extractedData.brand_name || '', validated: extractedData.brand_name || '', confidence: 0, changed: false },
           storeName: { original: extractedData.store_name || '', validated: extractedData.store_name || '', confidence: 0, changed: false },
-          warrantyPeriod: { original: extractedData.warranty_period || '', validated: extractedData.warranty_period || '', confidence: 0, changed: false }
+          warrantyPeriod: { original: extractedData.warranty_period || '1 year', validated: extractedData.warranty_period || '1 year', confidence: 0, changed: false }
         },
-        error: error instanceof Error ? error.message : 'Unknown validation error'
+        error: error.message || 'Unknown validation error'
       };
     }
   }
@@ -170,14 +213,14 @@ export class PerplexityValidationService {
     }
     
     try {
-      const prompt = `Create a short, clean product name from this receipt description: "${productDescription}"
+      const prompt = `Create a short, clean product name from this Australian or New Zealand receipt description: "${productDescription}"
 
 Please:
 1. Keep the brand name and main product type
 2. Include the model number if important
 3. Remove unnecessary technical specifications and marketing text
 4. Make it concise and readable (maximum 60 characters)
-5. Use standard formatting (e.g., "Brand Model Product Type")
+5. Use standard formatting for products sold in AU/NZ markets (e.g., "Brand Model Product Type")
 
 Examples:
 - "Apple iPhone 14 Pro Max 256GB Space Black with..." → "Apple iPhone 14 Pro Max"
@@ -237,7 +280,7 @@ Please:
 Return only the corrected brand name, nothing else.`;
 
       const response = await this.callPerplexityAPI(prompt);
-      const validated = response.trim();
+      const validated = this.extractBrandName(response.trim());
       
       return {
         original: brandName,
@@ -276,15 +319,17 @@ Return only the corrected brand name, nothing else.`;
     }
     
     try {
-      const prompt = `Validate and correct this store name from a receipt: "${storeName}"
+      const prompt = `Validate and correct this store name from an Australian or New Zealand receipt: "${storeName}"
 
 Please:
-1. Check if the store name is spelled correctly
-2. Use the official store name format
+1. Check if the store name is spelled correctly for Australian/New Zealand retailers
+2. Use the official store name format for AU/NZ stores
 3. Correct any OCR errors
-4. Return the standardized store name
+4. Return the standardized store name for Australian/New Zealand market
 
-IMPORTANT: Return ONLY the corrected store name (e.g., "Amazon Australia", "Walmart", "Target"). Do not include explanations, citations, or additional text.`;
+Examples of common AU/NZ stores: Woolworths, Coles, ALDI, Bunnings, JB Hi-Fi, Harvey Norman, The Warehouse, Countdown, New World, etc.
+
+IMPORTANT: Return ONLY the corrected store name (e.g., "Woolworths", "JB Hi-Fi", "The Warehouse"). Do not include explanations, citations, or additional text.`;
 
       const response = await this.callPerplexityAPI(prompt);
       const validated = this.extractStoreName(response.trim());
@@ -328,11 +373,14 @@ IMPORTANT: Return ONLY the corrected store name (e.g., "Amazon Australia", "Walm
     try {
       const prompt = `Validate and correct this warranty period for the product "${productDescription}": "${warrantyPeriod}"
 
-Please:
-1. Check if the warranty period is reasonable for this type of product
-2. Correct the format to be standardized (e.g., "1 year", "6 months", "90 days")
-3. Verify if this warranty period is typical for this product category
-4. If the warranty seems incorrect, provide the standard warranty for this product type
+This is for an Australian or New Zealand receipt. Please consider:
+1. Australian Consumer Law (ACL) and New Zealand Consumer Guarantees Act standards
+2. Standard manufacturer warranty periods for this product category in AU/NZ markets
+3. Check if the warranty period is reasonable for this type of product in Australia/New Zealand
+4. Correct the format to be standardized (e.g., "1 year", "6 months", "90 days")
+5. If the warranty seems incorrect, provide the typical warranty period for this product type sold in Australia/New Zealand
+
+Context: Australian Consumer Law provides additional protections beyond manufacturer warranties, and New Zealand has similar consumer guarantee provisions.
 
 IMPORTANT: Return ONLY the corrected warranty period in simple format (e.g., "3 years", "1 year", "6 months"). Do not include any explanations, citations, or additional text.`;
 
@@ -495,6 +543,127 @@ IMPORTANT: Return ONLY the corrected warranty period in simple format (e.g., "3 
     
     // Last resort: take first 50 characters
     return cleaned.substring(0, 50).trim();
+  }
+
+  /**
+   * Extract clean brand name from potentially verbose response
+   */
+  private static extractBrandName(response: string): string {
+    // Remove citations like [1], [2], etc.
+    let cleaned = response.replace(/\[[\d,\s]+\]/g, '').trim();
+    
+    // Look for patterns that indicate the final answer
+    const patterns = [
+      // Look for "standardized brand name is:" followed by the answer
+      /standardized\s+brand\s+name\s+is:\s*\*?\*?([^*\n]+)\*?\*?/i,
+      // Look for "commonly referred to as" followed by the answer
+      /commonly\s+referred\s+to\s+as\s*\*?\*?([^*\n]+)\*?\*?/i,
+      // Look for "Therefore, the corrected" followed by the answer
+      /Therefore,\s+the\s+corrected[^:]*:\s*\*?\*?([^*\n]+)\*?\*?/i,
+      // Look for text in **bold** formatting (most common pattern)
+      /\*\*([^*]+)\*\*/,
+      // Look for "should be:" followed by the answer
+      /should be:\s*\*?\*?([^*\n]+)\*?\*?/i,
+      // Look for the last line that doesn't contain explanatory text
+      /^([A-Za-z0-9\s&.-]+)$/m
+    ];
+    
+    for (const pattern of patterns) {
+      const match = cleaned.match(pattern);
+      if (match && match[1]) {
+        const extracted = match[1].trim();
+        // Make sure it's a reasonable brand name (not too long and doesn't contain explanatory text)
+        if (extracted.length <= 50 && 
+            !extracted.includes('format') && 
+            !extracted.includes('standardized') &&
+            !extracted.includes('corrected') &&
+            !extracted.includes('However') &&
+            !extracted.includes('Therefore') &&
+            !extracted.includes('commonly')) {
+          return extracted;
+        }
+      }
+    }
+    
+    // If no pattern matches, try to get the first reasonable line
+    const lines = cleaned.split('\n').filter(line => line.trim());
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.length <= 50 && 
+          !trimmed.includes('not the official') && 
+          !trimmed.includes('format') &&
+          !trimmed.includes('Therefore') &&
+          !trimmed.includes('However') &&
+          !trimmed.includes('commonly') &&
+          !trimmed.includes('corrected')) {
+        return trimmed;
+      }
+    }
+    
+    // Last resort: take first 50 characters
+    return cleaned.substring(0, 50).trim();
+  }
+
+  /**
+   * Check if receipt is from Australia or New Zealand
+   */
+  private static isAustralianOrNewZealandReceipt(extractedData: ExtractedReceiptData): boolean {
+    // Check country field first
+    if (extractedData.country) {
+      const country = extractedData.country.trim().toUpperCase();
+      if (country === 'AU' || country === 'AUSTRALIA' || 
+          country === 'NZ' || country === 'NEW ZEALAND') {
+        return true;
+      }
+    }
+    
+    // Check store name for Australian/NZ retailers
+    const storeName = (extractedData.store_name || '').toLowerCase();
+    const australianStores = [
+      'woolworths', 'coles', 'aldi', 'iga', 'bunnings', 'kmart', 'target', 'big w',
+      'harvey norman', 'jb hi-fi', 'officeworks', 'chemist warehouse', 'priceline',
+      'myer', 'david jones', 'rebel sport', 'supercheap auto', 'bcf', 'spotlight',
+      'fantastic furniture', 'the good guys', 'dick smith', 'jaycar', 'mitre 10',
+      'masters', 'reject shop', 'cashies', 'cash converters', 'gumtree'
+    ];
+    
+    const newZealandStores = [
+      'countdown', 'new world', 'pak n save', 'four square', 'the warehouse',
+      'warehouse stationery', 'noel leeming', 'harvey norman nz', 'briscoes',
+      'farmers', 'smiths city', 'bond & bond', 'dick smith nz', 'mitre 10 mega',
+      'bunnings nz', 'trade depot', 'placemakers', 'repco', 'supercheap auto nz'
+    ];
+    
+    const allStores = [...australianStores, ...newZealandStores];
+    
+    for (const store of allStores) {
+      if (storeName.includes(store)) {
+        return true;
+      }
+    }
+    
+    // Check purchase location for Australian/NZ patterns
+    const address = (extractedData.purchase_location || '').toLowerCase();
+    const australianPatterns = [
+      'australia', 'nsw', 'vic', 'qld', 'wa', 'sa', 'tas', 'nt', 'act',
+      'sydney', 'melbourne', 'brisbane', 'perth', 'adelaide', 'hobart', 'darwin', 'canberra'
+    ];
+    
+    const newZealandPatterns = [
+      'new zealand', 'auckland', 'wellington', 'christchurch', 'hamilton', 'dunedin',
+      'tauranga', 'palmerston north', 'napier', 'nelson', 'rotorua'
+    ];
+    
+    const allPatterns = [...australianPatterns, ...newZealandPatterns];
+    
+    for (const pattern of allPatterns) {
+      if (address.includes(pattern)) {
+        return true;
+      }
+    }
+    
+    // If no clear indicators, default to false (not AU/NZ)
+    return false;
   }
 
   /**

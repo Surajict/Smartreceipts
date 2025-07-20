@@ -15,11 +15,23 @@ import ReceiptScanning from './components/ReceiptScanning';
 import ProfilePage from './components/ProfilePage';
 import MyLibrary from './components/MyLibrary';
 import WarrantyPage from './components/WarrantyPage';
-import VideoDemo from './components/VideoDemo';
-import { getCurrentUser, onAuthStateChange } from './lib/supabase';
+import { UserProvider, useUser } from './contexts/UserContext';
 
 // Protected Route Component
-const ProtectedRoute = ({ children, user }: { children: React.ReactNode; user: any }) => {
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, isLoading } = useUser();
+  
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-text-secondary">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
   if (!user) {
     return <Navigate to="/login" replace />;
   }
@@ -48,7 +60,8 @@ const HomePage = () => {
 };
 
 // Login Page Component
-const LoginPage = ({ user }: { user: any }) => {
+const LoginPage = () => {
+  const { user } = useUser();
   const navigate = useNavigate();
   const handleBackToHome = () => navigate('/');
   const handleShowSignUp = () => navigate('/signup');
@@ -59,7 +72,8 @@ const LoginPage = ({ user }: { user: any }) => {
 };
 
 // SignUp Page Component
-const SignUpPage = ({ user }: { user: any }) => {
+const SignUpPage = () => {
+  const { user } = useUser();
   const navigate = useNavigate();
   const handleBackToHome = () => navigate('/');
   const handleShowLogin = () => navigate('/login');
@@ -70,15 +84,16 @@ const SignUpPage = ({ user }: { user: any }) => {
 };
 
 // Dashboard Page Component
-const DashboardPage = ({ user, onSignOut }: { user: any; onSignOut: () => void }) => {
+const DashboardPage = () => {
   const navigate = useNavigate();
   const handleShowReceiptScanning = () => navigate('/scan');
   const handleShowProfile = () => navigate('/profile');
   const handleShowLibrary = () => navigate('/library');
   const handleShowWarranty = () => navigate('/warranty');
+  const handleSignOut = () => navigate('/');
   return (
     <Dashboard
-      onSignOut={onSignOut}
+      onSignOut={handleSignOut}
       onShowReceiptScanning={handleShowReceiptScanning}
       onShowProfile={handleShowProfile}
       onShowLibrary={handleShowLibrary}
@@ -117,112 +132,62 @@ const WarrantyPageComponent = () => {
 };
 
 function App() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Check for existing session on app load
-    const checkUser = async () => {
-      try {
-        const currentUser = await getCurrentUser();
-        if (currentUser) {
-          setUser(currentUser);
-        }
-      } catch (error) {
-        console.error('Error checking user:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkUser();
-
-    // Listen for auth state changes
-    const { data: { subscription } } = onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        setUser(session.user);
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-      }
-    });
-
-    return () => {
-      subscription?.unsubscribe();
-    };
-  }, []);
-
-  const handleSignOut = () => {
-    setUser(null);
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-text-secondary">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <Router>
-      <Routes>
-        {/* Public Routes */}
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<LoginPage user={user} />} />
-        <Route path="/signup" element={<SignUpPage user={user} />} />
+    <UserProvider>
+      <Router>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignUpPage />} />
 
-        {/* Video Demo Route */}
-        <Route path="/video" element={<VideoDemo />} />
+          {/* Protected Routes */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/scan"
+            element={
+              <ProtectedRoute>
+                <ReceiptScanningPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <ProfilePageComponent />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/library"
+            element={
+              <ProtectedRoute>
+                <LibraryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/warranty"
+            element={
+              <ProtectedRoute>
+                <WarrantyPageComponent />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Protected Routes */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute user={user}>
-              <DashboardPage user={user} onSignOut={handleSignOut} />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/scan"
-          element={
-            <ProtectedRoute user={user}>
-              <ReceiptScanningPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute user={user}>
-              <ProfilePageComponent />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/library"
-          element={
-            <ProtectedRoute user={user}>
-              <LibraryPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/warranty"
-          element={
-            <ProtectedRoute user={user}>
-              <WarrantyPageComponent />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Catch all route - redirect to home */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
+          {/* Catch all route - redirect to home */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Router>
+    </UserProvider>
   );
 }
 

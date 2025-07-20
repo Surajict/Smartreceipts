@@ -23,11 +23,14 @@ import {
   Maximize2,
   Settings
 } from 'lucide-react';
-import { getCurrentUser, signOut, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT, supabase } from '../lib/supabase';
+import { signOut, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT, supabase } from '../lib/supabase';
+import { useUser } from '../contexts/UserContext';
 import { OCRService, OCREngine } from '../services/ocrService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { ExtractedReceiptData } from '../types/receipt';
 import { PerplexityValidationService, ValidationResult } from '../services/perplexityValidationService';
+import { DuplicateDetectionService, DuplicateMatch } from '../services/duplicateDetectionService';
+import DuplicateWarningModal from './DuplicateWarningModal';
 import NotificationDropdown from './NotificationDropdown';
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
@@ -47,8 +50,7 @@ type CaptureMode = 'normal' | 'long';
 type InputMode = 'capture' | 'upload' | 'manual';
 
 const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) => {
-  const [user, setUser] = useState<any>(null);
-  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const { user, profilePicture } = useUser();
   const [inputMode, setInputMode] = useState<InputMode>('capture');
   const [captureMode, setCaptureMode] = useState<CaptureMode>('normal');
   const [showCamera, setShowCamera] = useState(false);
@@ -67,6 +69,18 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const [showExtractedForm, setShowExtractedForm] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   
+  // Duplicate detection states
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatch[]>([]);
+  const [duplicateConfidence, setDuplicateConfidence] = useState(0);
+  const [pendingSaveData, setPendingSaveData] = useState<{
+    extractedData: ExtractedData;
+    imageUrl: string;
+    processingMethod: string;
+    ocrConfidence?: number;
+    extractedText?: string;
+  } | null>(null);
+  
   // OCR Engine - Always uses Google Cloud Vision
   const selectedOCREngine: OCREngine = 'google-cloud-vision';
   
@@ -82,7 +96,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   const frameCountRef = useRef(0);
 
   useEffect(() => {
-    loadUser();
     checkOpenAIAvailability();
     setPreferredOCREngine();
   }, []);
@@ -98,25 +111,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     }
   };
 
-  const loadUser = async () => {
-    const currentUser = await getCurrentUser();
-    setUser(currentUser);
-    // Load profile picture if exists
-    if (currentUser?.user_metadata?.avatar_url) {
-      try {
-        const { data, error } = await supabase.storage
-          .from('profile-pictures')
-          .createSignedUrl(currentUser.user_metadata.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
-        if (error) {
-          console.error('Error creating signed URL:', error);
-        } else if (data?.signedUrl) {
-          setProfilePicture(data.signedUrl);
-        }
-      } catch (error) {
-        console.error('Error loading profile picture:', error);
-      }
-    }
-  };
+  // No longer needed - user data comes from context
 
   const checkOpenAIAvailability = async () => {
     const available = await testOpenAIConnection();
@@ -512,13 +507,59 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       }
 
       const productName = extractedData.product_description || 'receipt';
-      setProcessingStep(`Saving "${productName}"...`);
       const processingMethod = inputMode === 'manual' ? 'manual' : (extractedText ? 'gpt_structured' : 'manual');
       const ocrConfidence = extractedText ? 0.85 : undefined;
 
+      // Check for duplicates before saving
+      setProcessingStep('Checking for duplicates...');
+      const duplicateResult = await DuplicateDetectionService.checkForDuplicates(
+        extractedData,
+        user.id
+      );
+
+      if (duplicateResult.isDuplicate) {
+        // Show duplicate warning modal
+        setDuplicateMatches(duplicateResult.matches);
+        setDuplicateConfidence(duplicateResult.confidence);
+        setPendingSaveData({
+          extractedData,
+          imageUrl,
+          processingMethod,
+          ocrConfidence,
+          extractedText: extractedText || undefined
+        });
+        setShowDuplicateWarning(true);
+        setIsProcessing(false);
+        return;
+      }
+
+      // No duplicates found, proceed with save
+      await performSave(extractedData, imageUrl, processingMethod, ocrConfidence, extractedText);
+
+    } catch (err: any) {
+      console.error('Save error:', err);
+      setError(err.message || 'Failed to save receipt');
+      setIsProcessing(false);
+    }
+  };
+
+  const performSave = async (
+    data: ExtractedData,
+    imageUrl: string,
+    processingMethod: string,
+    ocrConfidence?: number,
+    extractedText?: string
+  ) => {
+    if (!user) return;
+
+    try {
+      setIsProcessing(true);
+      const productName = data.product_description || 'receipt';
+      setProcessingStep(`Saving "${productName}"...`);
+
       // Use the new MultiProductReceiptService
       const result = await MultiProductReceiptService.saveReceipt(
-        extractedData,
+        data,
         user.id,
         imageUrl,
         processingMethod,
@@ -547,6 +588,139 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
     }
   };
 
+  const handleDuplicateProceed = async () => {
+    if (!pendingSaveData) return;
+
+    setShowDuplicateWarning(false);
+    await performSave(
+      pendingSaveData.extractedData,
+      pendingSaveData.imageUrl,
+      pendingSaveData.processingMethod,
+      pendingSaveData.ocrConfidence,
+      pendingSaveData.extractedText
+    );
+    
+    // Clear pending data
+    setPendingSaveData(null);
+    setDuplicateMatches([]);
+    setDuplicateConfidence(0);
+  };
+
+  const handleDuplicateCancel = () => {
+    setShowDuplicateWarning(false);
+    setPendingSaveData(null);
+    setDuplicateMatches([]);
+    setDuplicateConfidence(0);
+    setIsProcessing(false);
+  };
+
+  // Helper functions for managing multiple products
+  const addNewProduct = () => {
+    if (!extractedData) return;
+    
+    const newProduct = {
+      product_description: '',
+      brand_name: '',
+      model_number: '',
+      amount: 0,
+      warranty_period: '1 year' // Each product gets its own warranty
+    };
+
+    if (extractedData.products) {
+      // Already multi-product, just add to array
+      setExtractedData({
+        ...extractedData,
+        products: [...extractedData.products, newProduct]
+      });
+    } else {
+      // Convert single product to multi-product
+      const currentProduct = {
+        product_description: extractedData.product_description || '',
+        brand_name: extractedData.brand_name || '',
+        model_number: extractedData.model_number || '',
+        amount: extractedData.amount || 0,
+        warranty_period: extractedData.warranty_period || '1 year' // Use existing warranty for conversion
+      };
+      
+      setExtractedData({
+        ...extractedData,
+        products: [currentProduct, newProduct],
+        total_amount: (extractedData.amount || 0) + 0
+      });
+    }
+  };
+
+  const removeProduct = (index: number) => {
+    if (!extractedData?.products) return;
+    
+    const updatedProducts = extractedData.products.filter((_, i) => i !== index);
+    
+    if (updatedProducts.length === 0) {
+      // Convert back to single product with empty data
+      const { products, ...singleProductData } = extractedData;
+      setExtractedData({
+        ...singleProductData,
+        product_description: '',
+        brand_name: '',
+        model_number: '',
+        amount: 0
+      });
+    } else if (updatedProducts.length === 1) {
+      // Convert back to single product
+      const product = updatedProducts[0];
+      const { products, ...singleProductData } = extractedData;
+      setExtractedData({
+        ...singleProductData,
+        product_description: product.product_description,
+        brand_name: product.brand_name,
+        model_number: product.model_number,
+        amount: product.amount
+      });
+    } else {
+      // Keep as multi-product
+      const newTotal = updatedProducts.reduce((sum, product) => sum + (product.amount || 0), 0);
+      setExtractedData({
+        ...extractedData,
+        products: updatedProducts,
+        total_amount: newTotal
+      });
+    }
+  };
+
+  const convertToMultiProduct = () => {
+    if (!extractedData || extractedData.products) return;
+    
+    const currentProduct = {
+      product_description: extractedData.product_description || '',
+      brand_name: extractedData.brand_name || '',
+      model_number: extractedData.model_number || '',
+      amount: extractedData.amount || 0,
+      warranty_period: extractedData.warranty_period || '1 year'
+    };
+    
+    setExtractedData({
+      ...extractedData,
+      products: [currentProduct],
+      total_amount: extractedData.amount || 0
+    });
+  };
+
+  const updateProductInArray = (index: number, field: string, value: any) => {
+    if (!extractedData?.products) return;
+    
+    const updatedProducts = [...extractedData.products];
+    updatedProducts[index] = { ...updatedProducts[index], [field]: value };
+    
+    // Recalculate total if amount changed
+    const newTotal = updatedProducts.reduce((sum, product) => sum + (product.amount || 0), 0);
+    
+    setExtractedData({
+      ...extractedData,
+      products: updatedProducts,
+      total_amount: newTotal
+    });
+  };
+
   const startManualEntry = () => {
     setInputMode('manual');
     setExtractedData({
@@ -557,10 +731,30 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
       purchase_date: new Date().toISOString().split('T')[0],
       amount: undefined,
       total_amount: 0,
-      warranty_period: '1 year',
+      warranty_period: '1 year', // Keep for single product backward compatibility
       extended_warranty: '',
       model_number: '',
       country: 'United States'
+    });
+    setShowExtractedForm(true);
+  };
+
+  const startMultiProductEntry = () => {
+    setInputMode('manual');
+    setExtractedData({
+      store_name: '',
+      purchase_location: '',
+      purchase_date: new Date().toISOString().split('T')[0],
+      total_amount: 0,
+      extended_warranty: '',
+      country: 'United States',
+      products: [{
+        product_description: '',
+        brand_name: '',
+        model_number: '',
+        amount: 0,
+        warranty_period: '1 year' // Each product has its own warranty
+      }]
     });
     setShowExtractedForm(true);
   };
@@ -587,6 +781,19 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
             <div className="flex items-center space-x-4">
               {/* Notifications */}
               {user && <NotificationDropdown userId={user.id} />}
+              
+              {/* Settings Button */}
+              <button
+                onClick={() => {
+                  // Navigate to profile settings - for now using onBackToDashboard as placeholder
+                  onBackToDashboard();
+                }}
+                className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                title="Settings"
+              >
+                <Settings className="h-6 w-6" />
+              </button>
+
               {/* Back Button */}
               <button
                 onClick={onBackToDashboard}
@@ -607,7 +814,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                         src={profilePicture}
                         alt="Profile"
                         className="w-full h-full object-cover"
-                        onError={() => setProfilePicture(null)}
+                        onError={() => {}}
                       />
                     ) : (
                       <User className="h-4 w-4 text-white" />
@@ -627,6 +834,17 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                       </p>
                       <p className="text-xs text-text-secondary">{user?.email}</p>
                     </div>
+                    <button
+                      onClick={() => {
+                        // Navigate to profile settings - for now using onBackToDashboard as placeholder
+                        onBackToDashboard();
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <User className="h-4 w-4" />
+                      <span>Profile Settings</span>
+                    </button>
                     <button
                       onClick={onBackToDashboard}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
@@ -877,12 +1095,21 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                 <p className="text-text-secondary text-sm mb-4">
                   Enter receipt details manually
                 </p>
-                <button
-                  onClick={startManualEntry}
-                  className="w-full bg-accent-yellow text-white py-3 px-4 rounded-lg font-medium hover:bg-accent-yellow/90 transition-colors duration-200"
-                >
-                  Enter Manually
-                </button>
+                <div className="space-y-2">
+                  <button
+                    onClick={startManualEntry}
+                    className="w-full bg-accent-yellow text-white py-3 px-4 rounded-lg font-medium hover:bg-accent-yellow/90 transition-colors duration-200"
+                  >
+                    Single Product
+                  </button>
+                  <button
+                    onClick={startMultiProductEntry}
+                    className="w-full bg-accent-yellow/80 text-white py-3 px-4 rounded-lg font-medium hover:bg-accent-yellow transition-colors duration-200 flex items-center justify-center space-x-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Multiple Products</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1179,31 +1406,38 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                         placeholder="Enter country"
                       />
                     </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        Warranty Period *
-                      </label>
-                      <input
-                        type="text"
-                        value={extractedData.warranty_period}
-                        onChange={(e) => updateExtractedData('warranty_period', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
-                        placeholder="e.g., 1 year, 6 months"
-                      />
-                    </div>
                   </div>
                 </div>
 
                 {/* Products List */}
                 <div>
-                  <h3 className="text-lg font-semibold text-text-primary mb-4">Products</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-text-primary">Products</h3>
+                    <button
+                      onClick={addNewProduct}
+                      className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Add Product</span>
+                    </button>
+                  </div>
                   <div className="space-y-4">
                     {extractedData.products.map((product, index) => (
                       <div key={index} className="bg-white border border-gray-200 rounded-lg p-4">
                         <div className="flex items-center justify-between mb-3">
                           <h4 className="text-md font-medium text-text-primary">Product {index + 1}</h4>
-                          <span className="text-sm text-text-secondary">${product.amount?.toFixed(2) || '0.00'}</span>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm text-text-secondary">${product.amount?.toFixed(2) || '0.00'}</span>
+                            {extractedData.products && extractedData.products.length > 1 && (
+                              <button
+                                onClick={() => removeProduct(index)}
+                                className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-50 transition-colors duration-200"
+                                title="Remove this product"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                         
                         {/* Product Name - Full Width and Prominent */}
@@ -1215,11 +1449,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                           <input
                             type="text"
                             value={product.product_description || ''}
-                            onChange={(e) => {
-                              const updatedProducts = [...extractedData.products!];
-                              updatedProducts[index] = { ...product, product_description: e.target.value };
-                              updateExtractedData('products', updatedProducts);
-                            }}
+                            onChange={(e) => updateProductInArray(index, 'product_description', e.target.value)}
                             className="w-full px-4 py-3 text-md border-2 border-primary/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200"
                             placeholder="Enter a short, descriptive product name"
                           />
@@ -1234,11 +1464,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                             <input
                               type="text"
                               value={product.brand_name || ''}
-                              onChange={(e) => {
-                                const updatedProducts = [...extractedData.products!];
-                                updatedProducts[index] = { ...product, brand_name: e.target.value };
-                                updateExtractedData('products', updatedProducts);
-                              }}
+                              onChange={(e) => updateProductInArray(index, 'brand_name', e.target.value)}
                               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
                               placeholder="Enter brand name"
                             />
@@ -1251,11 +1477,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                             <input
                               type="text"
                               value={product.model_number || ''}
-                              onChange={(e) => {
-                                const updatedProducts = [...extractedData.products!];
-                                updatedProducts[index] = { ...product, model_number: e.target.value };
-                                updateExtractedData('products', updatedProducts);
-                              }}
+                              onChange={(e) => updateProductInArray(index, 'model_number', e.target.value)}
                               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
                               placeholder="Enter model number"
                             />
@@ -1269,13 +1491,22 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
                               type="number"
                               step="0.01"
                               value={product.amount || ''}
-                              onChange={(e) => {
-                                const updatedProducts = [...extractedData.products!];
-                                updatedProducts[index] = { ...product, amount: e.target.value ? parseFloat(e.target.value) : 0 };
-                                updateExtractedData('products', updatedProducts);
-                              }}
+                              onChange={(e) => updateProductInArray(index, 'amount', e.target.value ? parseFloat(e.target.value) : 0)}
                               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
                               placeholder="Enter amount"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-primary mb-2">
+                              Warranty Period *
+                            </label>
+                            <input
+                              type="text"
+                              value={product.warranty_period || ''}
+                              onChange={(e) => updateProductInArray(index, 'warranty_period', e.target.value)}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200"
+                              placeholder="e.g., 1 year, 6 months"
                             />
                           </div>
                         </div>
@@ -1287,6 +1518,17 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
             ) : (
               /* Single Product Receipt Form */
               <div className="space-y-6">
+                {/* Convert to Multi-Product Option */}
+                <div className="flex justify-end">
+                  <button
+                    onClick={convertToMultiProduct}
+                    className="bg-secondary text-white px-4 py-2 rounded-lg font-medium hover:bg-secondary/90 transition-colors duration-200 flex items-center space-x-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add More Products</span>
+                  </button>
+                </div>
+
                 {/* Product Name - Full Width and Prominent */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <label className="block text-lg font-semibold text-text-primary mb-3 flex items-center">
@@ -1472,6 +1714,15 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
           onClick={() => setShowUserMenu(false)}
         />
       )}
+
+      {/* Duplicate Warning Modal */}
+      <DuplicateWarningModal
+        isOpen={showDuplicateWarning}
+        matches={duplicateMatches}
+        confidence={duplicateConfidence}
+        onProceed={handleDuplicateProceed}
+        onCancel={handleDuplicateCancel}
+      />
     </div>
   );
 };

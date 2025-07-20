@@ -27,10 +27,13 @@ import {
   ChevronDown,
   ChevronUp,
   MapPin,
-  AlertCircle
+  AlertCircle,
+  FileText,
+  Settings
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { getCurrentUser, signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt, getUserNotifications, archiveNotification, archiveAllNotifications, cleanupDuplicateNotifications, Notification, supabase } from '../lib/supabase';
+import { signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, updateReceipt, getUserNotifications, archiveNotification, archiveAllNotifications, cleanupDuplicateNotifications, Notification, supabase } from '../lib/supabase';
+import { useUser } from '../contexts/UserContext';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import Footer from './Footer';
 
@@ -63,8 +66,7 @@ type SortOrder = 'asc' | 'desc';
 
 const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptScanning }) => {
   const location = useLocation();
-  const [user, setUser] = useState<any>(null);
-  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const { user, profilePicture } = useUser();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,10 +88,6 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
-
-  useEffect(() => {
-    loadUser();
-  }, []);
 
   useEffect(() => {
     if (user) {
@@ -116,25 +114,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     }
   }, [location.state, receipts]);
 
-  const loadUser = async () => {
-    const currentUser = await getCurrentUser();
-    setUser(currentUser);
-    // Load profile picture if exists
-    if (currentUser?.user_metadata?.avatar_url) {
-      try {
-        const { data, error } = await supabase.storage
-          .from('profile-pictures')
-          .createSignedUrl(currentUser.user_metadata.avatar_url, 365 * 24 * 60 * 60); // 1 year expiry
-        if (error) {
-          console.error('Error creating signed URL:', error);
-        } else if (data?.signedUrl) {
-          setProfilePicture(data.signedUrl);
-        }
-      } catch (error) {
-        console.error('Error loading profile picture:', error);
-      }
-    }
-  };
+  // No longer needed - user data comes from context
 
   const loadReceipts = async () => {
     if (!user) return;
@@ -403,14 +383,26 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     const period = warrantyPeriod.toLowerCase();
     
     let expiryDate = new Date(purchase);
-    if (period.includes('year')) {
-      const years = parseInt(period.match(/(\d+)/)?.[1] || '1');
-      expiryDate.setFullYear(expiryDate.getFullYear() + years);
-    } else if (period.includes('month')) {
-      const months = parseInt(period.match(/(\d+)/)?.[1] || '12');
-      expiryDate.setMonth(expiryDate.getMonth() + months);
+    
+    // Extract years
+    const years = period.match(/(\d+)\s*year/);
+    if (years) {
+      expiryDate.setFullYear(expiryDate.getFullYear() + parseInt(years[1]));
     } else {
-      expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+      // Extract months
+      const months = period.match(/(\d+)\s*month/);
+      if (months) {
+        expiryDate.setMonth(expiryDate.getMonth() + parseInt(months[1]));
+      } else {
+        // Extract days (THIS WAS MISSING!)
+        const days = period.match(/(\d+)\s*day/);
+        if (days) {
+          expiryDate.setDate(expiryDate.getDate() + parseInt(days[1]));
+        } else {
+          // Default to 1 year
+          expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+        }
+      }
     }
 
     const now = new Date();
@@ -572,6 +564,35 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     setEditForm(null);
   };
 
+  // Add PDF detection utility function after the imports
+  const isPdfFile = (url: string): boolean => {
+    if (!url) return false;
+    const lowerUrl = url.toLowerCase();
+    return lowerUrl.includes('.pdf') || 
+           lowerUrl.includes('application/pdf') ||
+           lowerUrl.includes('content-type=application/pdf') ||
+           lowerUrl.includes('mimetype=application/pdf');
+  };
+
+  // Add PDF viewer component
+  const PDFViewer: React.FC<{ url: string; alt: string; className?: string }> = ({ url, alt, className }) => {
+    return (
+      <div className={`bg-gradient-to-br from-red-50 to-red-100 rounded-lg flex flex-col items-center justify-center p-4 border-2 border-red-200 ${className}`}>
+        <FileText className="h-12 w-12 text-red-500 mb-2" />
+        <span className="text-sm text-gray-700 text-center font-medium mb-2">{alt}</span>
+        <span className="text-xs text-gray-600 mb-3">PDF Document</span>
+        <a 
+          href={url} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-xs bg-red-500 text-white px-3 py-1 rounded-full hover:bg-red-600 transition-colors duration-200"
+        >
+          Open PDF
+        </a>
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -685,6 +706,18 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                 )}
               </div>
 
+              {/* Settings Button */}
+              <button
+                onClick={() => {
+                  // Navigate to profile settings - for now using onBackToDashboard as placeholder
+                  onBackToDashboard();
+                }}
+                className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                title="Settings"
+              >
+                <Settings className="h-6 w-6" />
+              </button>
+
               {/* Back Button */}
               <button
                 onClick={onBackToDashboard}
@@ -706,7 +739,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                         src={profilePicture}
                         alt="Profile"
                         className="w-full h-full object-cover"
-                        onError={() => setProfilePicture(null)}
+                        onError={() => {}}
                       />
                     ) : (
                       <User className="h-4 w-4 text-white" />
@@ -726,6 +759,17 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                       </p>
                       <p className="text-xs text-text-secondary">{user?.email}</p>
                     </div>
+                    <button
+                      onClick={() => {
+                        // Navigate to profile settings - for now using onBackToDashboard as placeholder
+                        onBackToDashboard();
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <User className="h-4 w-4" />
+                      <span>Profile Settings</span>
+                    </button>
                     <button
                       onClick={onBackToDashboard}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
@@ -889,19 +933,27 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                     {/* Receipt Image or Placeholder */}
                     <div className="aspect-square bg-gradient-feature rounded-lg mb-4 flex items-center justify-center overflow-hidden">
                       {receipt.image_url ? (
-                        <img
-                          src={signedUrls[receipt.image_url] || receipt.image_url}
-                          alt={receipt.product_description || 'Receipt'}
-                          className="w-full h-full object-cover object-center"
-                          onError={(e) => {
-                            console.error(`Failed to load image for receipt ${receipt.id}:`, receipt.image_url);
-                            console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
-                            (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
-                          }}
-                          onLoad={() => {
-                            console.log(`✓ Image loaded successfully for receipt ${receipt.id}`);
-                          }}
-                        />
+                        isPdfFile(receipt.image_url) ? (
+                          <PDFViewer
+                            url={signedUrls[receipt.image_url] || receipt.image_url}
+                            alt={receipt.product_description || 'Receipt'}
+                            className="w-full h-full"
+                          />
+                        ) : (
+                          <img
+                            src={signedUrls[receipt.image_url] || receipt.image_url}
+                            alt={receipt.product_description || 'Receipt'}
+                            className="w-full h-full object-cover object-center"
+                            onError={(e) => {
+                              console.error(`Failed to load image for receipt ${receipt.id}:`, receipt.image_url);
+                              console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
+                              (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                            }}
+                            onLoad={() => {
+                              console.log(`✓ Image loaded successfully for receipt ${receipt.id}`);
+                            }}
+                          />
+                        )
                       ) : (
                         <img
                           src="/receipt-placeholder.svg"
@@ -959,19 +1011,27 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                       {/* Receipt Image or Placeholder */}
                       <div className="w-16 h-16 bg-gradient-feature rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                         {receipt.image_url ? (
-                          <img
-                            src={signedUrls[receipt.image_url] || receipt.image_url}
-                            alt={receipt.product_description || 'Receipt'}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              console.error(`Failed to load image for receipt ${receipt.id} (list view):`, receipt.image_url);
-                              console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
-                              (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
-                            }}
-                            onLoad={() => {
-                              console.log(`✓ Image loaded successfully for receipt ${receipt.id} (list view)`);
-                            }}
-                          />
+                          isPdfFile(receipt.image_url) ? (
+                            <PDFViewer
+                              url={signedUrls[receipt.image_url] || receipt.image_url}
+                              alt={receipt.product_description || 'Receipt'}
+                              className="w-full h-full"
+                            />
+                          ) : (
+                            <img
+                              src={signedUrls[receipt.image_url] || receipt.image_url}
+                              alt={receipt.product_description || 'Receipt'}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                console.error(`Failed to load image for receipt ${receipt.id} (list view):`, receipt.image_url);
+                                console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
+                                (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                              }}
+                              onLoad={() => {
+                                console.log(`✓ Image loaded successfully for receipt ${receipt.id} (list view)`);
+                              }}
+                            />
+                          )
                         ) : (
                           receipt.type === 'group' ? (
                             <Package className="h-8 w-8 text-primary" />
@@ -1054,19 +1114,29 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                   <h3 className="font-medium text-text-primary mb-3">Receipt Image</h3>
                   <div className="aspect-square bg-gradient-feature rounded-lg flex items-center justify-center overflow-hidden">
                     {selectedReceipt.image_url ? (
-                      <img
-                        src={signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url}
-                        alt={selectedReceipt.product_description || 'Receipt'}
-                        className="w-full h-full object-cover object-center"
-                        onError={(e) => {
-                          console.error(`Failed to load image for receipt ${selectedReceipt.id} (modal):`, selectedReceipt.image_url);
-                          console.error('Tried URLs:', selectedReceipt.image_url ? (signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url) : 'No image URL');
-                          (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
-                        }}
-                        onLoad={() => {
-                          console.log(`✓ Image loaded successfully for receipt ${selectedReceipt.id} (modal)`);
-                        }}
-                      />
+                      isPdfFile(selectedReceipt.image_url) ? (
+                        <div className="w-full h-full">
+                          <PDFViewer
+                            url={signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url}
+                            alt={selectedReceipt.product_description || 'Receipt'}
+                            className="w-full h-full"
+                          />
+                        </div>
+                      ) : (
+                        <img
+                          src={signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url}
+                          alt={selectedReceipt.product_description || 'Receipt'}
+                          className="w-full h-full object-cover object-center"
+                          onError={(e) => {
+                            console.error(`Failed to load image for receipt ${selectedReceipt.id} (modal):`, selectedReceipt.image_url);
+                            console.error('Tried URLs:', selectedReceipt.image_url ? (signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url) : 'No image URL');
+                            (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                          }}
+                          onLoad={() => {
+                            console.log(`✓ Image loaded successfully for receipt ${selectedReceipt.id} (modal)`);
+                          }}
+                        />
+                      )
                     ) : (
                       <img
                         src="/receipt-placeholder.svg"
@@ -1169,56 +1239,119 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                     )
                   ) : (
                     <>
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">Product</label>
-                        <p className="text-text-primary font-medium">{selectedReceipt.product_description || 'Receipt'}</p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">Brand</label>
-                        <p className="text-text-primary">{selectedReceipt.brand_name || 'Unknown'}</p>
-                      </div>
-
-                      {selectedReceipt.store_name && (
-                        <div>
-                          <label className="block text-sm font-medium text-text-secondary mb-1">Store</label>
-                          <p className="text-text-primary">{selectedReceipt.store_name}</p>
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">Purchase Date</label>
-                        <p className="text-text-primary">{formatDate(selectedReceipt.purchase_date)}</p>
-                      </div>
-
-                      {selectedReceipt.amount && (
-                        <div>
-                          <label className="block text-sm font-medium text-text-secondary mb-1">Amount</label>
-                          <p className="text-text-primary font-bold">{formatCurrency(selectedReceipt.amount)}</p>
-                        </div>
-                      )}
-
-                      {selectedReceipt.warranty_period && (
-                        <div>
-                          <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Period</label>
-                          <p className="text-text-primary">{selectedReceipt.warranty_period}</p>
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Status</label>
-                        {selectedReceipt.warranty_period ? (
-                          <div className={`flex items-center space-x-2 ${getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).color}`}>
-                            {React.createElement(getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).icon, { className: "h-5 w-5" })}
-                            <span className="font-medium capitalize">{getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).status}</span>
+                      {/* Check if this is a multi-product receipt */}
+                      {selectedReceipt.type === 'group' && selectedReceipt.receipts ? (
+                        <>
+                          {/* Store and Purchase Info */}
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Store</label>
+                            <p className="text-text-primary font-medium">{selectedReceipt.store_name}</p>
                           </div>
-                        ) : (
-                          <div className="flex items-center space-x-2 text-gray-500">
-                            <Clock className="h-5 w-5" />
-                            <span className="font-medium">No warranty info</span>
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Purchase Date</label>
+                            <p className="text-text-primary">{formatDate(selectedReceipt.purchase_date)}</p>
                           </div>
-                        )}
-                      </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Total Amount</label>
+                            <p className="text-text-primary font-bold">{formatCurrency(selectedReceipt.amount)}</p>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Products ({selectedReceipt.product_count})</label>
+                            <div className="space-y-4 mt-2">
+                              {selectedReceipt.receipts.map((product: any, index: number) => (
+                                <div key={product.id || index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                      <label className="block text-xs font-medium text-text-secondary mb-1">Product</label>
+                                      <p className="text-sm text-text-primary font-medium">{product.product_description || 'Unknown Product'}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-text-secondary mb-1">Brand</label>
+                                      <p className="text-sm text-text-primary">{product.brand_name || 'Unknown'}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-text-secondary mb-1">Amount</label>
+                                      <p className="text-sm text-text-primary font-bold">{formatCurrency(product.amount || 0)}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-text-secondary mb-1">Warranty Status</label>
+                                      {product.warranty_period ? (
+                                        <div className={`flex items-center space-x-2 ${getWarrantyStatus(selectedReceipt.purchase_date, product.warranty_period).color}`}>
+                                          {React.createElement(getWarrantyStatus(selectedReceipt.purchase_date, product.warranty_period).icon, { className: "h-4 w-4" })}
+                                          <span className="text-xs font-medium capitalize">{getWarrantyStatus(selectedReceipt.purchase_date, product.warranty_period).status}</span>
+                                          <span className="text-xs text-text-secondary">({product.warranty_period})</span>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center space-x-2 text-gray-500">
+                                          <Clock className="h-4 w-4" />
+                                          <span className="text-xs font-medium">No warranty info</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {/* Single Product Receipt */}
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Product</label>
+                            <p className="text-text-primary font-medium">{selectedReceipt.product_description || 'Receipt'}</p>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Brand</label>
+                            <p className="text-text-primary">{selectedReceipt.brand_name || 'Unknown'}</p>
+                          </div>
+
+                          {selectedReceipt.store_name && (
+                            <div>
+                              <label className="block text-sm font-medium text-text-secondary mb-1">Store</label>
+                              <p className="text-text-primary">{selectedReceipt.store_name}</p>
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Purchase Date</label>
+                            <p className="text-text-primary">{formatDate(selectedReceipt.purchase_date)}</p>
+                          </div>
+
+                          {selectedReceipt.amount && (
+                            <div>
+                              <label className="block text-sm font-medium text-text-secondary mb-1">Amount</label>
+                              <p className="text-text-primary font-bold">{formatCurrency(selectedReceipt.amount)}</p>
+                            </div>
+                          )}
+
+                          {selectedReceipt.warranty_period && (
+                            <div>
+                              <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Period</label>
+                              <p className="text-text-primary">{selectedReceipt.warranty_period}</p>
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Warranty Status</label>
+                            {selectedReceipt.warranty_period ? (
+                              <div className={`flex items-center space-x-2 ${getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).color}`}>
+                                {React.createElement(getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).icon, { className: "h-5 w-5" })}
+                                <span className="font-medium capitalize">{getWarrantyStatus(selectedReceipt.purchase_date, selectedReceipt.warranty_period).status}</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center space-x-2 text-gray-500">
+                                <Clock className="h-5 w-5" />
+                                <span className="font-medium">No warranty info</span>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
                 </div>

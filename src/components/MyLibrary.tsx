@@ -940,19 +940,19 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                             className="w-full h-full"
                           />
                         ) : (
-                          <img
-                            src={signedUrls[receipt.image_url] || receipt.image_url}
-                            alt={receipt.product_description || 'Receipt'}
-                            className="w-full h-full object-cover object-center"
-                            onError={(e) => {
-                              console.error(`Failed to load image for receipt ${receipt.id}:`, receipt.image_url);
-                              console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
-                              (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
-                            }}
-                            onLoad={() => {
-                              console.log(`✓ Image loaded successfully for receipt ${receipt.id}`);
-                            }}
-                          />
+                        <img
+                          src={signedUrls[receipt.image_url] || receipt.image_url}
+                          alt={receipt.product_description || 'Receipt'}
+                          className="w-full h-full object-cover object-center"
+                          onError={(e) => {
+                            console.error(`Failed to load image for receipt ${receipt.id}:`, receipt.image_url);
+                            console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
+                            (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                          }}
+                          onLoad={() => {
+                            console.log(`✓ Image loaded successfully for receipt ${receipt.id}`);
+                          }}
+                        />
                         )
                       ) : (
                         <img
@@ -1018,19 +1018,19 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                               className="w-full h-full"
                             />
                           ) : (
-                            <img
-                              src={signedUrls[receipt.image_url] || receipt.image_url}
-                              alt={receipt.product_description || 'Receipt'}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                console.error(`Failed to load image for receipt ${receipt.id} (list view):`, receipt.image_url);
-                                console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
-                                (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
-                              }}
-                              onLoad={() => {
-                                console.log(`✓ Image loaded successfully for receipt ${receipt.id} (list view)`);
-                              }}
-                            />
+                          <img
+                            src={signedUrls[receipt.image_url] || receipt.image_url}
+                            alt={receipt.product_description || 'Receipt'}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              console.error(`Failed to load image for receipt ${receipt.id} (list view):`, receipt.image_url);
+                              console.error('Tried URLs:', receipt.image_url ? (signedUrls[receipt.image_url] || receipt.image_url) : 'No image URL');
+                              (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                            }}
+                            onLoad={() => {
+                              console.log(`✓ Image loaded successfully for receipt ${receipt.id} (list view)`);
+                            }}
+                          />
                           )
                         ) : (
                           receipt.type === 'group' ? (
@@ -1123,19 +1123,19 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                           />
                         </div>
                       ) : (
-                        <img
-                          src={signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url}
-                          alt={selectedReceipt.product_description || 'Receipt'}
-                          className="w-full h-full object-cover object-center"
-                          onError={(e) => {
-                            console.error(`Failed to load image for receipt ${selectedReceipt.id} (modal):`, selectedReceipt.image_url);
-                            console.error('Tried URLs:', selectedReceipt.image_url ? (signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url) : 'No image URL');
-                            (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
-                          }}
-                          onLoad={() => {
-                            console.log(`✓ Image loaded successfully for receipt ${selectedReceipt.id} (modal)`);
-                          }}
-                        />
+                      <img
+                        src={signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url}
+                        alt={selectedReceipt.product_description || 'Receipt'}
+                        className="w-full h-full object-cover object-center"
+                        onError={(e) => {
+                          console.error(`Failed to load image for receipt ${selectedReceipt.id} (modal):`, selectedReceipt.image_url);
+                          console.error('Tried URLs:', selectedReceipt.image_url ? (signedUrls[selectedReceipt.image_url] || selectedReceipt.image_url) : 'No image URL');
+                          (e.currentTarget as HTMLImageElement).src = '/receipt-placeholder.svg';
+                        }}
+                        onLoad={() => {
+                          console.log(`✓ Image loaded successfully for receipt ${selectedReceipt.id} (modal)`);
+                        }}
+                      />
                       )
                     ) : (
                       <img

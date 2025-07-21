@@ -74,11 +74,14 @@ export class GoogleCloudVisionOCR {
     const startTime = Date.now();
     
     try {
-      const apiKey = import.meta.env.VITE_GOOGLE_CLOUD_API_KEY;
+      const apiKey = import.meta.env.VITE_GOOGLE_CLOUD_VISION_API_KEY;
       
       if (!apiKey) {
+        console.error('❌ Google Cloud Vision API key not found. Expected env var: VITE_GOOGLE_CLOUD_VISION_API_KEY');
         throw new Error('Text recognition service not configured. Please contact support.');
       }
+      
+      console.log('✅ Google Cloud Vision API key found, proceeding with OCR...');
       
       onProgress?.(10, 'Initializing text recognition...');
       
@@ -273,7 +276,7 @@ export class OCRService {
           return true; // Tesseract is always available as silent fallback
         
         case 'google-cloud-vision':
-          const apiKey = import.meta.env.VITE_GOOGLE_CLOUD_API_KEY;
+          const apiKey = import.meta.env.VITE_GOOGLE_CLOUD_VISION_API_KEY;
           return !!apiKey;
         
         default:

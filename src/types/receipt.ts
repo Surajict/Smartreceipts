@@ -73,4 +73,5 @@ export interface ReceiptScanResult {
   error?: string;
   processing_method: 'manual' | 'ocr' | 'gpt_structured' | 'fallback_parsing';
   ocr_confidence?: number;
+  subscription_error?: import('./subscription').SubscriptionError; // Freemium usage limit errors
 } 

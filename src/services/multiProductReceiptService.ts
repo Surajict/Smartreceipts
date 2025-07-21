@@ -1,6 +1,8 @@
 import { supabase, cleanReceiptDataGlobal } from '../lib/supabase';
 import { Receipt, ExtractedReceiptData, ReceiptScanResult } from '../types/receipt';
 import { v4 as uuidv4 } from 'uuid';
+import subscriptionService from './subscriptionService';
+import { SubscriptionError } from '../types/subscription';
 
 export class MultiProductReceiptService {
   
@@ -17,6 +19,26 @@ export class MultiProductReceiptService {
     extractedText?: string
   ): Promise<ReceiptScanResult> {
     try {
+      // Check usage limits before allowing receipt creation (FREEMIUM CONTROL)
+      const canScan = await subscriptionService.checkCanScan(userId);
+      
+      if (!canScan) {
+        const usageInfo = await subscriptionService.getUsageInfo(userId);
+        const subscriptionError: SubscriptionError = {
+          type: 'usage_limit',
+          message: `Monthly limit reached! You've used ${usageInfo.receipts_used}/${usageInfo.receipts_limit} receipts. Upgrade to Premium for unlimited scanning.`,
+          action: 'upgrade'
+        };
+        
+        return {
+          success: false,
+          receipts: [],
+          error: subscriptionError.message,
+          processing_method: processingMethod as any,
+          subscription_error: subscriptionError
+        };
+      }
+
       const isMultiProduct = extractedData.products && extractedData.products.length > 0;
       
       if (isMultiProduct) {
@@ -32,6 +54,14 @@ export class MultiProductReceiptService {
         // Generate embeddings for all saved receipts
         if (result.success && result.receipts) {
           this.generateEmbeddingsForReceipts(result.receipts);
+          
+          // Increment usage count after successful receipt creation (FREEMIUM TRACKING)
+          try {
+            await subscriptionService.incrementUsage(userId);
+          } catch (usageError) {
+            console.warn('Failed to increment usage count:', usageError);
+            // Don't fail the receipt creation if usage tracking fails
+          }
         }
         
         return result;
@@ -48,6 +78,14 @@ export class MultiProductReceiptService {
         // Generate embedding for the saved receipt
         if (result.success && result.receipts) {
           this.generateEmbeddingsForReceipts(result.receipts);
+          
+          // Increment usage count after successful receipt creation (FREEMIUM TRACKING)
+          try {
+            await subscriptionService.incrementUsage(userId);
+          } catch (usageError) {
+            console.warn('Failed to increment usage count:', usageError);
+            // Don't fail the receipt creation if usage tracking fails
+          }
         }
         
         return result;
@@ -170,18 +208,21 @@ export class MultiProductReceiptService {
 
   /**
    * Generate embeddings for receipts asynchronously (don't wait for completion)
+   * Updated to use direct OpenAI API for automatic indexing
    */
   private static generateEmbeddingsForReceipts(receipts: any[]) {
+    console.log(`🤖 Auto-generating embeddings for ${receipts.length} receipt(s)...`);
+    
     // Run embedding generation in the background without blocking the save operation
     receipts.forEach(receipt => {
       this.generateEmbeddingForReceipt(receipt).catch(error => {
-        console.warn(`Failed to generate embedding for receipt ${receipt.id}:`, error);
+        console.warn(`⚠️ Failed to auto-generate embedding for receipt ${receipt.id}:`, error);
       });
     });
   }
 
   /**
-   * Generate embedding for a single receipt
+   * Generate embedding for a single receipt using direct OpenAI API
    */
   private static async generateEmbeddingForReceipt(receipt: any): Promise<void> {
     try {
@@ -200,36 +241,52 @@ export class MultiProductReceiptService {
         return;
       }
 
-      console.log(`Generating embedding for receipt ${receipt.id}`);
+      console.log(`🔄 Auto-generating embedding for receipt ${receipt.id}: "${content.substring(0, 50)}..."`);
 
-      // Call the generate-embedding edge function
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-embedding`, {
+      // Get OpenAI API key
+      const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
+      
+      if (!openaiApiKey) {
+        console.warn('OpenAI API key not configured - skipping automatic embedding generation');
+        return;
+      }
+
+      // Generate embedding using direct OpenAI API call
+      const response = await fetch('https://api.openai.com/v1/embeddings', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Authorization': `Bearer ${openaiApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          content: content,
-          receiptId: receipt.id
+          model: 'text-embedding-3-small',
+          input: content,
+          dimensions: 384
         })
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+        throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
-      
-      if (result.error) {
-        throw new Error(result.error);
+      const embedding = result.data[0].embedding;
+
+      // Save the embedding to the database
+      const { error: updateError } = await supabase
+        .from('receipts')
+        .update({ embedding: embedding })
+        .eq('id', receipt.id);
+
+      if (updateError) {
+        throw new Error(`Database update failed: ${updateError.message}`);
       }
 
-      console.log(`✓ Successfully generated embedding for receipt ${receipt.id}`);
+      console.log(`✅ Successfully auto-generated and saved embedding for receipt ${receipt.id}`);
     } catch (error) {
-      console.error(`Failed to generate embedding for receipt ${receipt.id}:`, error);
-      throw error;
+      console.error(`❌ Failed to auto-generate embedding for receipt ${receipt.id}:`, error);
+      // Don't throw - we don't want to break receipt saving if embedding fails
     }
   }
 

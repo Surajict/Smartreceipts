@@ -102,7 +102,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
   useEffect(() => {
     if (user) {
       loadWarrantyData(user.id);
-    }
+        }
   }, [user]);
 
   useEffect(() => {
@@ -483,15 +483,15 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
                   className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
                 >
                   <div className="w-8 h-8 rounded-full overflow-hidden bg-primary flex items-center justify-center">
-                    {profilePicture ? (
-                      <img
-                        src={profilePicture}
-                        alt="Profile"
-                        className="w-full h-full object-cover"
+                {profilePicture ? (
+                  <img
+                    src={profilePicture}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
                         onError={() => {}}
-                      />
-                    ) : (
-                      <User className="h-4 w-4 text-white" />
+                  />
+                ) : (
+                  <User className="h-4 w-4 text-white" />
                     )}
                   </div>
                   <span className="text-sm font-medium text-text-primary hidden sm:inline">
@@ -807,11 +807,11 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
                               className="max-w-xs h-auto rounded-lg border border-gray-200 shadow-sm"
                             />
                           ) : (
-                            <img
-                              src={item.imageUrl}
-                              alt="Receipt"
-                              className="max-w-xs h-auto rounded-lg border border-gray-200 shadow-sm"
-                            />
+                          <img
+                            src={item.imageUrl}
+                            alt="Receipt"
+                            className="max-w-xs h-auto rounded-lg border border-gray-200 shadow-sm"
+                          />
                           )}
                         </div>
                       )}

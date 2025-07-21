@@ -1,6 +1,6 @@
 // Web Push Notifications utility for Android OS-level notifications
 export class PushNotificationManager {
-  private vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || 'BJEXXbpOexdu78r4wugBHB6ZhOCmGgrtENOouFmqYBmZSCQ8AuqGgWi3YGZaN4bz7kfU0FUID1cSDxYxVBpmFNw';
+  private vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 
   // Request notification permission from user
   async requestPermission(): Promise<boolean> {

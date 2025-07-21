@@ -25,12 +25,15 @@ import {
 } from 'lucide-react';
 import { signOut, supabase, getUserReceipts, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
-import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
+import { checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
+import subscriptionService from '../services/subscriptionService';
+import { UserSubscriptionInfo } from '../types/subscription';
+import UsageIndicator from './UsageIndicator';
 import { useNavigate } from 'react-router-dom';
 import Footer from './Footer';
-import PushNotificationSetup from './PushNotificationSetup';
+// Removed PushNotificationSetup import - push notifications disabled
 
 interface DashboardProps {
   onSignOut: () => void;
@@ -114,6 +117,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [archivingAll, setArchivingAll] = useState(false);
+  
+  // Subscription and usage tracking state
+  const [subscriptionInfo, setSubscriptionInfo] = useState<UserSubscriptionInfo | null>(null);
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -122,6 +129,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       loadDashboardData(user.id);
       loadEmbeddingStatus(user.id);
       loadNotifications(user.id);
+      loadSubscriptionData(user.id);
     }
   }, [user]);
 
@@ -179,29 +187,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           warrantiesClaimed: 0
         };
         setSummaryStats(fallbackStats);
-      } else {
-        // Calculate items from grouped receipts even when stats are available
-        const totalItems = groupedReceipts.reduce((sum, receipt) => {
-          if (receipt.type === 'group') {
-            return sum + (receipt.product_count || 0);
-          } else {
-            return sum + 1; // Single product receipt = 1 item
-          }
-        }, 0);
-        
-        const summaryStats: SummaryStats = {
-          receiptsScanned: groupedReceipts.length, // Use actual grouped receipts count
-          totalAmount: stats.total_amount || 0,
-          itemsCaptured: totalItems, // Use calculated items count
-          warrantiesClaimed: 0 // This would need a separate tracking mechanism
-        };
-        setSummaryStats(summaryStats);
+      } else if (stats) {
+        setSummaryStats({
+          receiptsScanned: Number(stats.total_receipts),
+          totalAmount: Number(stats.total_amount),
+          itemsCaptured: Number(stats.total_receipts), // Use receipts count as items for now
+          warrantiesClaimed: Number(stats.expiring_warranties)
+        });
       }
 
-      // Process recent receipts with proper grouping
+      // Convert grouped receipts to recent receipts
       const recentReceiptsData: RecentReceipt[] = groupedReceipts
-        .slice(0, 4)
-        .map(receipt => {
+        .sort((a, b) => new Date(b.purchase_date).getTime() - new Date(a.purchase_date).getTime())
+        .slice(0, 5)
+        .map((receipt => {
           if (receipt.type === 'group') {
             // Multi-product receipt group
             const firstProduct = receipt.receipts[0];
@@ -231,100 +230,78 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
               items: 1
             };
           }
-        });
+        }));
       setRecentReceipts(recentReceiptsData);
 
-      // Calculate warranty alerts from all individual receipts (including grouped ones)
-      const allReceipts = groupedReceipts.flatMap(receipt => {
-        if (receipt.type === 'group') {
-          return receipt.receipts;
-        } else {
-          return [receipt];
-        }
-      });
-
-      console.log('Processing warranty alerts for receipts:', allReceipts.length);
-      console.log('Sample receipts:', allReceipts.slice(0, 3).map(r => ({
-        id: r.id,
-        product: r.product_description,
-        brand: r.brand_name,
-        purchase_date: r.purchase_date,
-        warranty_period: r.warranty_period
-      })));
-
-      // Check for specific items we're looking for
-      const targetItems = allReceipts.filter(r => 
-        r.product_description?.toLowerCase().includes('nintendo') ||
-        r.product_description?.toLowerCase().includes('dji') ||
-        r.product_description?.toLowerCase().includes('microsoft') ||
-        r.product_description?.toLowerCase().includes('surface')
-      );
-      
-      console.log('Target electronics items found:', targetItems.length);
-      targetItems.forEach(item => {
-        console.log(`Target item: ${item.product_description}`, {
-          purchase_date: item.purchase_date,
-          warranty_period: item.warranty_period,
-          brand: item.brand_name
+      // Get warranty alerts from database function instead of frontend calculation
+      console.log('Loading warranty alerts from database for user:', userId);
+      try {
+        const { data: alertsData, error: alertsError } = await supabase.rpc('get_user_warranty_alerts', {
+          user_uuid: userId
         });
-      });
 
-      const alerts: WarrantyAlert[] = allReceipts
-        .map(receipt => {
-          // Skip items without purchase date
-          if (!receipt.purchase_date) {
-            console.log(`Skipping ${receipt.product_description} - no purchase date`);
-            return null;
-          }
+        if (alertsError) {
+          console.error('Error loading warranty alerts:', alertsError);
+          setWarrantyAlerts([]);
+          setAlertsCount(0);
+        } else {
+          console.log('Database warranty alerts found:', alertsData?.length || 0, alertsData);
           
-          // Use enhanced warranty period detection for electronics
-          let warrantyPeriod = receipt.warranty_period;
-          if (!warrantyPeriod || warrantyPeriod.trim() === '') {
-            warrantyPeriod = getDefaultWarrantyPeriod(receipt.product_description, receipt.brand_name);
-            console.log(`Applied default warranty for ${receipt.product_description}: ${warrantyPeriod}`);
-          }
-          
-          const warrantyExpiry = calculateWarrantyExpiry(receipt.purchase_date, warrantyPeriod);
-          const daysLeft = Math.ceil((warrantyExpiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-          
-          console.log(`Warranty check for ${receipt.product_description}:`, {
-            purchase_date: receipt.purchase_date,
-            original_warranty_period: receipt.warranty_period,
-            calculated_warranty_period: warrantyPeriod,
-            warranty_expiry: warrantyExpiry.toISOString().split('T')[0],
-            days_left: daysLeft,
-            within_threshold: daysLeft > 0 && daysLeft <= 180
-          });
-          
-          // Only include items with warranties expiring in the next 6 months
-          if (daysLeft > 0 && daysLeft <= 180) {
-            const alert = {
-              id: receipt.id,
-              itemName: receipt.product_description || 'Unknown Product',
-              purchaseDate: receipt.purchase_date,
-              expiryDate: warrantyExpiry.toISOString().split('T')[0],
-              daysLeft,
-              urgency: daysLeft <= 30 ? 'high' : daysLeft <= 90 ? 'medium' : 'low'
-            };
-            console.log(`✅ Adding warranty alert for ${receipt.product_description}:`, alert);
-            return alert;
-          } else {
-            console.log(`❌ Not adding alert for ${receipt.product_description} - days left: ${daysLeft}`);
-          }
-          return null;
-        })
-        .filter(alert => alert !== null)
-        .sort((a, b) => a!.daysLeft - b!.daysLeft)
-        .slice(0, 6) as WarrantyAlert[]; // Increased from 3 to 6 to show more items
+          // Convert database alerts to frontend format
+          const alerts: WarrantyAlert[] = (alertsData || []).map((alert: any) => ({
+            id: alert.id,
+            itemName: alert.product_description || 'Unknown Product',
+            purchaseDate: alert.purchase_date,
+            expiryDate: alert.warranty_expiry_date,
+            daysLeft: alert.days_until_expiry,
+            urgency: alert.urgency as 'low' | 'medium' | 'high'
+          }));
 
-      console.log('Warranty alerts found:', alerts.length, alerts);
-      setWarrantyAlerts(alerts);
-      setAlertsCount(alerts.length);
+          console.log('✅ Warranty alerts loaded successfully:', alerts.length);
+          setWarrantyAlerts(alerts);
+          setAlertsCount(alerts.length);
+        }
+      } catch (alertsError) {
+        console.error('Failed to load warranty alerts:', alertsError);
+        setWarrantyAlerts([]);
+        setAlertsCount(0);
+      }
 
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Load subscription and usage data
+  const loadSubscriptionData = async (userId: string) => {
+    try {
+      setLoadingSubscription(true);
+      
+      const subscriptionData = await subscriptionService.getSubscriptionInfo(userId);
+      
+      if (subscriptionData) {
+        setSubscriptionInfo(subscriptionData);
+      } else {
+        // Initialize subscription for new users
+        await subscriptionService.initializeUserSubscription(userId);
+        const newSubscriptionData = await subscriptionService.getSubscriptionInfo(userId);
+        setSubscriptionInfo(newSubscriptionData);
+      }
+    } catch (error) {
+      console.error('Error loading subscription data:', error);
+      // Set default free tier if we can't load subscription data
+      setSubscriptionInfo({
+        plan: 'free',
+        status: 'active',
+        cancel_at_period_end: false,
+        receipts_used: 0,
+        receipts_limit: 5,
+        usage_month: new Date().toISOString().substring(0, 7)
+      });
+    } finally {
+      setLoadingSubscription(false);
     }
   };
 
@@ -337,151 +314,186 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     }
   };
 
-  const handleGenerateEmbeddings = async () => {
+  // One-time function to index existing receipts (for receipts created before automatic indexing)
+  const handleIndexExistingReceipts = async () => {
     if (!user) return;
     
     setIsGeneratingEmbeddings(true);
     try {
-      const result = await generateEmbeddingsForAllReceipts(user.id);
-      console.log('Embedding generation result:', result);
+      console.log('🔄 Indexing existing receipts for AI search...');
+      
+      // Get all receipts without embeddings
+      const { data: receipts, error: fetchError } = await supabase
+        .from('receipts')
+        .select('id, product_description, brand_name, model_number, store_name, purchase_location, warranty_period, embedding')
+        .eq('user_id', user.id)
+        .is('embedding', null);
+
+      if (fetchError) {
+        throw new Error(`Failed to fetch receipts: ${fetchError.message}`);
+      }
+
+      if (!receipts || receipts.length === 0) {
+        alert('✅ All receipts are already indexed for AI search!');
+        await loadEmbeddingStatus(user.id);
+        return;
+      }
+
+      console.log(`Found ${receipts.length} receipts to index`);
+
+      let successful = 0;
+      let errors = 0;
+
+      // Process receipts one by one
+      for (const receipt of receipts) {
+        try {
+          // Create content for embedding
+          const content = [
+            receipt.product_description || '',
+            receipt.brand_name || '',
+            receipt.model_number || '',
+            receipt.store_name || '',
+            receipt.purchase_location || '',
+            receipt.warranty_period || ''
+          ].filter(Boolean).join(' ');
+
+          if (!content.trim()) {
+            console.warn(`Skipping receipt ${receipt.id} - no content to embed`);
+            continue;
+          }
+
+          console.log(`Generating embedding for receipt ${receipt.id}: "${content.substring(0, 100)}..."`);
+
+          // Generate embedding directly using OpenAI API
+          const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
+          
+          if (!openaiApiKey) {
+            throw new Error('OpenAI API key not configured');
+          }
+
+          const response = await fetch('https://api.openai.com/v1/embeddings', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openaiApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'text-embedding-3-small',
+              input: content,
+              dimensions: 384
+            })
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+          }
+
+          const result = await response.json();
+          const embedding = result.data[0].embedding;
+
+          // Save the embedding directly to the database
+          const { error: updateError } = await supabase
+            .from('receipts')
+            .update({ embedding: embedding })
+            .eq('id', receipt.id);
+
+          if (updateError) {
+            throw new Error(`Database update failed: ${updateError.message}`);
+          }
+
+          console.log(`✓ Successfully generated and saved embedding for receipt ${receipt.id}`);
+          successful++;
+        } catch (error) {
+          console.error(`Failed to generate embedding for receipt ${receipt.id}:`, error);
+          errors++;
+        }
+      }
       
       // Refresh embedding status
       await loadEmbeddingStatus(user.id);
       
       // Show success message
-      alert(`Embedding generation completed!\n${result.message}`);
+      const message = `✅ Indexing completed!\n\n` +
+        `Successfully indexed: ${successful} receipts\n` +
+        `Errors: ${errors} receipts\n\n` +
+        `🎉 Your AI search is now ready! Try questions like "Show me Nintendo products" or "How much did I spend on electronics?"`;
+      
+      alert(message);
       
     } catch (error) {
-      console.error('Failed to generate embeddings:', error);
-      alert('Failed to generate embeddings. Please try again.');
+      console.error('Failed to index existing receipts:', error);
+      alert('❌ Failed to index receipts. Please check the console for details.');
     } finally {
       setIsGeneratingEmbeddings(false);
     }
   };
 
-  const calculateWarrantyExpiry = (purchaseDate: string, warrantyPeriod: string): Date => {
-    const purchase = new Date(purchaseDate);
-    
-    // Handle null, undefined, or empty warranty period
-    if (!warrantyPeriod || warrantyPeriod.trim() === '') {
-      // Default to 1 year for items without warranty period specified
-      purchase.setFullYear(purchase.getFullYear() + 1);
-      return purchase;
-    }
-    
-    const period = warrantyPeriod.toLowerCase();
-    
-    if (period.includes('lifetime')) {
-      return new Date('2099-12-31');
-    }
-    
-    // Extract years
-    const years = period.match(/(\d+)\s*year/);
-    if (years) {
-      purchase.setFullYear(purchase.getFullYear() + parseInt(years[1]));
-      return purchase;
-    }
-    
-    // Extract months
-    const months = period.match(/(\d+)\s*month/);
-    if (months) {
-      purchase.setMonth(purchase.getMonth() + parseInt(months[1]));
-      return purchase;
-    }
-    
-    // Extract days (THIS WAS MISSING!)
-    const days = period.match(/(\d+)\s*day/);
-    if (days) {
-      purchase.setDate(purchase.getDate() + parseInt(days[1]));
-      return purchase;
-    }
-    
-    // Default to 1 year if no specific period found
-    purchase.setFullYear(purchase.getFullYear() + 1);
-    return purchase;
-  };
-
-  // Enhanced warranty period detection for electronics
-  const getDefaultWarrantyPeriod = (productDescription: string, brandName: string): string => {
-    const product = (productDescription || '').toLowerCase();
-    const brand = (brandName || '').toLowerCase();
-    
-    // Gaming consoles and accessories - typically 1 year
-    if (product.includes('nintendo') || product.includes('xbox') || product.includes('playstation') || 
-        product.includes('ps5') || product.includes('ps4') || product.includes('switch')) {
-      return '1 year';
-    }
-    
-    // Drones and camera equipment - typically 1 year
-    if (product.includes('dji') || product.includes('drone') || product.includes('gimbal') || 
-        brand.includes('dji')) {
-      return '1 year';
-    }
-    
-    // Computers and tablets - typically 1 year
-    if (product.includes('surface') || product.includes('laptop') || product.includes('computer') ||
-        product.includes('microsoft') || product.includes('macbook') || product.includes('ipad')) {
-      return '1 year';
-    }
-    
-    // Smartphones - typically 1 year
-    if (product.includes('iphone') || product.includes('samsung') || product.includes('pixel') ||
-        product.includes('phone')) {
-      return '1 year';
-    }
-    
-    // TVs and large appliances - typically 1 year
-    if (product.includes('tv') || product.includes('television') || product.includes('lg') ||
-        product.includes('sony') || product.includes('samsung')) {
-      return '1 year';
-    }
-    
-    // Default for all other electronics
-    return '1 year';
-  };
-
   // Enhanced Smart Search functionality with RAG
   const performSmartSearch = async (query: string) => {
+    console.log('🚀 performSmartSearch called with:', query);
+    console.log('🚀 User exists:', !!user);
+    
     if (!query.trim() || !user) {
+      console.log('❌ Early return: empty query or no user');
       setSearchResults([]);
       setRagResult(null);
       return;
     }
 
+    console.log('✅ Starting search process...');
     setIsSearching(true);
     setSearchError(null);
     setRagResult(null);
 
     try {
-      // First, perform the vector search to get relevant receipts
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/smart-search`;
+      // Try direct database search first (bypassing edge function issues)
+      console.log('🔍 Trying direct database search...');
       
-      const headers = {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      };
+      // Extract keywords from natural language query
+      const keywords = query.toLowerCase()
+        .replace(/[?!.,]/g, '') // Remove punctuation
+        .split(' ')
+        .filter(word => word.length > 2 && !['did', 'purchase', 'buy', 'any', 'the', 'and'].includes(word));
+      
+      console.log('🔑 Extracted keywords:', keywords);
+      
+      // Build search conditions for each keyword
+      const searchConditions = keywords.map(keyword => 
+        `product_description.ilike.%${keyword}%,brand_name.ilike.%${keyword}%,model_number.ilike.%${keyword}%,store_name.ilike.%${keyword}%`
+      ).join(',');
+      
+      console.log('🔎 Search conditions:', searchConditions);
+      
+      // Search using extracted keywords
+      const { data: receipts, error } = await supabase
+        .from('receipts')
+        .select('*')
+        .eq('user_id', user.id)
+        .or(searchConditions)
+        .limit(10);
 
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          query: query.trim(),
-          userId: user.id
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Search failed: ${response.status} ${errorText}`);
+      if (error) {
+        console.error('❌ Database search error:', error);
+        throw new Error(`Database search failed: ${error.message}`);
       }
 
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      console.log('📋 Direct database search found:', receipts?.length || 0, 'receipts');
 
-      const searchResults = data.results || [];
+      const searchResults = (receipts || []).map(receipt => ({
+        id: receipt.id,
+        title: receipt.product_description || 'Unknown Product',
+        brand: receipt.brand_name || 'Unknown Brand',
+        model: receipt.model_number,
+        purchaseDate: receipt.purchase_date,
+        amount: receipt.amount,
+        warrantyPeriod: receipt.warranty_period || 'Unknown',
+        store_name: receipt.store_name,
+        purchase_location: receipt.purchase_location,
+        relevanceScore: 0.8 // Higher score for direct matches
+      }));
+
+      console.log('✅ Search results prepared:', searchResults.length);
       setSearchResults(searchResults);
 
       // Check if this query would benefit from RAG processing
@@ -489,6 +501,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       
       if (isRAGQuery && searchResults.length > 0) {
         try {
+          console.log('🤖 Starting RAG processing for natural language query...');
+          
           // Convert search results to Receipt format for RAG
           const receiptsForRAG = searchResults.map((result: any) => ({
             id: result.id,
@@ -508,33 +522,53 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           const ragResponse = await RAGService.processQuery(query, receiptsForRAG, user.id);
           
           if (ragResponse.error) {
-            console.warn('RAG processing failed:', ragResponse.error);
+            console.warn('⚠️ RAG processing failed (but search still works):', ragResponse.error);
+            
+            // Provide a simple fallback answer based on search results
+            setRagResult({
+              answer: `I found ${searchResults.length} receipt${searchResults.length !== 1 ? 's' : ''} matching your query. ${searchResults.map(r => `• ${r.title} from ${r.brand || 'Unknown Brand'} ($${r.amount || 'Unknown amount'})`).join('\n')}`,
+              queryType: 'question'
+            });
           } else {
             setRagResult({
               answer: ragResponse.answer,
               queryType: ragResponse.queryType,
             });
+            console.log('✅ RAG processing successful');
           }
-        } catch (ragError) {
-          console.warn('RAG processing error:', ragError);
-          // Don't fail the search if RAG fails
+        } catch (ragError: any) {
+          console.warn('⚠️ RAG processing error (search still works):', ragError.message);
+          
+          // Provide a simple fallback answer
+          setRagResult({
+            answer: `I found ${searchResults.length} receipt${searchResults.length !== 1 ? 's' : ''} matching "${query}". The search results show your purchases above.`,
+            queryType: 'question'
+          });
         }
       }
 
     } catch (err: any) {
-      console.error('Smart search error:', err);
+      console.error('❌ Smart search error:', err);
+      console.error('❌ Error details:', err.message, err.stack);
       setSearchError(err.message || 'Search failed. Please try again.');
       
       // Fallback to local search
+      console.log('🔄 Falling back to local search...');
       performLocalSearch(query);
     } finally {
+      console.log('🏁 Search process finished');
       setIsSearching(false);
     }
   };
 
   // Fallback local search
   const performLocalSearch = async (query: string) => {
-    if (!user) return;
+    console.log('🔍 performLocalSearch called with:', query);
+    if (!user) {
+      console.log('❌ No user for local search');
+      return;
+    }
+    console.log('⏳ Starting local search...');
     try {
       const { data: receipts, error } = await supabase
         .from('receipts')
@@ -544,9 +578,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         .limit(5);
 
       if (error) {
-        console.error('Local search error:', error);
+        console.error('❌ Local search error:', error);
         return;
       }
+
+      console.log('📋 Local search found receipts:', receipts?.length || 0);
 
       const localResults = (receipts || []).map(receipt => ({
         id: receipt.id,
@@ -559,14 +595,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         relevanceScore: 0.7 // Mock score for local search
       }));
 
+      console.log('✅ Local search results prepared:', localResults.length);
       setSearchResults(localResults);
     } catch (error) {
-      console.error('Local search failed:', error);
+      console.error('❌ Local search failed:', error);
     }
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('🔍 Search submitted:', searchQuery);
+    console.log('🔍 User ID:', user?.id);
+    console.log('🔍 Environment vars:', {
+      supabaseUrl: import.meta.env.VITE_SUPABASE_URL ? 'Set' : 'Missing',
+      anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Set' : 'Missing'
+    });
     performSmartSearch(searchQuery);
   };
 
@@ -856,40 +899,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             n => n.message.includes(alert.itemName) && n.message.includes('expires in')
           );
 
-                     // Check if the notification was previously dismissed
-           const wasDismissed = await wasNotificationDismissed(user.id, alert.itemName);
+          // Check if the notification was previously dismissed
+          const wasDismissed = await wasNotificationDismissed(user.id, alert.itemName);
 
           // Only create notification if it doesn't exist at all or if it was dismissed
           if (!alreadyExists && !wasDismissed) {
             const message = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days.`;
             await createNotification(user.id, 'warranty_alert', message);
+            console.log('✅ Created in-app warranty notification:', message);
             
-            // Also send push notification for Android notification center
-            try {
-              const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push-notification`, {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  userId: user.id,
-                  title: 'Warranty Alert - Smart Receipts',
-                  body: message,
-                  data: { 
-                    type: 'warranty_alert', 
-                    receiptId: alert.id,
-                    url: '/warranty'
-                  }
-                })
-              });
-              
-              if (!response.ok) {
-                console.warn('Failed to send push notification:', await response.text());
-              }
-            } catch (error) {
-              console.error('Error sending push notification:', error);
-            }
+            // Removed push notification API calls - only in-app notifications enabled
           }
         }
         
@@ -1048,6 +1067,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                       <span>Profile Settings</span>
                     </button>
                     <button
+                      onClick={() => {
+                        navigate('/subscription');
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <Shield className="h-4 w-4" />
+                      <span>Subscription</span>
+                      {subscriptionInfo && subscriptionInfo.plan === 'free' && (
+                        <span className="ml-auto bg-primary text-white text-xs px-2 py-0.5 rounded-full">
+                          Free
+                        </span>
+                      )}
+                      {subscriptionInfo && subscriptionInfo.plan === 'premium' && (
+                        <span className="ml-auto bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
+                          Pro
+                        </span>
+                      )}
+                    </button>
+                    <button
                       onClick={handleSignOut}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
                     >
@@ -1074,10 +1113,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </p>
         </div>
 
+        {/* Usage Indicator - Freemium Model */}
+        {!loadingSubscription && subscriptionInfo && (
+          <div className="mb-8">
+            <UsageIndicator
+              receiptsUsed={subscriptionInfo.receipts_used}
+              receiptsLimit={subscriptionInfo.receipts_limit}
+              plan={subscriptionInfo.plan}
+            />
+          </div>
+        )}
+
         {/* Push Notification Setup */}
-        <PushNotificationSetup onSetupComplete={(enabled) => {
-          console.log('Push notifications:', enabled ? 'enabled' : 'disabled');
-        }} />
+        {/* Removed PushNotificationSetup component */}
+        
+        {/* Note: Only in-app notifications are enabled. Android push notifications when app is closed have been disabled. */}
 
         {/* Quick Access Tiles */}
         <div className="grid md:grid-cols-3 gap-6 mb-12">
@@ -1252,26 +1302,47 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                       <strong>{embeddingStatus.withoutEmbeddings}</strong> receipts need to be indexed for AI search
                     </p>
                     <p className="text-xs text-yellow-700 mt-1">
-                      Generate embeddings to enable smart search functionality
+                      These are existing receipts that need one-time indexing. New receipts are automatically indexed.
                     </p>
                   </div>
-                  <button
-                    onClick={handleGenerateEmbeddings}
-                    disabled={isGeneratingEmbeddings}
-                    className="bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                  >
-                    {isGeneratingEmbeddings ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Indexing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Database className="h-4 w-4" />
-                        <span>Index Receipts</span>
-                      </>
-                    )}
-                  </button>
+                  <div>
+                    <button
+                      onClick={handleIndexExistingReceipts}
+                      disabled={isGeneratingEmbeddings}
+                      className="bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    >
+                      {isGeneratingEmbeddings ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Indexing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Database className="h-4 w-4" />
+                          <span>Index Now</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* AI Search Status - Show when all receipts are indexed */}
+            {embeddingStatus && embeddingStatus.withoutEmbeddings === 0 && embeddingStatus.total > 0 && (
+              <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Brain className="h-4 w-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-green-800 font-medium">
+                      ✅ All {embeddingStatus.total} receipts are indexed for AI search
+                    </p>
+                    <p className="text-xs text-green-700 mt-1">
+                      New receipts will be automatically indexed when added.
+                    </p>
+                  </div>
                 </div>
               </div>
             )}

@@ -30,7 +30,7 @@ import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { useNavigate } from 'react-router-dom';
 import Footer from './Footer';
-import PushNotificationSetup from './PushNotificationSetup';
+// Removed PushNotificationSetup import - push notifications disabled
 
 interface DashboardProps {
   onSignOut: () => void;
@@ -179,29 +179,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           warrantiesClaimed: 0
         };
         setSummaryStats(fallbackStats);
-      } else {
-        // Calculate items from grouped receipts even when stats are available
-        const totalItems = groupedReceipts.reduce((sum, receipt) => {
-          if (receipt.type === 'group') {
-            return sum + (receipt.product_count || 0);
-          } else {
-            return sum + 1; // Single product receipt = 1 item
-          }
-        }, 0);
-        
-        const summaryStats: SummaryStats = {
-          receiptsScanned: groupedReceipts.length, // Use actual grouped receipts count
-          totalAmount: stats.total_amount || 0,
-          itemsCaptured: totalItems, // Use calculated items count
-          warrantiesClaimed: 0 // This would need a separate tracking mechanism
-        };
-        setSummaryStats(summaryStats);
+      } else if (stats) {
+        setSummaryStats({
+          receiptsScanned: Number(stats.total_receipts),
+          totalAmount: Number(stats.total_amount),
+          itemsCaptured: Number(stats.total_receipts), // Use receipts count as items for now
+          warrantiesClaimed: Number(stats.expiring_warranties)
+        });
       }
 
-      // Process recent receipts with proper grouping
+      // Convert grouped receipts to recent receipts
       const recentReceiptsData: RecentReceipt[] = groupedReceipts
-        .slice(0, 4)
-        .map(receipt => {
+        .sort((a, b) => new Date(b.purchase_date).getTime() - new Date(a.purchase_date).getTime())
+        .slice(0, 5)
+        .map((receipt => {
           if (receipt.type === 'group') {
             // Multi-product receipt group
             const firstProduct = receipt.receipts[0];
@@ -231,95 +222,42 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
               items: 1
             };
           }
-        });
+        }));
       setRecentReceipts(recentReceiptsData);
 
-      // Calculate warranty alerts from all individual receipts (including grouped ones)
-      const allReceipts = groupedReceipts.flatMap(receipt => {
-        if (receipt.type === 'group') {
-          return receipt.receipts;
-        } else {
-          return [receipt];
-        }
-      });
-
-      console.log('Processing warranty alerts for receipts:', allReceipts.length);
-      console.log('Sample receipts:', allReceipts.slice(0, 3).map(r => ({
-        id: r.id,
-        product: r.product_description,
-        brand: r.brand_name,
-        purchase_date: r.purchase_date,
-        warranty_period: r.warranty_period
-      })));
-
-      // Check for specific items we're looking for
-      const targetItems = allReceipts.filter(r => 
-        r.product_description?.toLowerCase().includes('nintendo') ||
-        r.product_description?.toLowerCase().includes('dji') ||
-        r.product_description?.toLowerCase().includes('microsoft') ||
-        r.product_description?.toLowerCase().includes('surface')
-      );
-      
-      console.log('Target electronics items found:', targetItems.length);
-      targetItems.forEach(item => {
-        console.log(`Target item: ${item.product_description}`, {
-          purchase_date: item.purchase_date,
-          warranty_period: item.warranty_period,
-          brand: item.brand_name
+      // Get warranty alerts from database function instead of frontend calculation
+      console.log('Loading warranty alerts from database for user:', userId);
+      try {
+        const { data: alertsData, error: alertsError } = await supabase.rpc('get_user_warranty_alerts', {
+          user_uuid: userId
         });
-      });
 
-      const alerts: WarrantyAlert[] = allReceipts
-        .map(receipt => {
-          // Skip items without purchase date
-          if (!receipt.purchase_date) {
-            console.log(`Skipping ${receipt.product_description} - no purchase date`);
-            return null;
-          }
+        if (alertsError) {
+          console.error('Error loading warranty alerts:', alertsError);
+          setWarrantyAlerts([]);
+          setAlertsCount(0);
+        } else {
+          console.log('Database warranty alerts found:', alertsData?.length || 0, alertsData);
           
-          // Use enhanced warranty period detection for electronics
-          let warrantyPeriod = receipt.warranty_period;
-          if (!warrantyPeriod || warrantyPeriod.trim() === '') {
-            warrantyPeriod = getDefaultWarrantyPeriod(receipt.product_description, receipt.brand_name);
-            console.log(`Applied default warranty for ${receipt.product_description}: ${warrantyPeriod}`);
-          }
-          
-          const warrantyExpiry = calculateWarrantyExpiry(receipt.purchase_date, warrantyPeriod);
-          const daysLeft = Math.ceil((warrantyExpiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-          
-          console.log(`Warranty check for ${receipt.product_description}:`, {
-            purchase_date: receipt.purchase_date,
-            original_warranty_period: receipt.warranty_period,
-            calculated_warranty_period: warrantyPeriod,
-            warranty_expiry: warrantyExpiry.toISOString().split('T')[0],
-            days_left: daysLeft,
-            within_threshold: daysLeft > 0 && daysLeft <= 180
-          });
-          
-          // Only include items with warranties expiring in the next 6 months
-          if (daysLeft > 0 && daysLeft <= 180) {
-            const alert = {
-              id: receipt.id,
-              itemName: receipt.product_description || 'Unknown Product',
-              purchaseDate: receipt.purchase_date,
-              expiryDate: warrantyExpiry.toISOString().split('T')[0],
-              daysLeft,
-              urgency: daysLeft <= 30 ? 'high' : daysLeft <= 90 ? 'medium' : 'low'
-            };
-            console.log(`✅ Adding warranty alert for ${receipt.product_description}:`, alert);
-            return alert;
-          } else {
-            console.log(`❌ Not adding alert for ${receipt.product_description} - days left: ${daysLeft}`);
-          }
-          return null;
-        })
-        .filter(alert => alert !== null)
-        .sort((a, b) => a!.daysLeft - b!.daysLeft)
-        .slice(0, 6) as WarrantyAlert[]; // Increased from 3 to 6 to show more items
+          // Convert database alerts to frontend format
+          const alerts: WarrantyAlert[] = (alertsData || []).map((alert: any) => ({
+            id: alert.id,
+            itemName: alert.product_description || 'Unknown Product',
+            purchaseDate: alert.purchase_date,
+            expiryDate: alert.warranty_expiry_date,
+            daysLeft: alert.days_until_expiry,
+            urgency: alert.urgency as 'low' | 'medium' | 'high'
+          }));
 
-      console.log('Warranty alerts found:', alerts.length, alerts);
-      setWarrantyAlerts(alerts);
-      setAlertsCount(alerts.length);
+          console.log('✅ Warranty alerts loaded successfully:', alerts.length);
+          setWarrantyAlerts(alerts);
+          setAlertsCount(alerts.length);
+        }
+      } catch (alertsError) {
+        console.error('Failed to load warranty alerts:', alertsError);
+        setWarrantyAlerts([]);
+        setAlertsCount(0);
+      }
 
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -359,85 +297,50 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     }
   };
 
-  const calculateWarrantyExpiry = (purchaseDate: string, warrantyPeriod: string): Date => {
-    const purchase = new Date(purchaseDate);
-    
-    // Handle null, undefined, or empty warranty period
-    if (!warrantyPeriod || warrantyPeriod.trim() === '') {
-      // Default to 1 year for items without warranty period specified
-      purchase.setFullYear(purchase.getFullYear() + 1);
-      return purchase;
-    }
-    
-    const period = warrantyPeriod.toLowerCase();
-    
-    if (period.includes('lifetime')) {
-      return new Date('2099-12-31');
-    }
-    
-    // Extract years
-    const years = period.match(/(\d+)\s*year/);
-    if (years) {
-      purchase.setFullYear(purchase.getFullYear() + parseInt(years[1]));
-      return purchase;
-    }
-    
-    // Extract months
-    const months = period.match(/(\d+)\s*month/);
-    if (months) {
-      purchase.setMonth(purchase.getMonth() + parseInt(months[1]));
-      return purchase;
-    }
-    
-    // Extract days (THIS WAS MISSING!)
-    const days = period.match(/(\d+)\s*day/);
-    if (days) {
-      purchase.setDate(purchase.getDate() + parseInt(days[1]));
-      return purchase;
-    }
-    
-    // Default to 1 year if no specific period found
-    purchase.setFullYear(purchase.getFullYear() + 1);
-    return purchase;
-  };
-
-  // Enhanced warranty period detection for electronics
+  // Default warranty periods for common electronic brands (kept for compatibility)
   const getDefaultWarrantyPeriod = (productDescription: string, brandName: string): string => {
     const product = (productDescription || '').toLowerCase();
     const brand = (brandName || '').toLowerCase();
     
-    // Gaming consoles and accessories - typically 1 year
-    if (product.includes('nintendo') || product.includes('xbox') || product.includes('playstation') || 
-        product.includes('ps5') || product.includes('ps4') || product.includes('switch')) {
+    // Nintendo devices typically have 1 year warranty
+    if (product.includes('nintendo') || product.includes('switch') || brand.includes('nintendo')) {
       return '1 year';
     }
     
-    // Drones and camera equipment - typically 1 year
-    if (product.includes('dji') || product.includes('drone') || product.includes('gimbal') || 
-        brand.includes('dji')) {
+    // DJI drones typically have 1 year warranty
+    if (product.includes('dji') || product.includes('drone') || brand.includes('dji')) {
       return '1 year';
     }
     
-    // Computers and tablets - typically 1 year
-    if (product.includes('surface') || product.includes('laptop') || product.includes('computer') ||
-        product.includes('microsoft') || product.includes('macbook') || product.includes('ipad')) {
+    // Apple devices typically have 1 year warranty
+    if (product.includes('iphone') || product.includes('ipad') || product.includes('macbook') || 
+        product.includes('apple') || brand.includes('apple')) {
       return '1 year';
     }
     
-    // Smartphones - typically 1 year
-    if (product.includes('iphone') || product.includes('samsung') || product.includes('pixel') ||
-        product.includes('phone')) {
+    // Microsoft Surface devices typically have 1 year warranty
+    if (product.includes('surface') || product.includes('microsoft') || brand.includes('microsoft')) {
       return '1 year';
     }
     
-    // TVs and large appliances - typically 1 year
-    if (product.includes('tv') || product.includes('television') || product.includes('lg') ||
-        product.includes('sony') || product.includes('samsung')) {
+    // Samsung devices typically have 1 year warranty
+    if (brand.includes('samsung') || product.includes('galaxy')) {
       return '1 year';
     }
     
-    // Default for all other electronics
-    return '1 year';
+    // Gaming consoles typically have 1 year warranty
+    if (product.includes('xbox') || product.includes('playstation') || product.includes('ps5') || 
+        product.includes('ps4') || product.includes('console')) {
+      return '1 year';
+    }
+    
+    // Laptops and computers typically have 1 year warranty
+    if (product.includes('laptop') || product.includes('computer') || product.includes('desktop')) {
+      return '1 year';
+    }
+    
+    // Default to 90 days for electronics, 1 year for everything else
+    return product.includes('electronic') || product.includes('tech') ? '90 days' : '1 year';
   };
 
   // Enhanced Smart Search functionality with RAG
@@ -856,40 +759,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             n => n.message.includes(alert.itemName) && n.message.includes('expires in')
           );
 
-                     // Check if the notification was previously dismissed
-           const wasDismissed = await wasNotificationDismissed(user.id, alert.itemName);
+          // Check if the notification was previously dismissed
+          const wasDismissed = await wasNotificationDismissed(user.id, alert.itemName);
 
           // Only create notification if it doesn't exist at all or if it was dismissed
           if (!alreadyExists && !wasDismissed) {
             const message = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days.`;
             await createNotification(user.id, 'warranty_alert', message);
+            console.log('✅ Created in-app warranty notification:', message);
             
-            // Also send push notification for Android notification center
-            try {
-              const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push-notification`, {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  userId: user.id,
-                  title: 'Warranty Alert - Smart Receipts',
-                  body: message,
-                  data: { 
-                    type: 'warranty_alert', 
-                    receiptId: alert.id,
-                    url: '/warranty'
-                  }
-                })
-              });
-              
-              if (!response.ok) {
-                console.warn('Failed to send push notification:', await response.text());
-              }
-            } catch (error) {
-              console.error('Error sending push notification:', error);
-            }
+            // Removed push notification API calls - only in-app notifications enabled
           }
         }
         
@@ -1075,9 +954,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         </div>
 
         {/* Push Notification Setup */}
-        <PushNotificationSetup onSetupComplete={(enabled) => {
-          console.log('Push notifications:', enabled ? 'enabled' : 'disabled');
-        }} />
+        {/* Removed PushNotificationSetup component */}
+        
+        {/* Note: Only in-app notifications are enabled. Android push notifications when app is closed have been disabled. */}
 
         {/* Quick Access Tiles */}
         <div className="grid md:grid-cols-3 gap-6 mb-12">

@@ -31,5 +31,9 @@ dist-ssr
 .env.production.local
 .env
 
+# Cursor configuration with potentially sensitive data
+.cursorrules
+.cursor/
+
 # Local Netlify folder
 .netlify

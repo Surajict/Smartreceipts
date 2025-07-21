@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { signOut, supabase, getUserReceipts, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
-import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus } from '../utils/generateEmbeddings';
+import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus, testEmbeddingGeneration } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { useNavigate } from 'react-router-dom';
@@ -287,13 +287,29 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       await loadEmbeddingStatus(user.id);
       
       // Show success message
-      alert(`Embedding generation completed!\n${result.message}`);
+      alert(`Embedding generation completed!\n${result.message}\n\n🎉 Your smart search should now work with questions like "Did I purchase any Nintendo product?"`);
       
     } catch (error) {
       console.error('Failed to generate embeddings:', error);
       alert('Failed to generate embeddings. Please try again.');
     } finally {
       setIsGeneratingEmbeddings(false);
+    }
+  };
+
+  const handleTestEmbeddings = async () => {
+    try {
+      console.log('🧪 Testing embedding generation...');
+      const isWorking = await testEmbeddingGeneration();
+      
+      if (isWorking) {
+        alert('✅ Embedding system is working correctly!\n\nYou can now safely use "Index Receipts" to generate embeddings for your receipts.');
+      } else {
+        alert('❌ Embedding system test failed.\n\nPlease check the console for more details.');
+      }
+    } catch (error) {
+      console.error('❌ Test embedding error:', error);
+      alert('❌ Failed to test embedding system.\n\nPlease check the console for more details.');
     }
   };
 
@@ -345,46 +361,69 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
   // Enhanced Smart Search functionality with RAG
   const performSmartSearch = async (query: string) => {
+    console.log('🚀 performSmartSearch called with:', query);
+    console.log('🚀 User exists:', !!user);
+    
     if (!query.trim() || !user) {
+      console.log('❌ Early return: empty query or no user');
       setSearchResults([]);
       setRagResult(null);
       return;
     }
 
+    console.log('✅ Starting search process...');
     setIsSearching(true);
     setSearchError(null);
     setRagResult(null);
 
     try {
-      // First, perform the vector search to get relevant receipts
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/smart-search`;
+      // Try direct database search first (bypassing edge function issues)
+      console.log('🔍 Trying direct database search...');
       
-      const headers = {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      };
+      // Extract keywords from natural language query
+      const keywords = query.toLowerCase()
+        .replace(/[?!.,]/g, '') // Remove punctuation
+        .split(' ')
+        .filter(word => word.length > 2 && !['did', 'purchase', 'buy', 'any', 'the', 'and'].includes(word));
+      
+      console.log('🔑 Extracted keywords:', keywords);
+      
+      // Build search conditions for each keyword
+      const searchConditions = keywords.map(keyword => 
+        `product_description.ilike.%${keyword}%,brand_name.ilike.%${keyword}%,model_number.ilike.%${keyword}%,store_name.ilike.%${keyword}%`
+      ).join(',');
+      
+      console.log('🔎 Search conditions:', searchConditions);
+      
+      // Search using extracted keywords
+      const { data: receipts, error } = await supabase
+        .from('receipts')
+        .select('*')
+        .eq('user_id', user.id)
+        .or(searchConditions)
+        .limit(10);
 
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          query: query.trim(),
-          userId: user.id
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Search failed: ${response.status} ${errorText}`);
+      if (error) {
+        console.error('❌ Database search error:', error);
+        throw new Error(`Database search failed: ${error.message}`);
       }
 
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      console.log('📋 Direct database search found:', receipts?.length || 0, 'receipts');
 
-      const searchResults = data.results || [];
+      const searchResults = (receipts || []).map(receipt => ({
+        id: receipt.id,
+        title: receipt.product_description || 'Unknown Product',
+        brand: receipt.brand_name || 'Unknown Brand',
+        model: receipt.model_number,
+        purchaseDate: receipt.purchase_date,
+        amount: receipt.amount,
+        warrantyPeriod: receipt.warranty_period || 'Unknown',
+        store_name: receipt.store_name,
+        purchase_location: receipt.purchase_location,
+        relevanceScore: 0.8 // Higher score for direct matches
+      }));
+
+      console.log('✅ Search results prepared:', searchResults.length);
       setSearchResults(searchResults);
 
       // Check if this query would benefit from RAG processing
@@ -392,6 +431,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       
       if (isRAGQuery && searchResults.length > 0) {
         try {
+          console.log('🤖 Starting RAG processing for natural language query...');
+          
           // Convert search results to Receipt format for RAG
           const receiptsForRAG = searchResults.map((result: any) => ({
             id: result.id,
@@ -411,33 +452,53 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           const ragResponse = await RAGService.processQuery(query, receiptsForRAG, user.id);
           
           if (ragResponse.error) {
-            console.warn('RAG processing failed:', ragResponse.error);
+            console.warn('⚠️ RAG processing failed (but search still works):', ragResponse.error);
+            
+            // Provide a simple fallback answer based on search results
+            setRagResult({
+              answer: `I found ${searchResults.length} receipt${searchResults.length !== 1 ? 's' : ''} matching your query. ${searchResults.map(r => `• ${r.title} from ${r.brand || 'Unknown Brand'} ($${r.amount || 'Unknown amount'})`).join('\n')}`,
+              queryType: 'question'
+            });
           } else {
             setRagResult({
               answer: ragResponse.answer,
               queryType: ragResponse.queryType,
             });
+            console.log('✅ RAG processing successful');
           }
-        } catch (ragError) {
-          console.warn('RAG processing error:', ragError);
-          // Don't fail the search if RAG fails
+        } catch (ragError: any) {
+          console.warn('⚠️ RAG processing error (search still works):', ragError.message);
+          
+          // Provide a simple fallback answer
+          setRagResult({
+            answer: `I found ${searchResults.length} receipt${searchResults.length !== 1 ? 's' : ''} matching "${query}". The search results show your purchases above.`,
+            queryType: 'question'
+          });
         }
       }
 
     } catch (err: any) {
-      console.error('Smart search error:', err);
+      console.error('❌ Smart search error:', err);
+      console.error('❌ Error details:', err.message, err.stack);
       setSearchError(err.message || 'Search failed. Please try again.');
       
       // Fallback to local search
+      console.log('🔄 Falling back to local search...');
       performLocalSearch(query);
     } finally {
+      console.log('🏁 Search process finished');
       setIsSearching(false);
     }
   };
 
   // Fallback local search
   const performLocalSearch = async (query: string) => {
-    if (!user) return;
+    console.log('🔍 performLocalSearch called with:', query);
+    if (!user) {
+      console.log('❌ No user for local search');
+      return;
+    }
+    console.log('⏳ Starting local search...');
     try {
       const { data: receipts, error } = await supabase
         .from('receipts')
@@ -447,9 +508,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         .limit(5);
 
       if (error) {
-        console.error('Local search error:', error);
+        console.error('❌ Local search error:', error);
         return;
       }
+
+      console.log('📋 Local search found receipts:', receipts?.length || 0);
 
       const localResults = (receipts || []).map(receipt => ({
         id: receipt.id,
@@ -462,14 +525,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         relevanceScore: 0.7 // Mock score for local search
       }));
 
+      console.log('✅ Local search results prepared:', localResults.length);
       setSearchResults(localResults);
     } catch (error) {
-      console.error('Local search failed:', error);
+      console.error('❌ Local search failed:', error);
     }
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('🔍 Search submitted:', searchQuery);
+    console.log('🔍 User ID:', user?.id);
+    console.log('🔍 Environment vars:', {
+      supabaseUrl: import.meta.env.VITE_SUPABASE_URL ? 'Set' : 'Missing',
+      anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Set' : 'Missing'
+    });
     performSmartSearch(searchQuery);
   };
 
@@ -1134,23 +1204,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                       Generate embeddings to enable smart search functionality
                     </p>
                   </div>
-                  <button
-                    onClick={handleGenerateEmbeddings}
-                    disabled={isGeneratingEmbeddings}
-                    className="bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                  >
-                    {isGeneratingEmbeddings ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Indexing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Database className="h-4 w-4" />
-                        <span>Index Receipts</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleTestEmbeddings}
+                      className="bg-blue-600 text-white px-3 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors duration-200 flex items-center space-x-1 text-sm"
+                      title="Test if embedding generation is working"
+                    >
+                      <span>🧪</span>
+                      <span>Test</span>
+                    </button>
+                    <button
+                      onClick={handleGenerateEmbeddings}
+                      disabled={isGeneratingEmbeddings}
+                      className="bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    >
+                      {isGeneratingEmbeddings ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Indexing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Database className="h-4 w-4" />
+                          <span>Index Receipts</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

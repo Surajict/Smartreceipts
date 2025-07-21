@@ -67,31 +67,45 @@ export async function generateEmbeddingsForAllReceipts(userId: string): Promise<
 
         console.log(`Generating embedding for receipt ${receipt.id}: "${content.substring(0, 100)}..."`);
 
-        // Call the generate-embedding edge function
-        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-embedding`, {
+        // Generate embedding directly using OpenAI API
+        const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
+        
+        if (!openaiApiKey) {
+          throw new Error('OpenAI API key not configured');
+        }
+
+        const response = await fetch('https://api.openai.com/v1/embeddings', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Authorization': `Bearer ${openaiApiKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            content: content,
-            receiptId: receipt.id
+            model: 'text-embedding-3-small',
+            input: content,
+            dimensions: 384
           })
         });
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(`HTTP ${response.status}: ${errorText}`);
+          throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
         }
 
         const result = await response.json();
-        
-        if (result.error) {
-          throw new Error(result.error);
+        const embedding = result.data[0].embedding;
+
+        // Save the embedding directly to the database
+        const { error: updateError } = await supabase
+          .from('receipts')
+          .update({ embedding: embedding })
+          .eq('id', receipt.id);
+
+        if (updateError) {
+          throw new Error(`Database update failed: ${updateError.message}`);
         }
 
-        console.log(`✓ Successfully generated embedding for receipt ${receipt.id}`);
+        console.log(`✓ Successfully generated and saved embedding for receipt ${receipt.id}`);
         successful++;
 
         // Add a small delay to avoid overwhelming the API
@@ -120,6 +134,52 @@ export async function generateEmbeddingsForAllReceipts(userId: string): Promise<
       errors: 1,
       message: `Failed to generate embeddings: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
+  }
+}
+
+// Test function for embedding generation
+export async function testEmbeddingGeneration(): Promise<boolean> {
+  try {
+    const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
+    
+    if (!openaiApiKey) {
+      console.error('❌ OpenAI API key not configured');
+      return false;
+    }
+
+    console.log('🧪 Testing embedding generation...');
+    
+    const response = await fetch('https://api.openai.com/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'text-embedding-3-small',
+        input: 'Test embedding generation',
+        dimensions: 384
+      })
+    });
+
+    if (!response.ok) {
+      console.error('❌ Embedding generation test failed:', response.status);
+      return false;
+    }
+
+    const result = await response.json();
+    const embedding = result.data[0].embedding;
+    
+    if (!embedding || !Array.isArray(embedding) || embedding.length !== 384) {
+      console.error('❌ Invalid embedding format received');
+      return false;
+    }
+
+    console.log('✅ Embedding generation test successful!');
+    return true;
+  } catch (error) {
+    console.error('❌ Embedding generation test error:', error);
+    return false;
   }
 }
 

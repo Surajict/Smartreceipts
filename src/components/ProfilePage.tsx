@@ -95,11 +95,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
     if (user) {
       setEditedName(user.full_name);
       setNewEmail(user.email);
-      
+
       if (user.id) {
-        console.log('User ID available, loading settings:', user.id);
-        loadUserSettings();
-      }
+      console.log('User ID available, loading settings:', user.id);
+      loadUserSettings();
+    }
     }
   }, [user]);
 

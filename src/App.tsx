@@ -15,6 +15,7 @@ import ReceiptScanning from './components/ReceiptScanning';
 import ProfilePage from './components/ProfilePage';
 import MyLibrary from './components/MyLibrary';
 import WarrantyPage from './components/WarrantyPage';
+import Chatbot from './components/Chatbot';
 import { UserProvider, useUser } from './contexts/UserContext';
 
 // Protected Route Component
@@ -55,6 +56,8 @@ const HomePage = () => {
         <CTA onShowLogin={handleShowLogin} onShowSignUp={handleShowSignUp} />
       </main>
       <OldFooter />
+      {/* Chatbot - Only show on landing page */}
+      <Chatbot />
     </div>
   );
 };
@@ -134,59 +137,59 @@ const WarrantyPageComponent = () => {
 function App() {
   return (
     <UserProvider>
-      <Router>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<HomePage />} />
+    <Router>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignUpPage />} />
 
-          {/* Protected Routes */}
-          <Route
-            path="/dashboard"
-            element={
+        {/* Protected Routes */}
+        <Route
+          path="/dashboard"
+          element={
               <ProtectedRoute>
                 <DashboardPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/scan"
-            element={
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/scan"
+          element={
               <ProtectedRoute>
-                <ReceiptScanningPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
+              <ReceiptScanningPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
               <ProtectedRoute>
-                <ProfilePageComponent />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/library"
-            element={
+              <ProfilePageComponent />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/library"
+          element={
               <ProtectedRoute>
-                <LibraryPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/warranty"
-            element={
+              <LibraryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/warranty"
+          element={
               <ProtectedRoute>
-                <WarrantyPageComponent />
-              </ProtectedRoute>
-            }
-          />
+              <WarrantyPageComponent />
+            </ProtectedRoute>
+          }
+        />
 
-          {/* Catch all route - redirect to home */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Router>
+        {/* Catch all route - redirect to home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Router>
     </UserProvider>
   );
 }

@@ -25,9 +25,12 @@ import {
 } from 'lucide-react';
 import { signOut, supabase, getUserReceipts, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
-import { generateEmbeddingsForAllReceipts, checkEmbeddingStatus, testEmbeddingGeneration } from '../utils/generateEmbeddings';
+import { checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
+import subscriptionService from '../services/subscriptionService';
+import { UserSubscriptionInfo } from '../types/subscription';
+import UsageIndicator from './UsageIndicator';
 import { useNavigate } from 'react-router-dom';
 import Footer from './Footer';
 // Removed PushNotificationSetup import - push notifications disabled
@@ -114,6 +117,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [archivingAll, setArchivingAll] = useState(false);
+  
+  // Subscription and usage tracking state
+  const [subscriptionInfo, setSubscriptionInfo] = useState<UserSubscriptionInfo | null>(null);
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -122,6 +129,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       loadDashboardData(user.id);
       loadEmbeddingStatus(user.id);
       loadNotifications(user.id);
+      loadSubscriptionData(user.id);
     }
   }, [user]);
 
@@ -266,6 +274,37 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     }
   };
 
+  // Load subscription and usage data
+  const loadSubscriptionData = async (userId: string) => {
+    try {
+      setLoadingSubscription(true);
+      
+      const subscriptionData = await subscriptionService.getSubscriptionInfo(userId);
+      
+      if (subscriptionData) {
+        setSubscriptionInfo(subscriptionData);
+      } else {
+        // Initialize subscription for new users
+        await subscriptionService.initializeUserSubscription(userId);
+        const newSubscriptionData = await subscriptionService.getSubscriptionInfo(userId);
+        setSubscriptionInfo(newSubscriptionData);
+      }
+    } catch (error) {
+      console.error('Error loading subscription data:', error);
+      // Set default free tier if we can't load subscription data
+      setSubscriptionInfo({
+        plan: 'free',
+        status: 'active',
+        cancel_at_period_end: false,
+        receipts_used: 0,
+        receipts_limit: 5,
+        usage_month: new Date().toISOString().substring(0, 7)
+      });
+    } finally {
+      setLoadingSubscription(false);
+    }
+  };
+
   const loadEmbeddingStatus = async (userId: string) => {
     try {
       const status = await checkEmbeddingStatus(userId);
@@ -275,88 +314,119 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     }
   };
 
-  const handleGenerateEmbeddings = async () => {
+  // One-time function to index existing receipts (for receipts created before automatic indexing)
+  const handleIndexExistingReceipts = async () => {
     if (!user) return;
     
     setIsGeneratingEmbeddings(true);
     try {
-      const result = await generateEmbeddingsForAllReceipts(user.id);
-      console.log('Embedding generation result:', result);
+      console.log('🔄 Indexing existing receipts for AI search...');
+      
+      // Get all receipts without embeddings
+      const { data: receipts, error: fetchError } = await supabase
+        .from('receipts')
+        .select('id, product_description, brand_name, model_number, store_name, purchase_location, warranty_period, embedding')
+        .eq('user_id', user.id)
+        .is('embedding', null);
+
+      if (fetchError) {
+        throw new Error(`Failed to fetch receipts: ${fetchError.message}`);
+      }
+
+      if (!receipts || receipts.length === 0) {
+        alert('✅ All receipts are already indexed for AI search!');
+        await loadEmbeddingStatus(user.id);
+        return;
+      }
+
+      console.log(`Found ${receipts.length} receipts to index`);
+
+      let successful = 0;
+      let errors = 0;
+
+      // Process receipts one by one
+      for (const receipt of receipts) {
+        try {
+          // Create content for embedding
+          const content = [
+            receipt.product_description || '',
+            receipt.brand_name || '',
+            receipt.model_number || '',
+            receipt.store_name || '',
+            receipt.purchase_location || '',
+            receipt.warranty_period || ''
+          ].filter(Boolean).join(' ');
+
+          if (!content.trim()) {
+            console.warn(`Skipping receipt ${receipt.id} - no content to embed`);
+            continue;
+          }
+
+          console.log(`Generating embedding for receipt ${receipt.id}: "${content.substring(0, 100)}..."`);
+
+          // Generate embedding directly using OpenAI API
+          const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
+          
+          if (!openaiApiKey) {
+            throw new Error('OpenAI API key not configured');
+          }
+
+          const response = await fetch('https://api.openai.com/v1/embeddings', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openaiApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'text-embedding-3-small',
+              input: content,
+              dimensions: 384
+            })
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+          }
+
+          const result = await response.json();
+          const embedding = result.data[0].embedding;
+
+          // Save the embedding directly to the database
+          const { error: updateError } = await supabase
+            .from('receipts')
+            .update({ embedding: embedding })
+            .eq('id', receipt.id);
+
+          if (updateError) {
+            throw new Error(`Database update failed: ${updateError.message}`);
+          }
+
+          console.log(`✓ Successfully generated and saved embedding for receipt ${receipt.id}`);
+          successful++;
+        } catch (error) {
+          console.error(`Failed to generate embedding for receipt ${receipt.id}:`, error);
+          errors++;
+        }
+      }
       
       // Refresh embedding status
       await loadEmbeddingStatus(user.id);
       
       // Show success message
-      alert(`Embedding generation completed!\n${result.message}\n\n🎉 Your smart search should now work with questions like "Did I purchase any Nintendo product?"`);
+      const message = `✅ Indexing completed!\n\n` +
+        `Successfully indexed: ${successful} receipts\n` +
+        `Errors: ${errors} receipts\n\n` +
+        `🎉 Your AI search is now ready! Try questions like "Show me Nintendo products" or "How much did I spend on electronics?"`;
+      
+      alert(message);
       
     } catch (error) {
-      console.error('Failed to generate embeddings:', error);
-      alert('Failed to generate embeddings. Please try again.');
+      console.error('Failed to index existing receipts:', error);
+      alert('❌ Failed to index receipts. Please check the console for details.');
     } finally {
       setIsGeneratingEmbeddings(false);
     }
-  };
-
-  const handleTestEmbeddings = async () => {
-    try {
-      console.log('🧪 Testing embedding generation...');
-      const isWorking = await testEmbeddingGeneration();
-      
-      if (isWorking) {
-        alert('✅ Embedding system is working correctly!\n\nYou can now safely use "Index Receipts" to generate embeddings for your receipts.');
-      } else {
-        alert('❌ Embedding system test failed.\n\nPlease check the console for more details.');
-      }
-    } catch (error) {
-      console.error('❌ Test embedding error:', error);
-      alert('❌ Failed to test embedding system.\n\nPlease check the console for more details.');
-    }
-  };
-
-  // Default warranty periods for common electronic brands (kept for compatibility)
-  const getDefaultWarrantyPeriod = (productDescription: string, brandName: string): string => {
-    const product = (productDescription || '').toLowerCase();
-    const brand = (brandName || '').toLowerCase();
-    
-    // Nintendo devices typically have 1 year warranty
-    if (product.includes('nintendo') || product.includes('switch') || brand.includes('nintendo')) {
-      return '1 year';
-    }
-    
-    // DJI drones typically have 1 year warranty
-    if (product.includes('dji') || product.includes('drone') || brand.includes('dji')) {
-      return '1 year';
-    }
-    
-    // Apple devices typically have 1 year warranty
-    if (product.includes('iphone') || product.includes('ipad') || product.includes('macbook') || 
-        product.includes('apple') || brand.includes('apple')) {
-      return '1 year';
-    }
-    
-    // Microsoft Surface devices typically have 1 year warranty
-    if (product.includes('surface') || product.includes('microsoft') || brand.includes('microsoft')) {
-      return '1 year';
-    }
-    
-    // Samsung devices typically have 1 year warranty
-    if (brand.includes('samsung') || product.includes('galaxy')) {
-      return '1 year';
-    }
-    
-    // Gaming consoles typically have 1 year warranty
-    if (product.includes('xbox') || product.includes('playstation') || product.includes('ps5') || 
-        product.includes('ps4') || product.includes('console')) {
-      return '1 year';
-    }
-    
-    // Laptops and computers typically have 1 year warranty
-    if (product.includes('laptop') || product.includes('computer') || product.includes('desktop')) {
-      return '1 year';
-    }
-    
-    // Default to 90 days for electronics, 1 year for everything else
-    return product.includes('electronic') || product.includes('tech') ? '90 days' : '1 year';
   };
 
   // Enhanced Smart Search functionality with RAG
@@ -997,6 +1067,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                       <span>Profile Settings</span>
                     </button>
                     <button
+                      onClick={() => {
+                        navigate('/subscription');
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <Shield className="h-4 w-4" />
+                      <span>Subscription</span>
+                      {subscriptionInfo && subscriptionInfo.plan === 'free' && (
+                        <span className="ml-auto bg-primary text-white text-xs px-2 py-0.5 rounded-full">
+                          Free
+                        </span>
+                      )}
+                      {subscriptionInfo && subscriptionInfo.plan === 'premium' && (
+                        <span className="ml-auto bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
+                          Pro
+                        </span>
+                      )}
+                    </button>
+                    <button
                       onClick={handleSignOut}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
                     >
@@ -1022,6 +1112,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             Ready to manage your receipts and warranties smartly?
           </p>
         </div>
+
+        {/* Usage Indicator - Freemium Model */}
+        {!loadingSubscription && subscriptionInfo && (
+          <div className="mb-8">
+            <UsageIndicator
+              receiptsUsed={subscriptionInfo.receipts_used}
+              receiptsLimit={subscriptionInfo.receipts_limit}
+              plan={subscriptionInfo.plan}
+            />
+          </div>
+        )}
 
         {/* Push Notification Setup */}
         {/* Removed PushNotificationSetup component */}
@@ -1201,20 +1302,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                       <strong>{embeddingStatus.withoutEmbeddings}</strong> receipts need to be indexed for AI search
                     </p>
                     <p className="text-xs text-yellow-700 mt-1">
-                      Generate embeddings to enable smart search functionality
+                      These are existing receipts that need one-time indexing. New receipts are automatically indexed.
                     </p>
                   </div>
-                  <div className="flex items-center space-x-2">
+                  <div>
                     <button
-                      onClick={handleTestEmbeddings}
-                      className="bg-blue-600 text-white px-3 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors duration-200 flex items-center space-x-1 text-sm"
-                      title="Test if embedding generation is working"
-                    >
-                      <span>🧪</span>
-                      <span>Test</span>
-                    </button>
-                    <button
-                      onClick={handleGenerateEmbeddings}
+                      onClick={handleIndexExistingReceipts}
                       disabled={isGeneratingEmbeddings}
                       className="bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                     >
@@ -1226,10 +1319,29 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                       ) : (
                         <>
                           <Database className="h-4 w-4" />
-                          <span>Index Receipts</span>
+                          <span>Index Now</span>
                         </>
                       )}
                     </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* AI Search Status - Show when all receipts are indexed */}
+            {embeddingStatus && embeddingStatus.withoutEmbeddings === 0 && embeddingStatus.total > 0 && (
+              <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Brain className="h-4 w-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-green-800 font-medium">
+                      ✅ All {embeddingStatus.total} receipts are indexed for AI search
+                    </p>
+                    <p className="text-xs text-green-700 mt-1">
+                      New receipts will be automatically indexed when added.
+                    </p>
                   </div>
                 </div>
               </div>

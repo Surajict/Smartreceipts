@@ -24,6 +24,21 @@ VITE_VAPID_PUBLIC_KEY=your-vapid-public-key-here
 
 # n8n Webhook for Chatbot FAQ (optional)
 VITE_N8N_WEBHOOK_URL=https://your-n8n-webhook-url-here
+
+# Stripe Configuration (for payment processing)
+# Test environment keys (for development)
+VITE_STRIPE_TEST_PUBLISHABLE_KEY=pk_test_your-stripe-test-publishable-key
+VITE_STRIPE_TEST_SECRET_KEY=sk_test_your-stripe-test-secret-key
+
+# Live environment keys (for production) 
+VITE_STRIPE_LIVE_PUBLISHABLE_KEY=pk_live_your-stripe-live-publishable-key
+VITE_STRIPE_LIVE_SECRET_KEY=sk_live_your-stripe-live-secret-key
+
+# Stripe environment toggle (test or live)
+VITE_STRIPE_ENVIRONMENT=test
+
+# Stripe webhook endpoint secret (for verifying webhook signatures)
+VITE_STRIPE_WEBHOOK_SECRET=whsec_your-webhook-secret
 ```
 
 ## Setup Instructions:
@@ -41,12 +56,32 @@ VITE_N8N_WEBHOOK_URL=https://your-n8n-webhook-url-here
    - Get Perplexity API key from perplexity.ai
    - Get Google Cloud Vision key from Google Cloud Console
    - Generate VAPID keys for push notifications
+   - **Get Stripe keys from your Stripe Dashboard:**
+     - Go to https://dashboard.stripe.com/apikeys
+     - Copy publishable and secret keys for both test and live modes
+     - Set `VITE_STRIPE_ENVIRONMENT=test` for development
+     - Set `VITE_STRIPE_ENVIRONMENT=live` for production
 
 4. **Never commit `.env.local`** - it's already in `.gitignore`
+
+## Stripe Product Setup:
+
+### Test Environment:
+1. Go to https://dashboard.stripe.com/test/products
+2. Create new product: "Smart Receipts Premium"
+3. Add recurring price: AU$7.00/month
+4. Note the product and price IDs
+
+### Live Environment:
+1. Switch to live mode in Stripe Dashboard
+2. Repeat the same product creation process
+3. Use these IDs in production deployment
 
 ## Security Notes:
 
 ⚠️ **IMPORTANT**: 
 - `.env.local` is gitignored and safe to use
 - Never put real API keys in code or template files
-- Always use environment variables for sensitive data 
+- Always use environment variables for sensitive data
+- Keep test and live Stripe keys separate
+- Use webhook secrets to verify Stripe webhook authenticity 

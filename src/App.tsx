@@ -15,6 +15,7 @@ import ReceiptScanning from './components/ReceiptScanning';
 import ProfilePage from './components/ProfilePage';
 import MyLibrary from './components/MyLibrary';
 import WarrantyPage from './components/WarrantyPage';
+import SubscriptionManagement from './components/SubscriptionManagement';
 import Chatbot from './components/Chatbot';
 import { UserProvider, useUser } from './contexts/UserContext';
 
@@ -134,6 +135,13 @@ const WarrantyPageComponent = () => {
   return <WarrantyPage onBackToDashboard={handleBackToDashboard} />;
 };
 
+// Subscription Management Page Component
+const SubscriptionPage = () => {
+  const navigate = useNavigate();
+  const handleBackToDashboard = () => navigate('/dashboard');
+  return <SubscriptionManagement onBackToDashboard={handleBackToDashboard} />;
+};
+
 function App() {
   return (
     <UserProvider>
@@ -182,6 +190,14 @@ function App() {
           element={
               <ProtectedRoute>
               <WarrantyPageComponent />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/subscription"
+          element={
+              <ProtectedRoute>
+              <SubscriptionPage />
             </ProtectedRoute>
           }
         />

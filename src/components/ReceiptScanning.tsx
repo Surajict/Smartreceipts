@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { signOut, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT, supabase } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
-import { OCRService, OCREngine } from '../services/ocrService';
+import { extractTextFromImage, OCRResult, OCROptions } from '../services/ocrService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { ExtractedReceiptData } from '../types/receipt';
 import { PerplexityValidationService, ValidationResult } from '../services/perplexityValidationService';
@@ -82,7 +82,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   } | null>(null);
   
   // OCR Engine - Always uses Google Cloud Vision
-  const selectedOCREngine: OCREngine = 'google-cloud-vision';
+  const selectedOCREngine = 'google-cloud-vision';
   
   // Long receipt capture states
   const [isCapturingLong, setIsCapturingLong] = useState(false);
@@ -97,19 +97,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
 
   useEffect(() => {
     checkOpenAIAvailability();
-    setPreferredOCREngine();
   }, []);
-
-  const setPreferredOCREngine = async () => {
-    try {
-      const preferredEngine = await OCRService.getPreferredEngine();
-      // selectedOCREngine is now a constant, no need to set it
-      console.log('Using OCR engine:', preferredEngine);
-    } catch (error) {
-      console.warn('Failed to check OCR engine:', error);
-      // Always use 'google-cloud-vision'
-    }
-  };
 
   // No longer needed - user data comes from context
 
@@ -275,22 +263,27 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
   };
 
   const performOCR = async (imageSource: string | File): Promise<string> => {
-    const result = await OCRService.extractText(
-      imageSource,
-      selectedOCREngine,
-      (progress, step) => {
-        setOcrProgress(progress);
-        setProcessingStep(step);
-      }
-    );
+    // Convert string source to File if needed
+    let fileSource: File;
+    if (typeof imageSource === 'string') {
+      // Convert data URL to File
+      const response = await fetch(imageSource);
+      const blob = await response.blob();
+      fileSource = new File([blob], 'receipt.jpg', { type: 'image/jpeg' });
+    } else {
+      fileSource = imageSource;
+    }
+
+    const result = await extractTextFromImage(fileSource, {
+      fallbackToGoogleVision: true
+    });
 
     if (result.error) {
       throw new Error(result.error);
     }
 
-    console.log(`OCR Engine: ${result.engine}`);
+    console.log(`OCR Method: ${result.method}`);
     console.log('OCR Confidence:', result.confidence);
-    console.log('Processing Time:', `${result.processingTime}ms`);
     console.log('Extracted text:', result.text);
 
     return result.text;

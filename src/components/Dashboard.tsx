@@ -49,7 +49,7 @@ interface WarrantyAlert {
   purchaseDate: string;
   expiryDate: string;
   daysLeft: number;
-  urgency: 'low' | 'medium' | 'high';
+  urgency: 'low' | 'medium' | 'high' | 'critical';
 }
 
 interface RecentReceipt {
@@ -188,10 +188,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         };
         setSummaryStats(fallbackStats);
       } else if (stats) {
+        // Use the corrected database function results
         setSummaryStats({
-          receiptsScanned: Number(stats.total_receipts),
+          receiptsScanned: Number(stats.total_receipts), // Actual number of receipt documents
           totalAmount: Number(stats.total_amount),
-          itemsCaptured: Number(stats.total_receipts), // Use receipts count as items for now
+          itemsCaptured: Number(stats.total_items), // Total individual items/products 
           warrantiesClaimed: Number(stats.expiring_warranties)
         });
       }
@@ -254,7 +255,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             purchaseDate: alert.purchase_date,
             expiryDate: alert.warranty_expiry_date,
             daysLeft: alert.days_until_expiry,
-            urgency: alert.urgency as 'low' | 'medium' | 'high'
+            urgency: alert.urgency as 'low' | 'medium' | 'high' | 'critical'
           }));
 
           console.log('✅ Warranty alerts loaded successfully:', alerts.length);
@@ -780,6 +781,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {
+      case 'critical': return 'border-red-600 bg-red-100';
       case 'high': return 'border-accent-red bg-red-50';
       case 'medium': return 'border-accent-yellow bg-yellow-50';
       case 'low': return 'border-primary bg-green-50';
@@ -789,6 +791,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
   const getUrgencyIcon = (urgency: string) => {
     switch (urgency) {
+      case 'critical': return <AlertTriangle className="h-5 w-5 text-red-600 animate-pulse" />;
       case 'high': return <AlertTriangle className="h-5 w-5 text-accent-red" />;
       case 'medium': return <Clock className="h-5 w-5 text-accent-yellow" />;
       case 'low': return <CheckCircle className="h-5 w-5 text-primary" />;
@@ -863,52 +866,116 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
   // Archive (clear) a single notification
   const handleArchiveNotification = async (id: string) => {
-    await archiveNotification(id);
-    if (user) loadNotifications(user.id);
+    try {
+      // Immediately update local state to hide the notification
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      
+      // Then update the database
+      await archiveNotification(id);
+      
+      // Optionally reload to ensure consistency (but notification already removed from UI)
+      if (user) {
+        const { data } = await getUserNotifications(user.id);
+        if (data) {
+          const cleanedNotifications = removeDuplicateNotifications(data);
+          setNotifications(cleanedNotifications);
+        }
+      }
+    } catch (error) {
+      console.error('Error archiving notification:', error);
+      // On error, reload notifications to restore the correct state
+      if (user) loadNotifications(user.id);
+    }
   };
 
   // Archive (clear) all notifications
   const handleArchiveAllNotifications = async () => {
     if (!user) return;
-    setArchivingAll(true);
-    await archiveAllNotifications(user.id);
-    await loadNotifications(user.id);
-    setArchivingAll(false);
+    
+    try {
+      setArchivingAll(true);
+      
+      // Immediately clear local state
+      setNotifications([]);
+      
+      // Then update the database
+      await archiveAllNotifications(user.id);
+      
+      // Reload to ensure consistency
+      await loadNotifications(user.id);
+    } catch (error) {
+      console.error('Error archiving all notifications:', error);
+      // On error, reload notifications to restore the correct state
+      if (user) loadNotifications(user.id);
+    } finally {
+      setArchivingAll(false);
+    }
   };
 
   // Count of unread notifications
   const unreadCount = notifications.filter(n => !n.read && !n.archived).length;
 
-  // When a new warranty alert is generated, create a notification only if it does not exist in the DB
+  // When a new warranty alert is generated, create milestone-based notifications
   useEffect(() => {
-    const createWarrantyNotifications = async () => {
+    const createMilestoneWarrantyNotifications = async () => {
       if (user && warrantyAlerts.length > 0) {
-        // Fetch all current notifications from DB (including archived ones to prevent re-creation)
-        const { data: dbNotifications } = await supabase
-          .from('notifications')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('type', 'warranty_alert');
+        console.log('📋 Processing warranty alerts for milestone notifications:', warrantyAlerts.length);
         
         for (const alert of warrantyAlerts) {
-          // Create a unique identifier based on the item name and receipt ID
-          const uniqueIdentifier = `${alert.itemName}_${alert.id}`;
+          console.log(`🔍 Processing ${alert.itemName} (${alert.daysLeft} days remaining)`);
           
-          // Check if a notification for this specific item already exists (archived or not)
-          const alreadyExists = (dbNotifications || []).some(
-            n => n.message.includes(alert.itemName) && n.message.includes('expires in')
-          );
-
-          // Check if the notification was previously dismissed
-          const wasDismissed = await wasNotificationDismissed(user.id, alert.itemName);
-
-          // Only create notification if it doesn't exist at all or if it was dismissed
-          if (!alreadyExists && !wasDismissed) {
-            const message = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days.`;
-            await createNotification(user.id, 'warranty_alert', message);
-            console.log('✅ Created in-app warranty notification:', message);
+          // Determine all applicable milestones for this item
+          const applicableMilestones = [];
+          
+          if (alert.daysLeft <= 7) {
+            applicableMilestones.push({ threshold: 7, urgency: 'critical' });
+          }
+          if (alert.daysLeft <= 30) {
+            applicableMilestones.push({ threshold: 30, urgency: 'high' });
+          }
+          if (alert.daysLeft <= 90) {
+            applicableMilestones.push({ threshold: 90, urgency: 'medium' });
+          }
+          if (alert.daysLeft <= 180) {
+            applicableMilestones.push({ threshold: 180, urgency: 'low' });
+          }
+          
+          // For each applicable milestone, check if notification was already dismissed
+          for (const milestone of applicableMilestones) {
+            console.log(`🔍 Checking milestone ${milestone.threshold} days for ${alert.itemName}`);
             
-            // Removed push notification API calls - only in-app notifications enabled
+            // Check if this specific milestone notification was dismissed
+            const wasDismissed = await wasNotificationDismissed(user.id, alert.itemName, milestone.threshold);
+            
+            // Also check if there's already an active notification for this milestone
+            const { data: activeNotifications } = await supabase
+              .from('notifications')
+              .select('*')
+              .eq('user_id', user.id)
+              .eq('type', 'warranty_alert')
+              .eq('archived', false) // Only check active notifications
+              .ilike('message', `%${alert.itemName}%`)
+              .ilike('message', `%${milestone.threshold} day threshold%`);
+            
+            const hasActiveNotification = (activeNotifications || []).length > 0;
+            
+            if (!wasDismissed && !hasActiveNotification) {
+              console.log(`🔔 Creating ${milestone.urgency.toUpperCase()} notification for ${alert.itemName} (${alert.daysLeft} days remaining)`);
+              
+              const milestoneMessage = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days. (${milestone.urgency.toUpperCase()} - ${milestone.threshold} day threshold)`;
+              await createNotification(user.id, 'warranty_alert', milestoneMessage);
+              
+              // For critical alerts (≤7 days), create additional urgent notification
+              if (milestone.urgency === 'critical') {
+                const urgentWasDismissed = await wasNotificationDismissed(user.id, alert.itemName, 1); // Check for urgent dismissal
+                if (!urgentWasDismissed) {
+                  const urgentMessage = `🚨 URGENT: Warranty for ${alert.itemName} expires in ${alert.daysLeft} days!`;
+                  await createNotification(user.id, 'warranty_alert', urgentMessage);
+                }
+              }
+            } else {
+              console.log(`⏭️ Skipping ${milestone.urgency} notification for ${alert.itemName} - wasDismissed: ${wasDismissed}, hasActive: ${hasActiveNotification}`);
+            }
           }
         }
         
@@ -916,8 +983,51 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         await loadNotifications(user.id);
       }
     };
-    createWarrantyNotifications();
+
+    // Add a small delay to prevent continuous recreation
+    const timeoutId = setTimeout(() => {
+      createMilestoneWarrantyNotifications();
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warrantyAlerts, user]);
+
+  // Debug function to log notification status
+  const debugNotificationStatus = async () => {
+    if (!user) return;
+    
+    console.log('🔍 NOTIFICATION DEBUG STATUS:');
+    
+    // Get all notifications for user
+    const { data: allNotifications } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('type', 'warranty_alert')
+      .order('created_at', { ascending: false });
+    
+    console.log('📋 All warranty notifications:', allNotifications?.length || 0);
+    
+    allNotifications?.forEach((n, index) => {
+      console.log(`${index + 1}. ${n.archived ? '❌ DISMISSED' : '✅ ACTIVE'}: ${n.message}`);
+    });
+    
+    // Check warranty alerts
+    console.log('⚠️ Current warranty alerts:', warrantyAlerts.length);
+    warrantyAlerts.forEach((alert, index) => {
+      console.log(`${index + 1}. ${alert.itemName}: ${alert.daysLeft} days (${alert.urgency})`);
+    });
+  };
+
+  // Add debug button (temporary for testing)
+  useEffect(() => {
+    if (user && warrantyAlerts.length > 0) {
+      // Add debug logging after a short delay
+      setTimeout(() => {
+        debugNotificationStatus();
+      }, 2000);
+    }
   }, [warrantyAlerts, user]);
 
   if (isLoading) {
@@ -1131,18 +1241,61 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
         {/* Quick Access Tiles */}
         <div className="grid md:grid-cols-3 gap-6 mb-12">
-          <button 
-            onClick={onShowReceiptScanning}
-            className="group bg-gradient-to-br from-primary to-teal-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
-          >
-            <div className="flex flex-col items-center text-center">
-              <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
-                <Camera className="h-8 w-8" />
+          {/* Scan Receipt Card - Modified to handle free tier limits */}
+          {subscriptionInfo && subscriptionInfo.plan === 'free' && subscriptionInfo.receipts_used >= subscriptionInfo.receipts_limit ? (
+            // Disabled state for free users who reached limit
+            <div className="group bg-gradient-to-br from-gray-400 to-gray-500 p-8 rounded-2xl shadow-card border-2 border-red-300 relative overflow-hidden">
+              {/* Upgrade Badge */}
+              <div className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                LIMIT REACHED
               </div>
-              <h3 className="text-xl font-bold mb-2">Scan Receipt</h3>
-              <p className="text-white/90">Capture and digitize your receipts instantly</p>
+              
+              <div className="flex flex-col items-center text-center">
+                <div className="bg-white/20 rounded-full p-4 mb-4 relative">
+                  <Camera className="h-8 w-8 text-white opacity-50" />
+                  {/* Lock icon overlay */}
+                  <div className="absolute -bottom-1 -right-1 bg-red-500 rounded-full p-1">
+                    <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+                <h3 className="text-xl font-bold mb-2 text-white">Monthly Limit Reached</h3>
+                <p className="text-white/90 text-sm mb-4">
+                  You've used {subscriptionInfo.receipts_used}/{subscriptionInfo.receipts_limit} receipts this month
+                </p>
+                <button
+                  onClick={() => navigate('/subscription')}
+                  className="bg-gradient-to-r from-primary to-secondary text-white px-6 py-3 rounded-lg font-bold hover:shadow-lg transform hover:scale-105 transition-all duration-200 text-sm"
+                >
+                  🚀 Upgrade to Premium
+                </button>
+                <p className="text-white/70 text-xs mt-2">Unlimited scanning + Premium features</p>
+              </div>
             </div>
-          </button>
+          ) : (
+            // Normal functional state
+            <button 
+              onClick={onShowReceiptScanning}
+              className="group bg-gradient-to-br from-primary to-teal-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
+                  <Camera className="h-8 w-8" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">Scan Receipt</h3>
+                <p className="text-white/90">Capture and digitize your receipts instantly</p>
+                {/* Show remaining scans for free users */}
+                {subscriptionInfo && subscriptionInfo.plan === 'free' && (
+                  <div className="mt-2 bg-white/20 rounded-full px-3 py-1">
+                    <span className="text-xs font-medium text-white">
+                      {subscriptionInfo.receipts_limit - subscriptionInfo.receipts_used} scans left this month
+                    </span>
+                  </div>
+                )}
+              </div>
+            </button>
+          )}
 
           <button 
             onClick={onShowLibrary}

@@ -1243,24 +1243,36 @@ export const archiveAllNotifications = async (
   return { data, error };
 };
 
-// Check if a notification was previously dismissed for a specific item
+// Check if a notification was previously dismissed for a specific item and milestone
 export const wasNotificationDismissed = async (
   userId: string,
-  itemName: string
+  itemName: string,
+  threshold?: number // Optional threshold for milestone-specific checking
 ): Promise<boolean> => {
-  const { data, error } = await supabase
+  let query = supabase
     .from('notifications')
-    .select('id')
+    .select('id, message')
     .eq('user_id', userId)
     .eq('type', 'warranty_alert')
     .eq('archived', true)
     .ilike('message', `%${itemName}%`);
+  
+  const { data, error } = await query;
   
   if (error) {
     console.error('Error checking dismissed notifications:', error);
     return false;
   }
   
+  // If threshold is specified, check for milestone-specific dismissal
+  if (threshold) {
+    const milestoneSpecificDismissal = (data || []).some(
+      notification => notification.message.includes(`${threshold} day threshold`)
+    );
+    return milestoneSpecificDismissal;
+  }
+  
+  // If no threshold specified, check for any dismissal (legacy behavior)
   return (data || []).length > 0;
 };
 

@@ -42,7 +42,7 @@ interface WarrantyItem {
   purchaseDate: string;
   expiryDate: string;
   daysLeft: number;
-  urgency: 'low' | 'medium' | 'high' | 'expired';
+  urgency: 'low' | 'medium' | 'high' | 'critical' | 'expired';
   warrantyPeriod: string;
   storeName: string;
   purchaseLocation: string;
@@ -160,7 +160,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
               purchaseDate: receipt.purchase_date,
               expiryDate: warrantyExpiry.toISOString().split('T')[0],
               daysLeft,
-              urgency: daysLeft < 0 ? 'expired' : daysLeft <= 30 ? 'high' : daysLeft <= 90 ? 'medium' : 'low',
+              urgency: daysLeft < 0 ? 'expired' : daysLeft <= 7 ? 'critical' : daysLeft <= 30 ? 'high' : daysLeft <= 90 ? 'medium' : 'low',
               warrantyPeriod: warrantyPeriod,
               storeName: receipt.store_name || 'Unknown Store',
               purchaseLocation: receipt.purchase_location || 'Unknown Location',
@@ -273,7 +273,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
           case 'active':
             return item.daysLeft > 90;
           case 'expiring':
-            return item.daysLeft >= 0 && item.daysLeft <= 90;
+            return item.daysLeft >= 0 && item.daysLeft <= 90; // Includes critical items
           case 'expired':
             return item.daysLeft < 0;
           default:
@@ -334,6 +334,8 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
         return 'border-red-200 bg-red-50';
       case 'medium':
         return 'border-yellow-200 bg-yellow-50';
+      case 'critical':
+        return 'border-red-600 bg-red-100';
       case 'expired':
         return 'border-gray-200 bg-gray-50';
       default:
@@ -347,6 +349,8 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
         return <AlertTriangle className="h-5 w-5 text-red-500" />;
       case 'medium':
         return <Clock className="h-5 w-5 text-yellow-500" />;
+      case 'critical':
+        return <AlertTriangle className="h-5 w-5 text-red-600 animate-pulse" />;
       case 'expired':
         return <XCircle className="h-5 w-5 text-gray-500" />;
       default:
@@ -359,6 +363,12 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
       return (
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
           Expired
+        </span>
+      );
+    } else if (item.daysLeft <= 7) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 animate-pulse">
+          🚨 Critical
         </span>
       );
     } else if (item.daysLeft <= 30) {

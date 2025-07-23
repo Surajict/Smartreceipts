@@ -56,15 +56,49 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ userId }) =
   };
 
   const handleArchiveNotification = async (id: string) => {
-    await archiveNotification(id);
-    loadNotifications();
+    try {
+      // Immediately update local state to hide the notification
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      
+      // Then update the database
+      await archiveNotification(id);
+      
+      // Optionally reload to ensure consistency (but notification already removed from UI)
+      const { data } = await getUserNotifications(userId);
+      if (data) {
+        const cleanedNotifications = removeDuplicateNotifications(data);
+        setNotifications(cleanedNotifications);
+      }
+    } catch (error) {
+      console.error('Error archiving notification:', error);
+      // On error, reload notifications to restore the correct state
+      loadNotifications();
+    }
   };
 
-  const handleArchiveAllNotifications = async () => {
-    setArchivingAll(true);
-    await archiveAllNotifications(userId);
-    await loadNotifications();
-    setArchivingAll(false);
+  const handleArchiveAll = async () => {
+    try {
+      setArchivingAll(true);
+      
+      // Immediately clear local state
+      setNotifications([]);
+      
+      // Then update the database
+      await archiveAllNotifications(userId);
+      
+      // Reload to ensure consistency
+      const { data } = await getUserNotifications(userId);
+      if (data) {
+        const cleanedNotifications = removeDuplicateNotifications(data);
+        setNotifications(cleanedNotifications);
+      }
+    } catch (error) {
+      console.error('Error archiving all notifications:', error);
+      // On error, reload notifications to restore the correct state
+      loadNotifications();
+    } finally {
+      setArchivingAll(false);
+    }
   };
 
   const unreadCount = notifications.filter(n => !n.read && !n.archived).length;
@@ -88,7 +122,7 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ userId }) =
             <h3 className="font-medium text-text-primary">Notifications</h3>
             {notifications.length > 0 && (
               <button
-                onClick={handleArchiveAllNotifications}
+                onClick={handleArchiveAll}
                 disabled={archivingAll}
                 className="text-xs text-primary hover:underline disabled:opacity-50"
               >

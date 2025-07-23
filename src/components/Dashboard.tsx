@@ -865,17 +865,50 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
   // Archive (clear) a single notification
   const handleArchiveNotification = async (id: string) => {
-    await archiveNotification(id);
-    if (user) loadNotifications(user.id);
+    try {
+      // Immediately update local state to hide the notification
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      
+      // Then update the database
+      await archiveNotification(id);
+      
+      // Optionally reload to ensure consistency (but notification already removed from UI)
+      if (user) {
+        const { data } = await getUserNotifications(user.id);
+        if (data) {
+          const cleanedNotifications = removeDuplicateNotifications(data);
+          setNotifications(cleanedNotifications);
+        }
+      }
+    } catch (error) {
+      console.error('Error archiving notification:', error);
+      // On error, reload notifications to restore the correct state
+      if (user) loadNotifications(user.id);
+    }
   };
 
   // Archive (clear) all notifications
   const handleArchiveAllNotifications = async () => {
     if (!user) return;
-    setArchivingAll(true);
-    await archiveAllNotifications(user.id);
-    await loadNotifications(user.id);
-    setArchivingAll(false);
+    
+    try {
+      setArchivingAll(true);
+      
+      // Immediately clear local state
+      setNotifications([]);
+      
+      // Then update the database
+      await archiveAllNotifications(user.id);
+      
+      // Reload to ensure consistency
+      await loadNotifications(user.id);
+    } catch (error) {
+      console.error('Error archiving all notifications:', error);
+      // On error, reload notifications to restore the correct state
+      if (user) loadNotifications(user.id);
+    } finally {
+      setArchivingAll(false);
+    }
   };
 
   // Count of unread notifications
@@ -887,14 +920,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       if (user && warrantyAlerts.length > 0) {
         console.log('📋 Processing warranty alerts for milestone notifications:', warrantyAlerts.length);
         
-        // Fetch all current notifications from DB to avoid duplicates
-        const { data: dbNotifications } = await supabase
-          .from('notifications')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('type', 'warranty_alert');
-        
         for (const alert of warrantyAlerts) {
+          console.log(`🔍 Processing ${alert.itemName} (${alert.daysLeft} days remaining)`);
+          
           // Determine all applicable milestones for this item
           const applicableMilestones = [];
           
@@ -911,27 +939,41 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             applicableMilestones.push({ threshold: 180, urgency: 'low' });
           }
           
-          // For each applicable milestone, check if notification already exists
+          // For each applicable milestone, check if notification was already dismissed
           for (const milestone of applicableMilestones) {
-            const milestoneMessage = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days. (${milestone.urgency.toUpperCase()} - ${milestone.threshold} day threshold)`;
+            console.log(`🔍 Checking milestone ${milestone.threshold} days for ${alert.itemName}`);
             
-            // Check if this specific milestone notification already exists
-            const milestoneExists = (dbNotifications || []).some(
-              n => n.message.includes(alert.itemName) && 
-                   n.message.includes(`${milestone.threshold} day threshold`)
-            );
+            // Check if this specific milestone notification was dismissed
+            const wasDismissed = await wasNotificationDismissed(user.id, alert.itemName, milestone.threshold);
             
-            // Only create notification if this specific milestone hasn't been addressed
-            if (!milestoneExists) {
+            // Also check if there's already an active notification for this milestone
+            const { data: activeNotifications } = await supabase
+              .from('notifications')
+              .select('*')
+              .eq('user_id', user.id)
+              .eq('type', 'warranty_alert')
+              .eq('archived', false) // Only check active notifications
+              .ilike('message', `%${alert.itemName}%`)
+              .ilike('message', `%${milestone.threshold} day threshold%`);
+            
+            const hasActiveNotification = (activeNotifications || []).length > 0;
+            
+            if (!wasDismissed && !hasActiveNotification) {
               console.log(`🔔 Creating ${milestone.urgency.toUpperCase()} notification for ${alert.itemName} (${alert.daysLeft} days remaining)`);
               
+              const milestoneMessage = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days. (${milestone.urgency.toUpperCase()} - ${milestone.threshold} day threshold)`;
               await createNotification(user.id, 'warranty_alert', milestoneMessage);
               
               // For critical alerts (≤7 days), create additional urgent notification
               if (milestone.urgency === 'critical') {
-                const urgentMessage = `🚨 URGENT: Warranty for ${alert.itemName} expires in ${alert.daysLeft} days!`;
-                await createNotification(user.id, 'warranty_alert', urgentMessage);
+                const urgentWasDismissed = await wasNotificationDismissed(user.id, alert.itemName, 1); // Check for urgent dismissal
+                if (!urgentWasDismissed) {
+                  const urgentMessage = `🚨 URGENT: Warranty for ${alert.itemName} expires in ${alert.daysLeft} days!`;
+                  await createNotification(user.id, 'warranty_alert', urgentMessage);
+                }
               }
+            } else {
+              console.log(`⏭️ Skipping ${milestone.urgency} notification for ${alert.itemName} - wasDismissed: ${wasDismissed}, hasActive: ${hasActiveNotification}`);
             }
           }
         }
@@ -940,8 +982,51 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         await loadNotifications(user.id);
       }
     };
-    createMilestoneWarrantyNotifications();
+
+    // Add a small delay to prevent continuous recreation
+    const timeoutId = setTimeout(() => {
+      createMilestoneWarrantyNotifications();
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warrantyAlerts, user]);
+
+  // Debug function to log notification status
+  const debugNotificationStatus = async () => {
+    if (!user) return;
+    
+    console.log('🔍 NOTIFICATION DEBUG STATUS:');
+    
+    // Get all notifications for user
+    const { data: allNotifications } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('type', 'warranty_alert')
+      .order('created_at', { ascending: false });
+    
+    console.log('📋 All warranty notifications:', allNotifications?.length || 0);
+    
+    allNotifications?.forEach((n, index) => {
+      console.log(`${index + 1}. ${n.archived ? '❌ DISMISSED' : '✅ ACTIVE'}: ${n.message}`);
+    });
+    
+    // Check warranty alerts
+    console.log('⚠️ Current warranty alerts:', warrantyAlerts.length);
+    warrantyAlerts.forEach((alert, index) => {
+      console.log(`${index + 1}. ${alert.itemName}: ${alert.daysLeft} days (${alert.urgency})`);
+    });
+  };
+
+  // Add debug button (temporary for testing)
+  useEffect(() => {
+    if (user && warrantyAlerts.length > 0) {
+      // Add debug logging after a short delay
+      setTimeout(() => {
+        debugNotificationStatus();
+      }, 2000);
+    }
   }, [warrantyAlerts, user]);
 
   if (isLoading) {

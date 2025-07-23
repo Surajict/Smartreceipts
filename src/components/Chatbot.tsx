@@ -3,11 +3,14 @@ import { MessageCircle, Send, X, Minimize2, Bot, User, Loader2 } from 'lucide-re
 import { FAQItem } from '../data/faqKnowledgeBase';
 import { ChatbotService } from '../services/chatbotService';
 import { useUser } from '../contexts/UserContext';
+
 interface Message {
   id: string;
   text: string;
   isUser: boolean;
   timestamp: Date;
+  faqMatch?: any;
+  suggestions?: any;
 }
 
 interface ChatbotProps {
@@ -27,10 +30,51 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-  }, [sessionId]);
+      text: 'Hello! I\'m your Smart Receipts assistant. How can I help you today?',
+      isUser: false,
+      timestamp: new Date()
+    }
+  ]);
+  const [inputText, setInputText] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isTyping]);
+
+  useEffect(() => {
+    if (isOpen && !isMinimized && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isOpen, isMinimized]);
+
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || isTyping) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text: text.trim(),
+      isUser: true,
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputText('');
+    setIsTyping(true);
+
+    try {
       // Use the enhanced chatbot service
       const result = await ChatbotService.processMessage(text.trim(), sessionId, user?.id);
       
+      const botMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: result.response,
+        isUser: false,
+        timestamp: new Date(),
         faqMatch: result.faqMatch,
         suggestions: result.suggestions
       };
@@ -133,9 +177,12 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
               onClick={toggleChatbot}
               className="text-white/80 hover:text-white transition-colors p-1"
               aria-label="Close chat"
+            >
+              <X className="h-4 w-4" />
+            </button>
             <div className="absolute -top-2 -right-2 bg-accent-yellow text-text-primary text-xs rounded-full h-6 w-6 flex items-center justify-center animate-pulse font-bold">
               FAQ
-            </button>
+            </div>
           </div>
         </div>
 
@@ -155,9 +202,9 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
                       message.isUser 
                         ? 'bg-primary text-white' 
                         : 'bg-gray-200 text-gray-600'
-                          <span className="text-xs text-green-600 flex items-center font-medium">
+                    }`}>
                       {message.isUser ? (
-                            FAQ Match: {message.faqMatch.category}
+                        <User className="h-4 w-4" />
                       ) : (
                         <Bot className="h-4 w-4" />
                       )}
@@ -168,10 +215,33 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
                         : 'bg-white text-gray-800 border border-gray-200'
                     }`}>
                       <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                      {message.faqMatch && (
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <span className="text-xs text-green-600 flex items-center font-medium">
+                            FAQ Match: {message.faqMatch.category}
+                          </span>
+                        </div>
+                      )}
+                      {message.suggestions && message.suggestions.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <p className="text-xs text-gray-600 mb-1">Related topics:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {message.suggestions.map((suggestion: string, index: number) => (
+                              <button
+                                key={index}
+                                onClick={() => sendMessage(suggestion)}
+                                className="text-xs bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1 rounded-full transition-colors duration-200 border border-primary/20"
+                              >
+                                {suggestion}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <p className={`text-xs mt-1 ${
                         message.isUser ? 'text-white/70' : 'text-gray-500'
                       }`}>
-                          className="text-xs bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1 rounded-full transition-colors duration-200 border border-primary/20"
+                        {message.timestamp.toLocaleTimeString([], { 
                           hour: '2-digit', 
                           minute: '2-digit' 
                         })}
@@ -216,7 +286,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
                 />
                 <button
                   type="submit"
-                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1 rounded transition-colors duration-200 capitalize"
+                  disabled={isTyping || !inputText.trim()}
                   className="bg-primary text-white p-3 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label="Send message"
                 >
@@ -224,8 +294,8 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
                 </button>
               </div>
             </form>
-                <h3 className="font-semibold text-sm">Smart Receipts FAQ Assistant</h3>
-                <p className="text-xs text-white/80">Instant answers to your questions!</p>
+          </>
+        )}
       </div>
     </div>
   );

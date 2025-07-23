@@ -188,10 +188,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         };
         setSummaryStats(fallbackStats);
       } else if (stats) {
+        // Use the corrected database function results
         setSummaryStats({
-          receiptsScanned: Number(stats.total_receipts),
+          receiptsScanned: Number(stats.total_receipts), // Actual number of receipt documents
           totalAmount: Number(stats.total_amount),
-          itemsCaptured: Number(stats.total_receipts), // Use receipts count as items for now
+          itemsCaptured: Number(stats.total_items), // Total individual items/products 
           warrantiesClaimed: Number(stats.expiring_warranties)
         });
       }
@@ -1240,18 +1241,61 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
         {/* Quick Access Tiles */}
         <div className="grid md:grid-cols-3 gap-6 mb-12">
-          <button 
-            onClick={onShowReceiptScanning}
-            className="group bg-gradient-to-br from-primary to-teal-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
-          >
-            <div className="flex flex-col items-center text-center">
-              <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
-                <Camera className="h-8 w-8" />
+          {/* Scan Receipt Card - Modified to handle free tier limits */}
+          {subscriptionInfo && subscriptionInfo.plan === 'free' && subscriptionInfo.receipts_used >= subscriptionInfo.receipts_limit ? (
+            // Disabled state for free users who reached limit
+            <div className="group bg-gradient-to-br from-gray-400 to-gray-500 p-8 rounded-2xl shadow-card border-2 border-red-300 relative overflow-hidden">
+              {/* Upgrade Badge */}
+              <div className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                LIMIT REACHED
               </div>
-              <h3 className="text-xl font-bold mb-2">Scan Receipt</h3>
-              <p className="text-white/90">Capture and digitize your receipts instantly</p>
+              
+              <div className="flex flex-col items-center text-center">
+                <div className="bg-white/20 rounded-full p-4 mb-4 relative">
+                  <Camera className="h-8 w-8 text-white opacity-50" />
+                  {/* Lock icon overlay */}
+                  <div className="absolute -bottom-1 -right-1 bg-red-500 rounded-full p-1">
+                    <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+                <h3 className="text-xl font-bold mb-2 text-white">Monthly Limit Reached</h3>
+                <p className="text-white/90 text-sm mb-4">
+                  You've used {subscriptionInfo.receipts_used}/{subscriptionInfo.receipts_limit} receipts this month
+                </p>
+                <button
+                  onClick={() => navigate('/subscription')}
+                  className="bg-gradient-to-r from-primary to-secondary text-white px-6 py-3 rounded-lg font-bold hover:shadow-lg transform hover:scale-105 transition-all duration-200 text-sm"
+                >
+                  🚀 Upgrade to Premium
+                </button>
+                <p className="text-white/70 text-xs mt-2">Unlimited scanning + Premium features</p>
+              </div>
             </div>
-          </button>
+          ) : (
+            // Normal functional state
+            <button 
+              onClick={onShowReceiptScanning}
+              className="group bg-gradient-to-br from-primary to-teal-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
+                  <Camera className="h-8 w-8" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">Scan Receipt</h3>
+                <p className="text-white/90">Capture and digitize your receipts instantly</p>
+                {/* Show remaining scans for free users */}
+                {subscriptionInfo && subscriptionInfo.plan === 'free' && (
+                  <div className="mt-2 bg-white/20 rounded-full px-3 py-1">
+                    <span className="text-xs font-medium text-white">
+                      {subscriptionInfo.receipts_limit - subscriptionInfo.receipts_used} scans left this month
+                    </span>
+                  </div>
+                )}
+              </div>
+            </button>
+          )}
 
           <button 
             onClick={onShowLibrary}

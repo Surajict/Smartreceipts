@@ -273,6 +273,28 @@ class SubscriptionService implements UsageTracker {
   }
 
   /**
+   * Redeem a subscription code
+   */
+  async redeemSubscriptionCode(code: string, userId: string): Promise<{ success: boolean; error?: string; message?: string }> {
+    try {
+      const { data, error } = await supabase.rpc('redeem_subscription_code', {
+        code_to_redeem: code,
+        target_user_id: userId  // Fixed: Use correct parameter name that matches database function
+      });
+
+      if (error) {
+        console.error('Error redeeming subscription code:', error);
+        return { success: false, error: 'Failed to redeem code. Please try again.' };
+      }
+
+      return data;
+    } catch (err: any) {
+      console.error('Subscription code redemption error:', err);
+      return { success: false, error: 'Failed to redeem code. Please try again.' };
+    }
+  }
+
+  /**
    * Development function: Upgrade user to premium
    * This is for testing the premium features during development
    */

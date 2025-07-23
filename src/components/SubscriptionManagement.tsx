@@ -1,29 +1,58 @@
 import React, { useState, useEffect } from 'react';
 import { SubscriptionManagementProps, UserSubscriptionInfo, PaymentMethod, BillingHistory } from '../types/subscription';
 import { useUser } from '../contexts/UserContext';
+import { useSubscription } from '../contexts/SubscriptionContext';
 import subscriptionService from '../services/subscriptionService';
 import stripeService from '../services/stripeService';
 import UsageIndicator from './UsageIndicator';
 import UpgradeModal from './UpgradeModal';
 import { SUBSCRIPTION_PLANS } from '../types/subscription';
+import { Gift, CreditCard, Key, CheckCircle, AlertCircle } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({ 
   onBackToDashboard 
 }) => {
   const { user } = useUser();
-  const [subscriptionInfo, setSubscriptionInfo] = useState<UserSubscriptionInfo | null>(null);
+  const { subscriptionInfo, loading: contextLoading, redeemCode, refreshSubscription } = useSubscription();
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [billingHistory, setBillingHistory] = useState<BillingHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  
+  // Subscription system state
+  const [subscriptionSystem, setSubscriptionSystem] = useState<'code_based' | 'stripe'>('code_based');
+  
+  // Code redemption state
+  const [redemptionCode, setRedemptionCode] = useState('');
+  const [isRedeeming, setIsRedeeming] = useState(false);
+  const [redemptionMessage, setRedemptionMessage] = useState('');
+  const [redemptionError, setRedemptionError] = useState('');
 
   useEffect(() => {
     if (user) {
       loadSubscriptionData();
+      loadSystemSettings();
     }
   }, [user]);
+
+  const loadSystemSettings = async () => {
+    try {
+      const { data } = await supabase
+        .from('admin_settings')
+        .select('setting_value')
+        .eq('setting_key', 'subscription_system')
+        .single();
+
+      if (data) {
+        setSubscriptionSystem(data.setting_value as 'code_based' | 'stripe');
+      }
+    } catch (err) {
+      console.error('Failed to load system settings:', err);
+    }
+  };
 
   const loadSubscriptionData = async () => {
     if (!user) return;
@@ -32,29 +61,51 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
       setLoading(true);
       setError(null);
 
-      // Load subscription info
-      const [subInfo, paymentMethods, billingHistory] = await Promise.all([
-        subscriptionService.getSubscriptionInfo(user.id),
-        stripeService.getPaymentMethods(user.id),
-        stripeService.getBillingHistory(user.id)
-      ]);
+      // For Stripe system, load payment methods and billing history
+      if (subscriptionSystem === 'stripe') {
+        const [paymentMethods, billingHistory] = await Promise.all([
+          stripeService.getPaymentMethods(user.id),
+          stripeService.getBillingHistory(user.id)
+        ]);
 
-      if (subInfo) {
-        setSubscriptionInfo(subInfo);
-      } else {
-        // Initialize if no subscription found
-        await subscriptionService.initializeUserSubscription(user.id);
-        const newSubInfo = await subscriptionService.getSubscriptionInfo(user.id);
-        setSubscriptionInfo(newSubInfo);
+        setPaymentMethods(paymentMethods);
+        setBillingHistory(billingHistory);
       }
 
-      setPaymentMethods(paymentMethods);
-      setBillingHistory(billingHistory);
     } catch (err: any) {
       console.error('Failed to load subscription data:', err);
       setError('Failed to load subscription information');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRedeemCode = async () => {
+    if (!redemptionCode.trim()) {
+      setRedemptionError('Please enter a subscription code');
+      return;
+    }
+
+    setIsRedeeming(true);
+    setRedemptionError('');
+    setRedemptionMessage('');
+
+    try {
+      const result = await redeemCode(redemptionCode.trim().toUpperCase());
+      
+      if (result.success) {
+        setRedemptionMessage(result.message || 'Subscription code redeemed successfully!');
+        setRedemptionCode('');
+        // Refresh subscription info
+        await refreshSubscription();
+      } else {
+        setRedemptionError(result.error || 'Failed to redeem code');
+      }
+    } catch (err: any) {
+      console.error('Error redeeming code:', err);
+      setRedemptionError('An error occurred while redeeming the code');
+    } finally {
+      setIsRedeeming(false);
     }
   };
 
@@ -74,7 +125,7 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
       const result = await stripeService.cancelSubscription(user.id);
 
       if (result.success) {
-        await loadSubscriptionData(); // Reload data
+        await refreshSubscription();
         alert('Your subscription has been cancelled and will end at the current billing period.');
       } else {
         alert(result.error || 'Failed to cancel subscription');
@@ -95,7 +146,7 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
       const result = await stripeService.reactivateSubscription(user.id);
 
       if (result.success) {
-        await loadSubscriptionData(); // Reload data
+        await refreshSubscription();
         alert('Your subscription has been reactivated!');
       } else {
         alert(result.error || 'Failed to reactivate subscription');
@@ -140,7 +191,7 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
     return stripeService.formatCurrency(amount / 100, currency); // Stripe amounts are in cents
   };
 
-  if (loading) {
+  if (loading || contextLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -208,16 +259,90 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
               </button>
               <h1 className="text-2xl font-bold text-text-primary">Subscription Management</h1>
             </div>
+            <div className="flex items-center space-x-2">
+              {subscriptionSystem === 'code_based' ? (
+                <div className="flex items-center space-x-2 px-3 py-1 bg-blue-100 rounded-full">
+                  <Key className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium text-blue-600">Code-Based</span>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-2 px-3 py-1 bg-green-100 rounded-full">
+                  <CreditCard className="h-4 w-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-600">Stripe</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto p-6 space-y-8">
+        {/* Code Redemption Section - Only show for code-based system */}
+        {subscriptionSystem === 'code_based' && subscriptionInfo.plan === 'free' && (
+          <section className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <Gift className="h-6 w-6 text-blue-600" />
+              <h2 className="text-xl font-semibold text-gray-900">Redeem Subscription Code</h2>
+            </div>
+            
+            <p className="text-gray-600 mb-4">
+              Have a subscription code? Enter it below to activate your premium features.
+            </p>
+
+            <div className="flex space-x-4">
+              <div className="flex-1">
+                <input
+                  type="text"
+                  value={redemptionCode}
+                  onChange={(e) => setRedemptionCode(e.target.value.toUpperCase())}
+                  placeholder="Enter 16-digit subscription code"
+                  maxLength={16}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-center tracking-widest"
+                  style={{ letterSpacing: '0.1em' }}
+                />
+              </div>
+              <button
+                onClick={handleRedeemCode}
+                disabled={isRedeeming || !redemptionCode.trim()}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              >
+                {isRedeeming ? (
+                  <>
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    <span>Redeeming...</span>
+                  </>
+                ) : (
+                  <>
+                    <Key className="h-4 w-4" />
+                    <span>Redeem Code</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Success Message */}
+            {redemptionMessage && (
+              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center space-x-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <span className="text-green-700">{redemptionMessage}</span>
+              </div>
+            )}
+
+            {/* Error Message */}
+            {redemptionError && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+                <span className="text-red-700">{redemptionError}</span>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Current Plan Section */}
         <section className="bg-white rounded-lg shadow-sm border p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold">Current Plan</h2>
-            {subscriptionInfo.plan === 'free' && (
+            {subscriptionInfo.plan === 'free' && subscriptionSystem === 'stripe' && (
               <button
                 onClick={handleUpgrade}
                 className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark"
@@ -252,7 +377,9 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
 
                 {subscriptionInfo.plan === 'premium' && subscriptionInfo.current_period_end && (
                   <div className="flex justify-between">
-                    <span className="text-text-secondary">Next billing date:</span>
+                    <span className="text-text-secondary">
+                      {subscriptionSystem === 'code_based' ? 'Premium expires:' : 'Next billing date:'}
+                    </span>
                     <span className="font-medium">{formatDate(subscriptionInfo.current_period_end)}</span>
                   </div>
                 )}
@@ -260,9 +387,19 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
                 <div className="flex justify-between">
                   <span className="text-text-secondary">Monthly cost:</span>
                   <span className="font-medium text-lg">
-                    {stripeService.formatCurrency(currentPlan.price, currentPlan.currency)}
+                    {subscriptionSystem === 'code_based' && subscriptionInfo.plan === 'premium'
+                      ? 'Paid via Code'
+                      : stripeService.formatCurrency(currentPlan.price, currentPlan.currency)
+                    }
                   </span>
                 </div>
+
+                {subscriptionSystem === 'code_based' && (
+                  <div className="flex justify-between">
+                    <span className="text-text-secondary">Subscription Type:</span>
+                    <span className="font-medium text-blue-600">Code-Based</span>
+                  </div>
+                )}
               </div>
 
               {/* Plan Features */}
@@ -291,38 +428,40 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="mt-6 pt-6 border-t space-x-4">
-            {subscriptionInfo.plan === 'premium' && (
-              <>
-                {subscriptionInfo.cancel_at_period_end ? (
-                  <button
-                    onClick={handleReactivateSubscription}
-                    disabled={actionLoading === 'reactivate'}
-                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
-                  >
-                    {actionLoading === 'reactivate' ? 'Reactivating...' : 'Reactivate Subscription'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleCancelSubscription}
-                    disabled={actionLoading === 'cancel'}
-                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {actionLoading === 'cancel' ? 'Cancelling...' : 'Cancel Subscription'}
-                  </button>
-                )}
+          {/* Action Buttons - Only for Stripe system */}
+          {subscriptionSystem === 'stripe' && (
+            <div className="mt-6 pt-6 border-t space-x-4">
+              {subscriptionInfo.plan === 'premium' && (
+                <>
+                  {subscriptionInfo.cancel_at_period_end ? (
+                    <button
+                      onClick={handleReactivateSubscription}
+                      disabled={actionLoading === 'reactivate'}
+                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {actionLoading === 'reactivate' ? 'Reactivating...' : 'Reactivate Subscription'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleCancelSubscription}
+                      disabled={actionLoading === 'cancel'}
+                      className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {actionLoading === 'cancel' ? 'Cancelling...' : 'Cancel Subscription'}
+                    </button>
+                  )}
 
-                <button
-                  onClick={handleManageBilling}
-                  disabled={actionLoading === 'billing'}
-                  className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 disabled:opacity-50"
-                >
-                  {actionLoading === 'billing' ? 'Loading...' : 'Manage Billing'}
-                </button>
-              </>
-            )}
-          </div>
+                  <button
+                    onClick={handleManageBilling}
+                    disabled={actionLoading === 'billing'}
+                    className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    {actionLoading === 'billing' ? 'Loading...' : 'Manage Billing'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {subscriptionInfo.cancel_at_period_end && (
             <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
@@ -338,8 +477,8 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
           )}
         </section>
 
-        {/* Billing History */}
-        {billingHistory.length > 0 && (
+        {/* Billing History - Only for Stripe system */}
+        {subscriptionSystem === 'stripe' && billingHistory.length > 0 && (
           <section className="bg-white rounded-lg shadow-sm border p-6">
             <h2 className="text-xl font-semibold mb-4">Billing History</h2>
             <div className="overflow-x-auto">
@@ -391,14 +530,14 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
         )}
       </div>
 
-      {/* Upgrade Modal */}
-      {showUpgradeModal && subscriptionInfo && (
+      {/* Upgrade Modal - Only for Stripe system */}
+      {showUpgradeModal && subscriptionInfo && subscriptionSystem === 'stripe' && (
         <UpgradeModal
           isOpen={showUpgradeModal}
           onClose={() => setShowUpgradeModal(false)}
           onSuccess={() => {
             setShowUpgradeModal(false);
-            loadSubscriptionData();
+            refreshSubscription();
           }}
           currentPlan={subscriptionInfo.plan}
           usageInfo={subscriptionInfo}

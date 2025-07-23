@@ -49,7 +49,7 @@ interface WarrantyAlert {
   purchaseDate: string;
   expiryDate: string;
   daysLeft: number;
-  urgency: 'low' | 'medium' | 'high';
+  urgency: 'low' | 'medium' | 'high' | 'critical';
 }
 
 interface RecentReceipt {
@@ -254,7 +254,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             purchaseDate: alert.purchase_date,
             expiryDate: alert.warranty_expiry_date,
             daysLeft: alert.days_until_expiry,
-            urgency: alert.urgency as 'low' | 'medium' | 'high'
+            urgency: alert.urgency as 'low' | 'medium' | 'high' | 'critical'
           }));
 
           console.log('✅ Warranty alerts loaded successfully:', alerts.length);
@@ -780,6 +780,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {
+      case 'critical': return 'border-red-600 bg-red-100';
       case 'high': return 'border-accent-red bg-red-50';
       case 'medium': return 'border-accent-yellow bg-yellow-50';
       case 'low': return 'border-primary bg-green-50';
@@ -789,6 +790,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
   const getUrgencyIcon = (urgency: string) => {
     switch (urgency) {
+      case 'critical': return <AlertTriangle className="h-5 w-5 text-red-600 animate-pulse" />;
       case 'high': return <AlertTriangle className="h-5 w-5 text-accent-red" />;
       case 'medium': return <Clock className="h-5 w-5 text-accent-yellow" />;
       case 'low': return <CheckCircle className="h-5 w-5 text-primary" />;
@@ -879,11 +881,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   // Count of unread notifications
   const unreadCount = notifications.filter(n => !n.read && !n.archived).length;
 
-  // When a new warranty alert is generated, create a notification only if it does not exist in the DB
+  // When a new warranty alert is generated, create milestone-based notifications
   useEffect(() => {
-    const createWarrantyNotifications = async () => {
+    const createMilestoneWarrantyNotifications = async () => {
       if (user && warrantyAlerts.length > 0) {
-        // Fetch all current notifications from DB (including archived ones to prevent re-creation)
+        console.log('📋 Processing warranty alerts for milestone notifications:', warrantyAlerts.length);
+        
+        // Fetch all current notifications from DB to avoid duplicates
         const { data: dbNotifications } = await supabase
           .from('notifications')
           .select('*')
@@ -891,24 +895,44 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           .eq('type', 'warranty_alert');
         
         for (const alert of warrantyAlerts) {
-          // Create a unique identifier based on the item name and receipt ID
-          const uniqueIdentifier = `${alert.itemName}_${alert.id}`;
+          // Determine all applicable milestones for this item
+          const applicableMilestones = [];
           
-          // Check if a notification for this specific item already exists (archived or not)
-          const alreadyExists = (dbNotifications || []).some(
-            n => n.message.includes(alert.itemName) && n.message.includes('expires in')
-          );
-
-          // Check if the notification was previously dismissed
-          const wasDismissed = await wasNotificationDismissed(user.id, alert.itemName);
-
-          // Only create notification if it doesn't exist at all or if it was dismissed
-          if (!alreadyExists && !wasDismissed) {
-            const message = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days.`;
-            await createNotification(user.id, 'warranty_alert', message);
-            console.log('✅ Created in-app warranty notification:', message);
+          if (alert.daysLeft <= 7) {
+            applicableMilestones.push({ threshold: 7, urgency: 'critical' });
+          }
+          if (alert.daysLeft <= 30) {
+            applicableMilestones.push({ threshold: 30, urgency: 'high' });
+          }
+          if (alert.daysLeft <= 90) {
+            applicableMilestones.push({ threshold: 90, urgency: 'medium' });
+          }
+          if (alert.daysLeft <= 180) {
+            applicableMilestones.push({ threshold: 180, urgency: 'low' });
+          }
+          
+          // For each applicable milestone, check if notification already exists
+          for (const milestone of applicableMilestones) {
+            const milestoneMessage = `Warranty for ${alert.itemName} expires in ${alert.daysLeft} days. (${milestone.urgency.toUpperCase()} - ${milestone.threshold} day threshold)`;
             
-            // Removed push notification API calls - only in-app notifications enabled
+            // Check if this specific milestone notification already exists
+            const milestoneExists = (dbNotifications || []).some(
+              n => n.message.includes(alert.itemName) && 
+                   n.message.includes(`${milestone.threshold} day threshold`)
+            );
+            
+            // Only create notification if this specific milestone hasn't been addressed
+            if (!milestoneExists) {
+              console.log(`🔔 Creating ${milestone.urgency.toUpperCase()} notification for ${alert.itemName} (${alert.daysLeft} days remaining)`);
+              
+              await createNotification(user.id, 'warranty_alert', milestoneMessage);
+              
+              // For critical alerts (≤7 days), create additional urgent notification
+              if (milestone.urgency === 'critical') {
+                const urgentMessage = `🚨 URGENT: Warranty for ${alert.itemName} expires in ${alert.daysLeft} days!`;
+                await createNotification(user.id, 'warranty_alert', urgentMessage);
+              }
+            }
           }
         }
         
@@ -916,7 +940,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         await loadNotifications(user.id);
       }
     };
-    createWarrantyNotifications();
+    createMilestoneWarrantyNotifications();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [warrantyAlerts, user]);
 

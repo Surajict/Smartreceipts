@@ -29,6 +29,7 @@ import { useUser } from '../contexts/UserContext';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { useLocation } from 'react-router-dom';
 import Footer from './Footer';
+import WarrantyBuddy from './WarrantyBuddy';
 
 interface WarrantyPageProps {
   onBackToDashboard: () => void;
@@ -834,6 +835,9 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
         )}
       </div>
       <Footer />
+      
+      {/* Warranty Buddy Chatbot */}
+      <WarrantyBuddy />
 
       {/* Click outside to close user menu */}
       {showUserMenu && (

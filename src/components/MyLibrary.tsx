@@ -36,6 +36,7 @@ import { signOut, getUserReceipts, deleteReceipt, getReceiptImageSignedUrl, upda
 import { useUser } from '../contexts/UserContext';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import Footer from './Footer';
+import WarrantyBuddy from './WarrantyBuddy';
 
 interface MyLibraryProps {
   onBackToDashboard: () => void;
@@ -1092,6 +1093,9 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
         )}
       </main>
       <Footer />
+      
+      {/* Warranty Buddy Chatbot */}
+      <WarrantyBuddy />
 
       {/* Receipt Detail Modal */}
       {showReceiptModal && selectedReceipt && (

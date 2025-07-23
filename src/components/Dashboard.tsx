@@ -27,6 +27,7 @@ import { signOut, supabase, getUserReceipts, getUserReceiptStats, getUserNotific
 import { useUser } from '../contexts/UserContext';
 import { checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
+import WarrantyBuddy from './WarrantyBuddy';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import subscriptionService from '../services/subscriptionService';
 import { UserSubscriptionInfo } from '../types/subscription';
@@ -1612,6 +1613,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         </div>
       </main>
       <Footer />
+      
+      {/* Warranty Buddy Chatbot */}
+      <WarrantyBuddy />
 
       {/* Click outside to close menus */}
       {(showUserMenu || showNotificationMenu) && (

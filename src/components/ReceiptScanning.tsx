@@ -32,6 +32,7 @@ import { PerplexityValidationService, ValidationResult } from '../services/perpl
 import { DuplicateDetectionService, DuplicateMatch } from '../services/duplicateDetectionService';
 import DuplicateWarningModal from './DuplicateWarningModal';
 import NotificationDropdown from './NotificationDropdown';
+import WarrantyBuddy from './WarrantyBuddy';
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
 import html2canvas from 'html2canvas';
@@ -1724,6 +1725,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         onCancel={handleDuplicateCancel}
       />
     </div>
+    
+    {/* Warranty Buddy Chatbot */}
+    <WarrantyBuddy />
   );
 };
 

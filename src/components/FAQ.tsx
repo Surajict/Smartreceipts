@@ -1,44 +1,12 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { FAQ } from '../types';
+import { faqKnowledgeBase } from '../data/faqKnowledgeBase';
 
 const FAQSection: React.FC = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
-  const faqs: FAQ[] = [
-    {
-      question: 'How accurate is the AI receipt scanning?',
-      answer: 'Our AI technology achieves 99.5% accuracy in extracting information from receipts. It can read text from various receipt types, lighting conditions, and even slightly damaged receipts. The system continuously learns and improves with each scan.'
-    },
-    {
-      question: 'What happens if I can\'t scan a receipt?',
-      answer: 'If automatic scanning fails, you can manually enter receipt information through our user-friendly interface. Our customer support team is also available 24/7 to help with any scanning issues or manual data entry.'
-    },
-    {
-      question: 'How does warranty tracking work?',
-      answer: 'Smart Receipt automatically identifies warranty-eligible items from your receipts and registers them with manufacturers when possible. We send you alerts 30, 60, and 90 days before warranty expiration, along with instructions on how to file claims.'
-    },
-    {
-      question: 'Is my data secure and private?',
-      answer: 'Absolutely. We use bank-level encryption (AES-256) to protect your data both in transit and at rest. Your receipts are stored in SOC 2 certified data centers, and we never share your personal information with third parties without your consent.'
-    },
-    {
-      question: 'Can I access my receipts from multiple devices?',
-      answer: 'Yes! Smart Receipt syncs across all your devices - smartphones, tablets, and computers. Your receipts are securely stored in the cloud and accessible anywhere with an internet connection.'
-    },
-    {
-      question: 'What file formats are supported for receipt uploads?',
-      answer: 'You can upload receipts in various formats including JPEG, PNG, PDF, and HEIC. Our mobile app can scan receipts directly using your phone\'s camera, while the web version supports drag-and-drop uploads.'
-    },
-    {
-      question: 'How does the AI chatbot help with warranty claims?',
-      answer: 'Our AI chatbot guides you through the warranty claim process step-by-step, helps you gather required documentation, provides manufacturer contact information, and can even help draft claim emails. For complex cases, it escalates to our human support team.'
-    },
-    {
-      question: 'Is there a limit to how many receipts I can store?',
-      answer: 'Our free plan includes 100 receipts per month. Premium plans offer unlimited receipt storage, advanced analytics, priority support, and additional features like bulk upload and export capabilities.'
-    }
-  ];
+  // Use the centralized FAQ knowledge base
+  const faqs = faqKnowledgeBase.slice(0, 8); // Show first 8 FAQs on the landing page
 
   const toggleFAQ = (index: number) => {
     setOpenIndex(openIndex === index ? null : index);
@@ -101,14 +69,14 @@ const FAQSection: React.FC = () => {
               Still have questions?
             </h3>
             <p className="text-text-secondary mb-6">
-              Our support team is available 24/7 to help you get the most out of Smart Receipt.
+              Our FAQ chatbot can answer most questions instantly, or contact our support team for personalized help.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button className="bg-gradient-primary text-white px-6 py-3 rounded-lg font-medium hover:opacity-90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-0.5">
-                Contact Support
+                Try FAQ Chatbot
               </button>
               <button className="border-2 border-primary text-primary px-6 py-3 rounded-lg font-medium hover:bg-primary hover:text-white transition-all duration-200 shadow-sm hover:shadow-md">
-                Schedule Demo
+                Email Support
               </button>
             </div>
           </div>

@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, Send, X, Minimize2, Bot, User, Loader2 } from 'lucide-react';
-
+import { FAQItem } from '../data/faqKnowledgeBase';
+import { ChatbotService } from '../services/chatbotService';
+import { useUser } from '../contexts/UserContext';
 interface Message {
   id: string;
   text: string;
@@ -18,128 +20,19 @@ const generateSessionId = (): string => {
 };
 
 const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
+  const { user } = useUser();
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [sessionId] = useState<string>(() => generateSessionId()); // Generate session ID once
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: 'Hi! I\'m your Smart Receipts assistant. I can help answer questions about our receipt management service. What would you like to know?',
-      isUser: false,
-      timestamp: new Date()
-    }
-  ]);
-  const [inputText, setInputText] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  useEffect(() => {
-    if (isOpen && !isMinimized && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [isOpen, isMinimized]);
-
-  // Log session ID when component mounts for debugging
-  useEffect(() => {
-    console.log(`Chatbot initialized with Session ID: ${sessionId}`);
   }, [sessionId]);
-
-  const sendMessage = async (text: string) => {
-    if (!text.trim()) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: text.trim(),
-      isUser: true,
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputText('');
-    setIsTyping(true);
-
-    try {
-      const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL;
+      // Use the enhanced chatbot service
+      const result = await ChatbotService.processMessage(text.trim(), sessionId, user?.id);
       
-      if (!webhookUrl) {
-        throw new Error('Webhook URL not configured');
-      }
-
-      // Enhanced request body with SessionId for conversational persistence
-      const requestBody = {
-        message: text.trim(),
-        sessionId: sessionId, // Include session ID for conversation persistence
-        timestamp: new Date().toISOString(),
-        source: 'landing_page_chatbot',
-        messageCount: messages.length + 1, // Track message count in session
-        conversationContext: {
-          isFirstMessage: messages.length === 1, // Only the welcome message exists
-          previousMessages: messages.slice(-3).map(msg => ({ // Last 3 messages for context
-            text: msg.text,
-            isUser: msg.isUser,
-            timestamp: msg.timestamp.toISOString()
-          }))
-        }
-      };
-
-      console.log(`Sending message with Session ID: ${sessionId}`, requestBody);
-
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('Raw n8n response:', data); // Debug: Show raw response
-      
-      // Parse the n8n response format
-      let responseText = '';
-      
-      if (Array.isArray(data) && data.length > 0 && data[0].output) {
-        // Handle n8n format: [{ "output": "response text" }]
-        responseText = data[0].output;
-        console.log('✅ Using n8n array format');
-      } else if (data.response) {
-        // Handle standard format with "response" key
-        responseText = data.response;
-        console.log('✅ Using standard response format');
-      } else if (data.message) {
-        // Handle standard format with "message" key
-        responseText = data.message;
-        console.log('✅ Using standard message format');
-      } else if (typeof data === 'string') {
-        // Handle plain string response
-        responseText = data;
-        console.log('✅ Using plain string format');
-      } else {
-        // Fallback error message
-        responseText = 'I apologize, but I\'m having trouble processing your request right now. Please try again or contact our support team.';
-        console.log('❌ Using fallback error message');
-      }
-
-      console.log('Parsed response text:', responseText);
-      
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: responseText,
-        isUser: false,
-        timestamp: new Date()
+        faqMatch: result.faqMatch,
+        suggestions: result.suggestions
       };
 
       setMessages(prev => [...prev, botMessage]);
@@ -240,8 +133,8 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
               onClick={toggleChatbot}
               className="text-white/80 hover:text-white transition-colors p-1"
               aria-label="Close chat"
-            >
-              <X className="h-4 w-4" />
+            <div className="absolute -top-2 -right-2 bg-accent-yellow text-text-primary text-xs rounded-full h-6 w-6 flex items-center justify-center animate-pulse font-bold">
+              FAQ
             </button>
           </div>
         </div>
@@ -262,9 +155,9 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
                       message.isUser 
                         ? 'bg-primary text-white' 
                         : 'bg-gray-200 text-gray-600'
-                    }`}>
+                          <span className="text-xs text-green-600 flex items-center font-medium">
                       {message.isUser ? (
-                        <User className="h-4 w-4" />
+                            FAQ Match: {message.faqMatch.category}
                       ) : (
                         <Bot className="h-4 w-4" />
                       )}
@@ -278,7 +171,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
                       <p className={`text-xs mt-1 ${
                         message.isUser ? 'text-white/70' : 'text-gray-500'
                       }`}>
-                        {message.timestamp.toLocaleTimeString([], { 
+                          className="text-xs bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1 rounded-full transition-colors duration-200 border border-primary/20"
                           hour: '2-digit', 
                           minute: '2-digit' 
                         })}
@@ -323,7 +216,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
                 />
                 <button
                   type="submit"
-                  disabled={!inputText.trim() || isTyping}
+                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1 rounded transition-colors duration-200 capitalize"
                   className="bg-primary text-white p-3 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label="Send message"
                 >
@@ -331,8 +224,8 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
                 </button>
               </div>
             </form>
-          </>
-        )}
+                <h3 className="font-semibold text-sm">Smart Receipts FAQ Assistant</h3>
+                <p className="text-xs text-white/80">Instant answers to your questions!</p>
       </div>
     </div>
   );

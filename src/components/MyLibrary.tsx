@@ -249,12 +249,17 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
     if (!user) return;
     
     try {
-      await archiveAllNotifications(user.id);
+      // Immediately update local state
       setNotifications([]);
       setAlertsCount(0);
       setShowNotifications(false);
+      
+      // Then update the database
+      await archiveAllNotifications(user.id);
     } catch (error) {
       console.error('Error archiving all notifications:', error);
+      // On error, reload notifications to restore the correct state
+      if (user) loadNotifications(user.id);
     }
   };
 

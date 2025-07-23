@@ -8,6 +8,7 @@ import Testimonials from './Testimonials';
 import FAQ from './FAQ';
 import CTA from './CTA';
 import Footer from './Footer';
+import Chatbot from './Chatbot';
 
 const Homepage: React.FC = () => {
   const navigate = useNavigate();
@@ -51,6 +52,9 @@ const Homepage: React.FC = () => {
       </main>
       
       <Footer />
+      
+      {/* Floating Chatbot */}
+      <Chatbot />
     </div>
   );
 };

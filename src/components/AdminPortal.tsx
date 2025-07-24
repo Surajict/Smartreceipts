@@ -68,8 +68,11 @@ const AdminPortal: React.FC = () => {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Hardcoded credentials check
-    if (username === 'smartreceiptsau@gmail.com' && password === 'greatAppple651') {
+    // Environment variable credentials check
+    const adminUsername = import.meta.env.VITE_ADMIN_USERNAME;
+    const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD;
+    
+    if (username === adminUsername && password === adminPassword) {
       setIsAuthenticated(true);
       localStorage.setItem('admin_authenticated', 'true');
       await loadAdminData();

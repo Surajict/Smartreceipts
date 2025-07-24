@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
 // Removed unused props
@@ -11,12 +11,32 @@ import { Menu, X } from 'lucide-react';
 const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Check if we're on the homepage
+  const isHomepage = location.pathname === '/';
 
   const navLinks = [
-    { label: 'How It Works', href: '#how-it-works' },
-    { label: 'Features', href: '#features' },
-    { label: 'Pricing', href: '#pricing' },
-    { label: 'Support', href: '#support' }
+    { 
+      label: 'How It Works', 
+      href: isHomepage ? '#how-it-works' : '/how-it-works',
+      isExternal: !isHomepage
+    },
+    { 
+      label: 'Features', 
+      href: isHomepage ? '#features' : '/features',
+      isExternal: !isHomepage
+    },
+    { 
+      label: 'Pricing', 
+      href: '/pricing',
+      isExternal: true
+    },
+    { 
+      label: 'Support', 
+      href: '/help-center',
+      isExternal: true
+    }
   ];
 
   return (
@@ -38,13 +58,23 @@ const Header: React.FC = () => {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
             {navLinks.map((link) => (
-              <a
-                key={link.label}
-                href={link.href}
-                className="text-text-secondary hover:text-primary transition-colors duration-200 font-medium"
-              >
-                {link.label}
-              </a>
+              link.isExternal ? (
+                <Link
+                  key={link.label}
+                  to={link.href}
+                  className="text-text-secondary hover:text-primary transition-colors duration-200 font-medium"
+                >
+                  {link.label}
+                </Link>
+              ) : (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  className="text-text-secondary hover:text-primary transition-colors duration-200 font-medium"
+                >
+                  {link.label}
+                </a>
+              )
             ))}
             <button
               onClick={() => navigate('/login')}
@@ -76,14 +106,25 @@ const Header: React.FC = () => {
           <div className="md:hidden">
             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-200">
               {navLinks.map((link) => (
-                <a
-                  key={link.label}
-                  href={link.href}
-                  className="block px-3 py-2 text-text-secondary hover:text-primary transition-colors duration-200 font-medium"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  {link.label}
-                </a>
+                link.isExternal ? (
+                  <Link
+                    key={link.label}
+                    to={link.href}
+                    className="block px-3 py-2 text-text-secondary hover:text-primary transition-colors duration-200 font-medium"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    {link.label}
+                  </Link>
+                ) : (
+                  <a
+                    key={link.label}
+                    href={link.href}
+                    className="block px-3 py-2 text-text-secondary hover:text-primary transition-colors duration-200 font-medium"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    {link.label}
+                  </a>
+                )
               ))}
               <button
                 onClick={() => {

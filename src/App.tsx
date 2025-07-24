@@ -11,6 +11,15 @@ import ProfilePage from './components/ProfilePage';
 import SubscriptionManagement from './components/SubscriptionManagement';
 import AdminPortal from './components/AdminPortal';
 import ReceiptScanning from './components/ReceiptScanning';
+import AboutUs from './components/AboutUs';
+import ContactUs from './components/ContactUs';
+import PrivacyPolicy from './components/PrivacyPolicy';
+import TermsOfService from './components/TermsOfService';
+import CookiePolicy from './components/CookiePolicy';
+import Disclaimer from './components/Disclaimer';
+import Pricing from './components/Pricing';
+import HelpCenter from './components/HelpCenter';
+import ScrollToTop from './components/ScrollToTop';
 import useAuthState from './hooks/useAuthState';
 import './index.css';
 
@@ -40,6 +49,16 @@ const AppContent: React.FC = () => {
       <Route path="/signup" element={
         user ? <Navigate to="/dashboard" replace /> : <AuthLayout mode="signup" />
       } />
+      
+      {/* Public Pages */}
+      <Route path="/about" element={<AboutUs />} />
+      <Route path="/contact" element={<ContactUs />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+      <Route path="/terms-of-service" element={<TermsOfService />} />
+      <Route path="/cookie-policy" element={<CookiePolicy />} />
+      <Route path="/disclaimer" element={<Disclaimer />} />
+      <Route path="/pricing" element={<Pricing />} />
+      <Route path="/help-center" element={<HelpCenter />} />
       
       {/* Admin Portal Route (No authentication check needed - handles internally) */}
       <Route path="/admin" element={<AdminPortal />} />
@@ -119,6 +138,7 @@ const AppContent: React.FC = () => {
 function App() {
   return (
     <Router>
+      <ScrollToTop />
       <UserProvider>
         <SubscriptionProvider>
           <AppContent />

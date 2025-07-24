@@ -7,7 +7,7 @@ import Benefits from './Benefits';
 import Testimonials from './Testimonials';
 import FAQ from './FAQ';
 import CTA from './CTA';
-import Footer from './Footer';
+import HomepageFooter from './HomepageFooter';
 import Chatbot from './Chatbot';
 
 const Homepage: React.FC = () => {
@@ -51,7 +51,7 @@ const Homepage: React.FC = () => {
         />
       </main>
       
-      <Footer />
+      <HomepageFooter />
       
       {/* Floating Chatbot */}
       <Chatbot />

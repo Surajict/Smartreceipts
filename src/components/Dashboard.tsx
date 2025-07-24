@@ -29,8 +29,12 @@ import { checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import subscriptionService from '../services/subscriptionService';
+import onboardingService, { OnboardingProgress } from '../services/onboardingService';
 import { UserSubscriptionInfo } from '../types/subscription';
 import UsageIndicator from './UsageIndicator';
+import OnboardingTour from './OnboardingTour';
+import GettingStartedChecklist from './GettingStartedChecklist';
+import ContextualTooltip from './ContextualTooltip';
 import { useNavigate } from 'react-router-dom';
 import Footer from './Footer';
 // Removed PushNotificationSetup import - push notifications disabled
@@ -121,6 +125,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   // Subscription and usage tracking state
   const [subscriptionInfo, setSubscriptionInfo] = useState<UserSubscriptionInfo | null>(null);
   const [loadingSubscription, setLoadingSubscription] = useState(true);
+  
+  // Onboarding state
+  const [onboardingProgress, setOnboardingProgress] = useState<OnboardingProgress | null>(null);
+  const [showOnboardingTour, setShowOnboardingTour] = useState(false);
+  const [showGettingStarted, setShowGettingStarted] = useState(false);
+  const [isFirstTimeUser, setIsFirstTimeUser] = useState(false);
+  
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -130,6 +141,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       loadEmbeddingStatus(user.id);
       loadNotifications(user.id);
       loadSubscriptionData(user.id);
+      loadOnboardingData(user.id);
     }
   }, [user]);
 
@@ -304,6 +316,100 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     } finally {
       setLoadingSubscription(false);
     }
+  };
+
+  // Load onboarding data and determine if user should see tour/checklist
+  const loadOnboardingData = async (userId: string) => {
+    try {
+      const progress = await onboardingService.getOnboardingProgress(userId);
+      const isFirstTime = await onboardingService.isFirstTimeUser(userId);
+      
+      setOnboardingProgress(progress);
+      setIsFirstTimeUser(isFirstTime);
+
+      // Auto-detect progress based on user activity
+      await onboardingService.autoDetectProgress(userId);
+      
+      // Reload progress after auto-detection
+      const updatedProgress = await onboardingService.getOnboardingProgress(userId);
+      setOnboardingProgress(updatedProgress);
+
+      // Show tour for first-time users who haven't completed it
+      if (progress && progress.first_login && !progress.tour_completed) {
+        // Small delay to let the UI render first
+        setTimeout(() => {
+          setShowOnboardingTour(true);
+        }, 1000);
+      }
+
+      // Show getting started checklist if onboarding not completed
+      if (progress && !progress.onboarding_completed) {
+        setShowGettingStarted(true);
+      }
+      
+    } catch (error) {
+      console.error('Error loading onboarding data:', error);
+    }
+  };
+
+  // Handle onboarding tour completion
+  const handleTourComplete = async () => {
+    if (user) {
+      await onboardingService.completeTour(user.id);
+      setShowOnboardingTour(false);
+      
+      // Reload progress
+      const progress = await onboardingService.getOnboardingProgress(user.id);
+      setOnboardingProgress(progress);
+    }
+  };
+
+  // Handle onboarding tour skip
+  const handleTourSkip = async () => {
+    if (user) {
+      await onboardingService.skipTour(user.id);
+      setShowOnboardingTour(false);
+      
+      // Reload progress
+      const progress = await onboardingService.getOnboardingProgress(user.id);
+      setOnboardingProgress(progress);
+    }
+  };
+
+  // Handle checklist item actions
+  const handleChecklistItemAction = async (itemId: string) => {
+    if (!user) return;
+
+    switch (itemId) {
+      case 'scan-first-receipt':
+        onShowReceiptScanning();
+        break;
+      case 'try-smart-search':
+        // Focus on search input and mark as completed
+        const searchInput = document.querySelector('[data-tour="smart-search"] input') as HTMLInputElement;
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.placeholder = 'Try asking: "What did I buy last month?" or "Show me electronics"';
+        }
+        await onboardingService.completeChecklistItem(user.id, 'try-smart-search');
+        break;
+      case 'check-warranty':
+        onShowWarranty();
+        await onboardingService.completeChecklistItem(user.id, 'check-warranty');
+        break;
+      case 'complete-profile':
+        onShowProfile();
+        break;
+    }
+    
+    // Reload progress
+    const progress = await onboardingService.getOnboardingProgress(user.id);
+    setOnboardingProgress(progress);
+  };
+
+  // Handle starting tour from checklist
+  const handleShowTour = () => {
+    setShowOnboardingTour(true);
   };
 
   const loadEmbeddingStatus = async (userId: string) => {
@@ -1062,7 +1168,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             {/* Header Actions */}
             <div className="flex items-center space-x-4">
               {/* Notifications */}
-              <div className="relative">
+              <div className="relative" data-tour="notifications">
                 <button 
                   onClick={() => setShowNotificationMenu(!showNotificationMenu)}
                   className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
@@ -1214,7 +1320,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
-        <div className="mb-8">
+        <div className="mb-8" data-tour="welcome-section">
           <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-2">
             {getGreeting()}, {user?.user_metadata?.full_name?.split(' ')[0] || 'there'}!
           </h1>
@@ -1225,12 +1331,19 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
         {/* Usage Indicator - Freemium Model */}
         {!loadingSubscription && subscriptionInfo && (
-          <div className="mb-8">
-            <UsageIndicator
-              receiptsUsed={subscriptionInfo.receipts_used}
-              receiptsLimit={subscriptionInfo.receipts_limit}
-              plan={subscriptionInfo.plan}
-            />
+          <div className="mb-8" data-tour="usage-indicator">
+            <div className="flex items-center space-x-2">
+              <UsageIndicator
+                receiptsUsed={subscriptionInfo.receipts_used}
+                receiptsLimit={subscriptionInfo.receipts_limit}
+                plan={subscriptionInfo.plan}
+              />
+              <ContextualTooltip
+                title="Usage Tracking"
+                content="Free users get 5 receipts to try Smart Receipts. Upgrade to Premium for unlimited receipt scanning and advanced features like AI validation and smart search."
+                position="bottom"
+              />
+            </div>
           </div>
         )}
 
@@ -1278,6 +1391,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             <button 
               onClick={onShowReceiptScanning}
               className="group bg-gradient-to-br from-primary to-teal-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+              data-tour="scan-receipt"
             >
               <div className="flex flex-col items-center text-center">
                 <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
@@ -1300,6 +1414,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           <button 
             onClick={onShowLibrary}
             className="group bg-gradient-to-br from-secondary to-purple-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+            data-tour="my-library"
           >
             <div className="flex flex-col items-center text-center">
               <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
@@ -1313,6 +1428,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           <button 
             onClick={onShowWarranty}
             className="group bg-gradient-to-br from-red-500 to-orange-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+            data-tour="warranty-manager"
           >
             <div className="flex flex-col items-center text-center">
               <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
@@ -1325,50 +1441,50 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         </div>
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-card border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8 md:mb-12" data-tour="stats-overview">
+          <div className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl shadow-card border border-gray-100">
+            <div className="flex items-center justify-between mb-3 md:mb-4">
               <div className="bg-gradient-to-br from-primary/10 to-primary/20 rounded-lg p-2 sm:p-3 flex-shrink-0">
-                <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                <Receipt className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-primary" />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-bold text-text-primary mb-1">
+            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-text-primary mb-1">
               {summaryStats.receiptsScanned}
             </div>
             <div className="text-xs sm:text-sm text-text-secondary">Receipts Scanned</div>
           </div>
 
-          <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-card border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl shadow-card border border-gray-100">
+            <div className="flex items-center justify-between mb-3 md:mb-4">
               <div className="bg-gradient-to-br from-secondary/10 to-secondary/20 rounded-lg p-2 sm:p-3 flex-shrink-0">
-                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-secondary" />
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-secondary" />
               </div>
             </div>
-            <div className="text-xl sm:text-3xl font-bold text-text-primary mb-1 break-words">
+            <div className="text-lg sm:text-xl md:text-3xl font-bold text-text-primary mb-1 break-words">
               {formatCurrency(summaryStats.totalAmount)}
             </div>
             <div className="text-xs sm:text-sm text-text-secondary">Total Amount Captured</div>
           </div>
 
-          <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-card border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl shadow-card border border-gray-100">
+            <div className="flex items-center justify-between mb-3 md:mb-4">
               <div className="bg-gradient-to-br from-accent-yellow/10 to-accent-yellow/20 rounded-lg p-2 sm:p-3 flex-shrink-0">
-                <Tag className="h-5 w-5 sm:h-6 sm:w-6 text-accent-yellow" />
+                <Tag className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-accent-yellow" />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-bold text-text-primary mb-1">
+            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-text-primary mb-1">
               {summaryStats.itemsCaptured}
             </div>
             <div className="text-xs sm:text-sm text-text-secondary">Items Captured</div>
           </div>
 
-          <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-card border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl shadow-card border border-gray-100">
+            <div className="flex items-center justify-between mb-3 md:mb-4">
               <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-lg p-2 sm:p-3 flex-shrink-0">
-                <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
+                <Shield className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-green-600" />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-bold text-text-primary mb-1">
+            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-text-primary mb-1">
               {summaryStats.warrantiesClaimed}
             </div>
             <div className="text-xs sm:text-sm text-text-secondary">Warranties Claimed</div>
@@ -1376,14 +1492,19 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         </div>
 
         {/* Smart Search Section */}
-        <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-text-primary flex items-center space-x-2">
-              <Search className="h-6 w-6 text-primary" />
+        <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-4 md:p-6 mb-8" data-tour="smart-search">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6 space-y-3 sm:space-y-0">
+            <h2 className="text-xl md:text-2xl font-bold text-text-primary flex items-center space-x-2">
+              <Search className="h-5 w-5 md:h-6 md:w-6 text-primary" />
               <span>Smart Search</span>
+              <ContextualTooltip
+                title="AI-Powered Smart Search"
+                content="Ask questions about your receipts in natural language. Our AI understands queries like 'How much did I spend on electronics?' or 'Show me Apple products from last month'."
+                position="bottom"
+              />
             </h2>
-            <div className="flex items-center space-x-3">
-              <span className="text-sm text-text-secondary bg-gradient-to-r from-primary/10 to-secondary/10 px-3 py-1 rounded-full">
+            <div className="flex items-center space-x-2 md:space-x-3">
+              <span className="text-xs md:text-sm text-text-secondary bg-gradient-to-r from-primary/10 to-secondary/10 px-2 md:px-3 py-1 rounded-full">
                 AI-Powered
               </span>
               {embeddingStatus && (
@@ -1395,33 +1516,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </div>
 
           {/* Smart Search Input */}
-          <div className="mb-6">
+          <div className="mb-4 md:mb-6">
             <form onSubmit={handleSearchSubmit} className="relative">
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Search className="h-5 w-5 text-text-secondary" />
+                <div className="absolute inset-y-0 left-0 pl-3 md:pl-4 flex items-center pointer-events-none">
+                  <Search className="h-4 w-4 md:h-5 md:w-5 text-text-secondary" />
                 </div>
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="block w-full pl-12 pr-24 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 bg-gray-50 hover:bg-white focus:bg-white"
-                  placeholder="Ask questions about your receipts: 'How much did I spend on electronics?' or 'Show me Apple receipts'"
+                  className="block w-full pl-10 md:pl-12 pr-20 md:pr-24 py-2 md:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 bg-gray-50 hover:bg-white focus:bg-white text-sm md:text-base"
+                  placeholder={window.innerWidth < 768 ? "Ask about your receipts..." : "Ask questions about your receipts: 'How much did I spend on electronics?' or 'Show me Apple receipts'"}
                 />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-2 md:pr-3">
                   {searchQuery && (
                     <button
                       type="button"
                       onClick={clearSearch}
-                      className="text-text-secondary hover:text-text-primary transition-colors duration-200 p-1 mr-2"
+                      className="text-text-secondary hover:text-text-primary transition-colors duration-200 p-1 mr-1 md:mr-2"
                     >
-                      <X className="h-4 w-4" />
+                      <X className="h-3 w-3 md:h-4 md:w-4" />
                     </button>
                   )}
                   <button
                     type="submit"
                     disabled={isSearching || !searchQuery.trim()}
-                    className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    className="bg-primary text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1 md:space-x-2 text-sm"
                   >
                     {isSearching ? (
                       <>
@@ -1509,8 +1630,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           {/* Warranty Alerts */}
           <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-text-primary">
-                Upcoming Warranty Alerts
+              <h2 className="text-2xl font-bold text-text-primary flex items-center space-x-2">
+                <span>Upcoming Warranty Alerts</span>
+                <ContextualTooltip
+                  title="Warranty Protection"
+                  content="Smart Receipts automatically tracks warranty periods for your purchases and sends alerts before they expire. Never miss a warranty claim again!"
+                  position="bottom"
+                />
               </h2>
               <span className="text-sm text-text-secondary">Next 6 Months</span>
             </div>
@@ -1656,6 +1782,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         </div>
       </main>
       <Footer />
+
+      {/* Onboarding Components */}
+      <OnboardingTour
+        isActive={showOnboardingTour}
+        onComplete={handleTourComplete}
+        onSkip={handleTourSkip}
+      />
+
+      <GettingStartedChecklist
+        isVisible={showGettingStarted}
+        onClose={() => setShowGettingStarted(false)}
+        onItemAction={handleChecklistItemAction}
+        completedItems={onboardingProgress?.completed_items || []}
+        onShowTour={handleShowTour}
+      />
 
       {/* Click outside to close menus */}
       {(showUserMenu || showNotificationMenu) && (

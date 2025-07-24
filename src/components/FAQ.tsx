@@ -36,7 +36,7 @@ const FAQSection: React.FC = () => {
     },
     {
       question: 'Is there a limit to how many receipts I can store?',
-      answer: 'Our free plan includes 100 receipts per month. Premium plans offer unlimited receipt storage, advanced analytics, priority support, and additional features like bulk upload and export capabilities.'
+      answer: 'Our free trial includes 5 receipts total to get you started. The Premium plan (AU$7/month) offers unlimited receipt storage, advanced analytics, priority support, and additional features like bulk upload and export capabilities.'
     }
   ];
 

@@ -4,7 +4,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY!
 
 // Get the current site URL for redirects
-const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'
+const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://smartreceiptsanz.netlify.app'
 
 // Configure Supabase client with Google OAuth options
 export const supabase = createClient(supabaseUrl, supabaseKey, {
@@ -16,7 +16,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     // Configure Google OAuth provider
     providers: {
       google: {
-        clientId: '751272252597-eh4q33q5qevsrse3m0a7p6dtsnse8ocm.apps.googleusercontent.com'
+        clientId: import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID || '751272252597-eh4q33q5qevsrse3m0a7p6dtsnse8ocm.apps.googleusercontent.com'
       }
     }
   }
@@ -529,7 +529,7 @@ export const signInWithGoogle = async () => {
     // Get the current site URL for redirect
     const redirectTo = typeof window !== 'undefined' 
       ? `${window.location.origin}/dashboard`
-      : 'http://localhost:5173/dashboard'
+      : 'https://smartreceiptsanz.netlify.app/dashboard'
 
     console.log('Using redirect URL:', redirectTo)
 

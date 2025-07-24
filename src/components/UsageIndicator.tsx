@@ -26,18 +26,24 @@ const UsageIndicator: React.FC<UsageIndicatorProps> = ({
     }
 
     return (
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+      <div className="bg-green-50 border border-green-200 rounded-lg p-3 sm:p-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-            <div>
-              <h3 className="font-semibold text-green-800">Premium Plan</h3>
-              <p className="text-sm text-green-600">Unlimited receipt scanning</p>
+          <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+            <div className="w-3 h-3 bg-green-500 rounded-full flex-shrink-0"></div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold text-green-800 text-sm sm:text-base">Premium Plan</h3>
+              <p className="text-xs sm:text-sm text-green-600">
+                <span className="hidden sm:inline">Unlimited receipt scanning</span>
+                <span className="sm:hidden">Unlimited scanning</span>
+              </p>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold text-green-600">{receiptsUsed}</div>
-            <div className="text-sm text-green-500">receipts this month</div>
+          <div className="text-right flex-shrink-0 ml-3">
+            <div className="text-xl sm:text-2xl font-bold text-green-600">{receiptsUsed}</div>
+            <div className="text-xs sm:text-sm text-green-500">
+              <span className="hidden sm:inline">receipts this month</span>
+              <span className="sm:hidden">this month</span>
+            </div>
           </div>
         </div>
       </div>
@@ -57,28 +63,29 @@ const UsageIndicator: React.FC<UsageIndicatorProps> = ({
   }
 
   return (
-    <div className={`rounded-lg p-4 ${hasReachedLimit 
+    <div className={`rounded-lg p-3 sm:p-4 ${hasReachedLimit 
       ? 'bg-red-50 border border-red-200' 
       : isApproachingLimit 
         ? 'bg-orange-50 border border-orange-200' 
         : 'bg-blue-50 border border-blue-200'
     }`}>
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center space-x-3">
-          <div className={`w-3 h-3 rounded-full ${hasReachedLimit ? 'bg-red-500' : isApproachingLimit ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
-          <div>
-            <h3 className={`font-semibold ${hasReachedLimit ? 'text-red-800' : isApproachingLimit ? 'text-orange-800' : 'text-blue-800'}`}>
+        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+          <div className={`w-3 h-3 rounded-full flex-shrink-0 ${hasReachedLimit ? 'bg-red-500' : isApproachingLimit ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
+          <div className="min-w-0 flex-1">
+            <h3 className={`font-semibold text-sm sm:text-base ${hasReachedLimit ? 'text-red-800' : isApproachingLimit ? 'text-orange-800' : 'text-blue-800'}`}>
               {plan === 'free' ? 'Free Plan' : 'Receipt Usage'}
             </h3>
-            <p className={`text-sm ${statusColor}`}>{statusMessage}</p>
+            <p className={`text-xs sm:text-sm ${statusColor}`}>{statusMessage}</p>
           </div>
         </div>
-        <div className="text-right">
-          <div className={`text-2xl font-bold ${statusColor}`}>
+        <div className="text-right flex-shrink-0 ml-3">
+          <div className={`text-xl sm:text-2xl font-bold ${statusColor}`}>
             {receiptsUsed}/{receiptsLimit}
           </div>
-          <div className={`text-sm ${hasReachedLimit ? 'text-red-500' : isApproachingLimit ? 'text-orange-500' : 'text-blue-500'}`}>
-            receipts this month
+          <div className={`text-xs sm:text-sm ${hasReachedLimit ? 'text-red-500' : isApproachingLimit ? 'text-orange-500' : 'text-blue-500'}`}>
+            <span className="hidden sm:inline">receipts this month</span>
+            <span className="sm:hidden">this month</span>
           </div>
         </div>
       </div>

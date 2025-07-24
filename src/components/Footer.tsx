@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 export const OldFooter: React.FC = () => {
   const year = new Date().getFullYear();
@@ -34,18 +35,18 @@ const Footer: React.FC = () => {
         </div>
         {/* Navigation - stack on mobile, row on md+ */}
         <nav className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-2 sm:gap-4 md:gap-6 mt-4 md:mt-0">
-          <a href="/dashboard" className="text-text-secondary hover:text-primary">Dashboard</a>
-          <a href="/library" className="text-text-secondary hover:text-primary">My Receipts</a>
-          <a href="/warranty" className="text-text-secondary hover:text-primary">Warranty Center</a>
-          <a href="/profile" className="text-text-secondary hover:text-primary">Profile</a>
-          <a href="/help" className="text-text-secondary hover:text-primary">Help</a>
+          <Link to="/dashboard" className="text-text-secondary hover:text-primary transition-colors duration-200">Dashboard</Link>
+          <Link to="/library" className="text-text-secondary hover:text-primary transition-colors duration-200">My Receipts</Link>
+          <Link to="/warranty" className="text-text-secondary hover:text-primary transition-colors duration-200">Warranty Center</Link>
+          <Link to="/profile" className="text-text-secondary hover:text-primary transition-colors duration-200">Profile</Link>
+          <Link to="/help-center" className="text-text-secondary hover:text-primary transition-colors duration-200">Help</Link>
         </nav>
         {/* Support Links & Copyright */}
         <div className="flex flex-col items-center md:items-end mt-4 md:mt-0 w-full md:w-auto">
           <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-2 sm:gap-3 mb-2">
-            <a href="mailto:support@smartreceipts.com" className="text-text-secondary hover:text-primary text-sm">Contact Support</a>
-            <a href="/privacy" className="text-text-secondary hover:text-primary text-sm">Privacy Policy</a>
-            <a href="/terms" className="text-text-secondary hover:text-primary text-sm">Terms</a>
+            <Link to="/help-center" className="text-text-secondary hover:text-primary text-sm transition-colors duration-200">Contact Support</Link>
+            <Link to="/privacy-policy" className="text-text-secondary hover:text-primary text-sm transition-colors duration-200">Privacy Policy</Link>
+            <Link to="/terms-of-service" className="text-text-secondary hover:text-primary text-sm transition-colors duration-200">Terms</Link>
           </div>
           {/* Divider for mobile */}
           <div className="block md:hidden w-full border-t border-gray-200 my-2"></div>

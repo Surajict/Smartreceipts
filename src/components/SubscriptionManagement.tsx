@@ -9,6 +9,7 @@ import UpgradeModal from './UpgradeModal';
 import { SUBSCRIPTION_PLANS } from '../types/subscription';
 import { Gift, CreditCard, Key, CheckCircle, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import Footer from './Footer';
 
 const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({ 
   onBackToDashboard 
@@ -543,6 +544,8 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
           usageInfo={subscriptionInfo}
         />
       )}
+
+      <Footer />
     </div>
   );
 };

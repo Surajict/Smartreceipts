@@ -72,6 +72,11 @@ const HomepageFooter: React.FC<HomepageFooterProps> = () => {
             <h3 className="text-lg font-semibold text-white mb-4">Product & Support</h3>
             <ul className="space-y-3 text-gray-300">
               <li>
+                <a href="#how-it-works" className="hover:text-white transition-colors duration-200">
+                  How It Works
+                </a>
+              </li>
+              <li>
                 <a href="#features" className="hover:text-white transition-colors duration-200">
                   Features
                 </a>

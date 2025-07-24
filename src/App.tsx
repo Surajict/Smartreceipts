@@ -19,6 +19,8 @@ import CookiePolicy from './components/CookiePolicy';
 import Disclaimer from './components/Disclaimer';
 import Pricing from './components/Pricing';
 import HelpCenter from './components/HelpCenter';
+import HowItWorksPage from './components/HowItWorksPage';
+import FeaturesPage from './components/FeaturesPage';
 import ScrollToTop from './components/ScrollToTop';
 import useAuthState from './hooks/useAuthState';
 import './index.css';
@@ -51,14 +53,16 @@ const AppContent: React.FC = () => {
       } />
       
       {/* Public Pages */}
-      <Route path="/about" element={<AboutUs />} />
-      <Route path="/contact" element={<ContactUs />} />
-      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-      <Route path="/terms-of-service" element={<TermsOfService />} />
-      <Route path="/cookie-policy" element={<CookiePolicy />} />
-      <Route path="/disclaimer" element={<Disclaimer />} />
-      <Route path="/pricing" element={<Pricing />} />
-      <Route path="/help-center" element={<HelpCenter />} />
+                    <Route path="/about" element={<AboutUs />} />
+              <Route path="/contact" element={<ContactUs />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+              <Route path="/terms-of-service" element={<TermsOfService />} />
+              <Route path="/cookie-policy" element={<CookiePolicy />} />
+              <Route path="/disclaimer" element={<Disclaimer />} />
+              <Route path="/pricing" element={<Pricing />} />
+              <Route path="/help-center" element={<HelpCenter />} />
+              <Route path="/how-it-works" element={<HowItWorksPage />} />
+              <Route path="/features" element={<FeaturesPage />} />
       
       {/* Admin Portal Route (No authentication check needed - handles internally) */}
       <Route path="/admin" element={<AdminPortal />} />

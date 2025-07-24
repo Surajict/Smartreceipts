@@ -39,6 +39,13 @@ VITE_STRIPE_ENVIRONMENT=test
 
 # Stripe webhook endpoint secret (for verifying webhook signatures)
 VITE_STRIPE_WEBHOOK_SECRET=whsec_your-webhook-secret
+
+# Admin Portal Security (CRITICAL - Set Strong Credentials)
+VITE_ADMIN_USERNAME=admin@smartreceipts.com
+VITE_ADMIN_PASSWORD=your-very-secure-admin-password-here
+
+# Google OAuth Configuration
+VITE_GOOGLE_OAUTH_CLIENT_ID=your-google-oauth-client-id-here
 ```
 
 ## Setup Instructions:
@@ -79,9 +86,11 @@ VITE_STRIPE_WEBHOOK_SECRET=whsec_your-webhook-secret
 
 ## Security Notes:
 
-⚠️ **IMPORTANT**: 
+⚠️ **CRITICAL SECURITY REQUIREMENTS**: 
 - `.env.local` is gitignored and safe to use
-- Never put real API keys in code or template files
-- Always use environment variables for sensitive data
+- **NEVER put real API keys or credentials in code or template files**
+- **ALWAYS use environment variables for sensitive data**
+- **Admin Portal Credentials**: Use a strong, unique password for `VITE_ADMIN_PASSWORD`
+- **Google OAuth**: Set up proper OAuth client ID for secure authentication
 - Keep test and live Stripe keys separate
 - Use webhook secrets to verify Stripe webhook authenticity 

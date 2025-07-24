@@ -16,7 +16,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     // Configure Google OAuth provider
     providers: {
       google: {
-        clientId: '751272252597-eh4q33q5qevsrse3m0a7p6dtsnse8ocm.apps.googleusercontent.com'
+        clientId: import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID || '751272252597-eh4q33q5qevsrse3m0a7p6dtsnse8ocm.apps.googleusercontent.com'
       }
     }
   }

@@ -25,6 +25,9 @@ VITE_VAPID_PUBLIC_KEY=your-vapid-public-key-here
 # n8n Webhook for Chatbot FAQ (optional)
 VITE_N8N_WEBHOOK_URL=https://your-n8n-webhook-url-here
 
+# n8n Webhook for Contact Form (optional)
+VITE_N8N_CONTACT_WEBHOOK_URL=https://your-n8n-contact-webhook-url-here
+
 # Stripe Configuration (for payment processing)
 # Test environment keys (for development)
 VITE_STRIPE_TEST_PUBLISHABLE_KEY=pk_test_your-stripe-test-publishable-key

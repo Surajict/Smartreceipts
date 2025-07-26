@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { UserProvider } from './contexts/UserContext';
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
 import Homepage from './components/Homepage';
@@ -27,6 +27,12 @@ import './index.css';
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuthState();
+  const navigate = useNavigate();
+
+  // Handler for successful receipt save - navigate to library and open the receipt
+  const handleReceiptSaved = (receiptId: string) => {
+    navigate('/library', { state: { openReceiptId: receiptId } });
+  };
 
   if (loading) {
     return (
@@ -127,6 +133,7 @@ const AppContent: React.FC = () => {
         user ? (
           <ReceiptScanning
             onBackToDashboard={() => window.location.href = '/dashboard'}
+            onReceiptSaved={handleReceiptSaved}
           />
         ) : (
           <Navigate to="/login" replace />

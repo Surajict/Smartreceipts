@@ -42,6 +42,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs
 
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
+  onReceiptSaved?: (receiptId: string) => void;
 }
 
 // Use the imported type instead of local interface
@@ -50,7 +51,7 @@ type ExtractedData = ExtractedReceiptData;
 type CaptureMode = 'normal' | 'long';
 type InputMode = 'capture' | 'upload' | 'manual';
 
-const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) => {
+const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, onReceiptSaved }) => {
   const { user, profilePicture } = useUser();
   const [inputMode, setInputMode] = useState<InputMode>('capture');
   const [captureMode, setCaptureMode] = useState<CaptureMode>('normal');
@@ -565,6 +566,13 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard }) 
         throw new Error(result.error || 'Failed to save receipt');
       }
 
+      // Call the onReceiptSaved callback if provided to navigate to MyLibrary
+      if (onReceiptSaved) {
+        onReceiptSaved(result.receipts[0].id);
+        return; // Exit early to prevent showing success message
+      }
+
+      // Fallback: show success message if no callback provided
       setSuccess(true);
       const isMultiProduct = result.receipts.length > 1;
       setProcessingStep(

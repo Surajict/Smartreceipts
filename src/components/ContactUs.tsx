@@ -26,12 +26,46 @@ const ContactUs: React.FC = () => {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // Simulate form submission
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setIsSubmitted(true);
-    setIsSubmitting(false);
-    setFormData({ name: '', email: '', subject: '', message: '' });
+    try {
+      // Send data to n8n webhook
+      const contactWebhookUrl = import.meta.env.VITE_N8N_CONTACT_WEBHOOK_URL;
+      
+      if (!contactWebhookUrl) {
+        throw new Error('Contact webhook URL not configured');
+      }
+      
+      const response = await fetch(contactWebhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chatInput: {
+            name: formData.name,
+            email: formData.email,
+            subject: formData.subject,
+            message: formData.message
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Success - show success message
+      setIsSubmitted(true);
+      setFormData({ name: '', email: '', subject: '', message: '' });
+      
+    } catch (error) {
+      console.error('Error submitting contact form:', error);
+      
+      // Show error message to user
+      alert('We apologize, but there seems to be a technical difficulty with our contact form at the moment. Please send your message directly to smartreceiptsau@gmail.com and we\'ll get back to you as soon as possible. Thank you for your understanding.');
+      
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

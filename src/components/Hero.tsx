@@ -65,10 +65,15 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
               >
                 Start Free Trial
               </button>
-              <button className="flex items-center justify-center space-x-2 text-text-secondary hover:text-secondary transition-colors duration-200 px-6 py-4 rounded-lg border-2 border-gray-300 hover:border-secondary font-medium bg-white/90 backdrop-blur-sm">
+              <a 
+                href="https://youtu.be/wJ6iOkoH-pg"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center space-x-2 text-text-secondary hover:text-secondary transition-colors duration-200 px-6 py-4 rounded-lg border-2 border-gray-300 hover:border-secondary font-medium bg-white/90 backdrop-blur-sm"
+              >
                 <Play className="h-5 w-5" />
-                <span>Watch Demo</span>
-              </button>
+                <span>Smart Receipts Explainer</span>
+              </a>
             </div>
 
             {/* Trust Stats */}

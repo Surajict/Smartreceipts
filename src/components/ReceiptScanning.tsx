@@ -8,7 +8,6 @@ import {
   Check, 
   AlertCircle, 
   Loader2, 
-  FileText,
   Zap,
   Brain,
   Eye,
@@ -16,16 +15,15 @@ import {
   RefreshCw,
   User,
   LogOut,
-  Bell,
   Edit3,
   RotateCcw,
   Plus,
   Maximize2,
   Settings
 } from 'lucide-react';
-import { signOut, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT, supabase } from '../lib/supabase';
+import { signOut, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
-import { extractTextFromImage, OCRResult, OCROptions } from '../services/ocrService';
+import { extractTextFromImage } from '../services/ocrService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { ExtractedReceiptData } from '../types/receipt';
 import { PerplexityValidationService, ValidationResult } from '../services/perplexityValidationService';
@@ -77,14 +75,13 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
   const [duplicateConfidence, setDuplicateConfidence] = useState(0);
   const [pendingSaveData, setPendingSaveData] = useState<{
     extractedData: ExtractedData;
-    imageUrl: string;
+    imageUrl: string | undefined;
     processingMethod: string;
     ocrConfidence?: number;
     extractedText?: string;
   } | null>(null);
   
-  // OCR Engine - Always uses Google Cloud Vision
-  const selectedOCREngine = 'google-cloud-vision';
+  // OCR Engine - Google Cloud Vision is now primary with Tesseract fallback
   
   // Long receipt capture states
   const [isCapturingLong, setIsCapturingLong] = useState(false);
@@ -277,7 +274,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
     }
 
     const result = await extractTextFromImage(fileSource, {
-      fallbackToGoogleVision: true
+      // Google Cloud Vision is now the primary OCR engine with Tesseract as fallback
     });
 
     if (result.error) {
@@ -483,25 +480,43 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
 
     try {
       let imageUrl = undefined;
-      // Upload image if we have one
-      if (capturedImage || uploadedFile) {
-        setProcessingStep('Uploading image...');
-        const imageFile = uploadedFile || dataURLtoBlob(capturedImage!);
-        const { data: uploadData, error: uploadError } = await uploadReceiptImage(imageFile, user.id);
-        if (uploadError || !uploadData?.url) {
-          setError('Failed to upload image. Please try again.');
+      
+      // For manual entry, image is optional
+      if (inputMode === 'manual') {
+        // Upload image only if provided for manual entries
+        if (capturedImage || uploadedFile) {
+          setProcessingStep('Uploading image...');
+          const imageFile = uploadedFile || dataURLtoBlob(capturedImage!);
+          const { data: uploadData, error: uploadError } = await uploadReceiptImage(imageFile, user.id);
+          if (uploadError || !uploadData?.url) {
+            setError('Failed to upload image. Please try again.');
+            setIsProcessing(false);
+            return;
+          } else {
+            imageUrl = uploadData.url;
+          }
+        }
+        // For manual entry, no image is required - continue without image
+      } else {
+        // For capture/upload modes, image is required
+        if (capturedImage || uploadedFile) {
+          setProcessingStep('Uploading image...');
+          const imageFile = uploadedFile || dataURLtoBlob(capturedImage!);
+          const { data: uploadData, error: uploadError } = await uploadReceiptImage(imageFile, user.id);
+          if (uploadError || !uploadData?.url) {
+            setError('Failed to upload image. Please try again.');
+            setIsProcessing(false);
+            return;
+          } else {
+            imageUrl = uploadData.url;
+          }
+        } else {
+          setError('No image found. Please capture or upload a receipt image.');
           setIsProcessing(false);
           return;
-        } else {
-          imageUrl = uploadData.url;
         }
-      } else {
-        setError('No image found. Please capture or upload a receipt image.');
-        setIsProcessing(false);
-        return;
       }
 
-      const productName = extractedData.product_description || 'receipt';
       const processingMethod = inputMode === 'manual' ? 'manual' : (extractedText ? 'gpt_structured' : 'manual');
       const ocrConfidence = extractedText ? 0.85 : undefined;
 
@@ -540,7 +555,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
 
   const performSave = async (
     data: ExtractedData,
-    imageUrl: string,
+    imageUrl: string | undefined,
     processingMethod: string,
     ocrConfidence?: number,
     extractedText?: string
@@ -1318,7 +1333,14 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
               </div>
             </div>
 
-            {inputMode !== 'manual' && (
+            {inputMode === 'manual' ? (
+              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-700">
+                  💡 <strong>Manual Entry:</strong> No receipt image required! Simply enter your receipt details below. 
+                  You can optionally upload an image later for reference, but all warranty tracking and alerts will work based on the information you provide.
+                </p>
+              </div>
+            ) : (
               <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-700">
                   Please review the extracted information below and make any necessary corrections before saving.

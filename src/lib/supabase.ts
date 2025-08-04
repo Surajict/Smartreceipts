@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY!
 
-// Get the current site URL for redirects
-const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://smartreceiptsanz.netlify.app'
+// Get the current site URL for redirects - always use production URL for OAuth
+const siteUrl = 'https://smartreceiptsanz.netlify.app'
 
 // Configure Supabase client with Google OAuth options
 export const supabase = createClient(supabaseUrl, supabaseKey, {
@@ -13,12 +13,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     persistSession: true,
     detectSessionInUrl: true,
     flowType: 'pkce',
-    // Configure Google OAuth provider
-    providers: {
-      google: {
-        clientId: import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID || '751272252597-eh4q33q5qevsrse3m0a7p6dtsnse8ocm.apps.googleusercontent.com'
-      }
-    }
+  
   }
 })
 
@@ -526,10 +521,8 @@ export const signInWithGoogle = async () => {
   try {
     console.log('Starting Google sign in process')
 
-    // Get the current site URL for redirect
-    const redirectTo = typeof window !== 'undefined' 
-      ? `${window.location.origin}/dashboard`
-      : 'https://smartreceiptsanz.netlify.app/dashboard'
+    // Use the siteUrl variable which defaults to smartreceiptsanz.netlify.app
+    const redirectTo = `${siteUrl}/dashboard`
 
     console.log('Using redirect URL:', redirectTo)
 

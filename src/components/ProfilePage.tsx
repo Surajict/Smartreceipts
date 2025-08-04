@@ -26,6 +26,7 @@ import {
 import { supabase, signOut } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
 import NotificationDropdown from './NotificationDropdown';
+import Footer from './Footer';
 
 interface ProfilePageProps {
   onBackToDashboard: () => void;
@@ -983,6 +984,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
           onClick={() => setShowUserMenu(false)}
         />
       )}
+
+      <Footer />
     </div>
   );
 };

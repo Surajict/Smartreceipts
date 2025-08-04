@@ -58,7 +58,7 @@ export interface OCROptions {
   autoRotate?: boolean
 }
 
-// Extract text from image using Tesseract.js
+// Extract text from image with Google Cloud Vision as primary, Tesseract as fallback
 export async function extractTextFromImage(
   file: File, 
   options: OCROptions = {}
@@ -71,7 +71,7 @@ export async function extractTextFromImage(
       return {
         text: '',
         confidence: 0,
-        method: 'tesseract',
+        method: 'google-vision',
         error: 'Invalid file type. Please upload an image file.'
       }
     }
@@ -81,47 +81,75 @@ export async function extractTextFromImage(
       return {
         text: '',
         confidence: 0,
-        method: 'tesseract',
+        method: 'google-vision',
         error: 'File too large. Please upload an image smaller than 10MB.'
       }
     }
 
-    // Set up Tesseract options
-    const tesseractOptions: any = {
-      logger: () => {}, // Suppress logs in production
-    }
+    // Try Google Cloud Vision first (primary OCR engine)
+    try {
+      console.log('🔍 Attempting Google Cloud Vision OCR...');
+      const googleResult = await extractTextWithGoogleVision(file);
+      console.log('✅ Google Cloud Vision OCR successful');
+      return googleResult;
+    } catch (googleError: any) {
+      console.warn('⚠️ Google Cloud Vision failed:', googleError.message);
+      
+      // If Google Vision fails and fallback is enabled, try Tesseract
+      if (options.fallbackToGoogleVision !== false) { // Default to true unless explicitly disabled
+        console.log('🔄 Falling back to Tesseract OCR...');
+        
+        try {
+          // Set up Tesseract options
+          const tesseractOptions: any = {
+            logger: () => {}, // Suppress logs in production
+          }
 
-    if (options.engine) {
-      tesseractOptions.tessedit_ocr_engine_mode = options.engine
-    }
+          if (options.engine) {
+            tesseractOptions.tessedit_ocr_engine_mode = options.engine
+          }
 
-    // Process with Tesseract
-    const language = options.language || 'eng'
-    const result = await recognize(file, language, tesseractOptions)
+          // Process with Tesseract
+          const language = options.language || 'eng'
+          const result = await recognize(file, language, tesseractOptions)
 
-    // Check for timeout
-    const processingTime = Date.now() - startTime
-    if (options.timeout && processingTime > options.timeout) {
-      throw new Error('Processing timeout exceeded')
-    }
+          // Check for timeout
+          const processingTime = Date.now() - startTime
+          if (options.timeout && processingTime > options.timeout) {
+            throw new Error('Processing timeout exceeded')
+          }
 
-    return {
-      text: result.data.text,
-      confidence: result.data.confidence,
-      method: 'tesseract'
+          console.log('✅ Tesseract OCR fallback successful');
+          return {
+            text: result.data.text,
+            confidence: result.data.confidence,
+            method: 'tesseract'
+          }
+
+        } catch (tesseractError: any) {
+          console.error('❌ Tesseract OCR fallback also failed:', tesseractError);
+          
+          // Return error result with both failures
+          return {
+            text: '',
+            confidence: 0,
+            method: 'tesseract',
+            error: `Both OCR engines failed. Google Vision: ${googleError.message}. Tesseract: ${tesseractError.message}`
+          }
+        }
+      } else {
+        // No fallback enabled, return Google Vision error
+        return {
+          text: '',
+          confidence: 0,
+          method: 'google-vision',
+          error: `Google Cloud Vision failed: ${googleError.message}`
+        }
+      }
     }
 
   } catch (error: any) {
-    console.error('Tesseract OCR failed:', error)
-
-    // Try Google Vision fallback if enabled
-    if (options.fallbackToGoogleVision) {
-      try {
-        return await extractTextWithGoogleVision(file)
-      } catch (fallbackError) {
-        console.error('Google Vision fallback failed:', fallbackError)
-      }
-    }
+    console.error('OCR processing failed:', error)
 
     // Return error result
     let errorMessage = 'OCR processing failed'
@@ -132,7 +160,7 @@ export async function extractTextFromImage(
     return {
       text: '',
       confidence: 0,
-      method: 'tesseract',
+      method: 'google-vision',
       error: errorMessage
     }
   }

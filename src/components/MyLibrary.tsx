@@ -104,7 +104,19 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
   useEffect(() => {
     const openReceiptId = location.state?.openReceiptId;
     if (openReceiptId && receipts.length > 0) {
-      const receiptToOpen = receipts.find(r => r.id === openReceiptId);
+      // First try to find direct ID match
+      let receiptToOpen = receipts.find(r => r.id === openReceiptId);
+      
+      // If not found, search within grouped receipts
+      if (!receiptToOpen) {
+        receiptToOpen = receipts.find(r => {
+          if (r.type === 'group' && r.receipts) {
+            return r.receipts.some(item => item.id === openReceiptId);
+          }
+          return false;
+        });
+      }
+      
       if (receiptToOpen) {
         setSelectedReceipt(receiptToOpen);
         setShowReceiptModal(true);

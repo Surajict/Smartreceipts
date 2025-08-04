@@ -26,12 +26,106 @@ const ContactUs: React.FC = () => {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // Simulate form submission
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setIsSubmitted(true);
-    setIsSubmitting(false);
-    setFormData({ name: '', email: '', subject: '', message: '' });
+    try {
+      // Use Netlify function as proxy to n8n webhook (handles CORS)
+      const contactWebhookUrl = `${window.location.origin}/.netlify/functions/contact-proxy`;
+      
+      // Debug logging for development
+      console.log('Environment check:', {
+        contactUrl: contactWebhookUrl,
+        environment: import.meta.env.MODE,
+        origin: window.location.origin
+      });
+      
+      const requestData = {
+        chatInput: {
+          name: formData.name,
+          email: formData.email,
+          subject: formData.subject,
+          message: formData.message,
+          timestamp: new Date().toISOString(),
+          source: 'contact-form'
+        }
+      };
+
+      console.log('Sending request to webhook:', {
+        url: `${contactWebhookUrl.substring(0, 20)}...`,
+        method: 'POST',
+        hasData: !!requestData
+      });
+      
+      const response = await fetch(contactWebhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(requestData)
+      });
+
+      console.log('Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Webhook response error:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
+        
+        if (response.status === 0 || response.status === 404) {
+          throw new Error(`Webhook not reachable (${response.status}). Please check the webhook URL configuration.`);
+        } else if (response.status >= 400 && response.status < 500) {
+          throw new Error(`Client error (${response.status}): ${response.statusText}. ${errorText}`);
+        } else if (response.status >= 500) {
+          throw new Error(`Server error (${response.status}): ${response.statusText}. The webhook service may be down.`);
+        } else {
+          throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+        }
+      }
+
+      // Try to parse response
+      let responseData;
+      try {
+        responseData = await response.json();
+        console.log('Webhook response data:', responseData);
+      } catch (parseError) {
+        console.log('Response is not JSON, treating as success');
+      }
+
+      // Success - show success message
+      console.log('Contact form submitted successfully');
+      setIsSubmitted(true);
+      setFormData({ name: '', email: '', subject: '', message: '' });
+      
+    } catch (error) {
+      console.error('Contact form submission error:', error);
+      
+      let errorMessage = 'We apologize, but there seems to be a technical difficulty with our contact form at the moment.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('webhook URL not configured')) {
+          errorMessage = 'Contact form is not properly configured. Please contact support directly.';
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          errorMessage = 'Network connection issue. Please check your internet connection and try again.';
+        } else if (error.message.includes('CORS')) {
+          errorMessage = 'Cross-origin request blocked. Please contact support directly.';
+        } else if (error.message.includes('not reachable')) {
+          errorMessage = 'Contact service is currently unavailable. Please try again later or contact us directly.';
+        }
+      }
+      
+      // Show error message to user
+      alert(`${errorMessage} Please send your message directly to smartreceiptsau@gmail.com and we'll get back to you as soon as possible. Thank you for your understanding.`);
+      
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

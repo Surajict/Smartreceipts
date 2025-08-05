@@ -792,18 +792,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                   navigate('/library', { state: { openReceiptId: result.id } });
                 }}
               >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <h4 className="text-base font-semibold text-text-primary group-hover:text-primary transition-colors duration-200 truncate">
-                      {result.title}
-                    </h4>
+                                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center space-x-2 sm:space-x-3 mb-2">
+                      <h4 className="text-sm sm:text-base font-semibold text-text-primary group-hover:text-primary transition-colors duration-200 truncate">
+                        {result.title}
+                      </h4>
                     <div className="flex items-center space-x-1 text-xs text-text-secondary bg-primary/10 px-2 py-1 rounded-full flex-shrink-0">
                       <span>Match:</span>
                       <span className="font-medium text-primary">{Math.round(result.relevanceScore * 100)}%</span>
                     </div>
                   </div>
                   
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-text-secondary">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-text-secondary">
                     <div className="flex items-center space-x-1">
                       <Tag className="h-4 w-4" />
                       <span>{result.brand}</span>
@@ -1151,22 +1151,22 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
       {/* Header */}
       <header className="bg-white shadow-card border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
+          <div className="flex justify-between items-center h-16 min-w-0">
             {/* Logo */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0">
               <img 
                 src="/Smart Receipt Logo.png" 
                 alt="Smart Receipts Logo" 
-                className="h-10 w-10 object-contain"
+                className="h-8 w-8 sm:h-10 sm:w-10 object-contain flex-shrink-0"
               />
-              <span className="text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent">
+              <span className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent truncate">
                 Smart Receipts
               </span>
             </div>
 
             {/* Header Actions */}
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Notifications */}
               <div className="relative" data-tour="notifications">
                 <button 
@@ -1183,7 +1183,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
                 {/* Notification Dropdown */}
                 {showNotificationMenu && (
-                  <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                  <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 max-w-[calc(100vw-2rem)] mr-2">
                     <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-between">
                       <h3 className="font-medium text-text-primary">Notifications</h3>
                       {notifications.length > 0 && (
@@ -1265,7 +1265,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
                 {/* User Dropdown */}
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                  <div className="absolute right-0 mt-2 w-44 sm:w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 max-w-[calc(100vw-2rem)] mr-2">
                     <div className="px-4 py-2 border-b border-gray-200">
                       <p className="text-sm font-medium text-text-primary">
                         {user?.user_metadata?.full_name || 'User'}
@@ -1318,13 +1318,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 py-6 sm:py-8">
         {/* Welcome Section */}
         <div className="mb-8" data-tour="welcome-section">
-          <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-2">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-text-primary mb-2">
             {getGreeting()}, {user?.user_metadata?.full_name?.split(' ')[0] || 'there'}!
           </h1>
-          <p className="text-xl text-text-secondary">
+          <p className="text-base sm:text-lg lg:text-xl text-text-secondary">
             Ready to manage your receipts and warranties smartly?
           </p>
         </div>
@@ -1494,8 +1494,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         {/* Smart Search Section */}
         <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-4 md:p-6 mb-8" data-tour="smart-search">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6 space-y-3 sm:space-y-0">
-            <h2 className="text-xl md:text-2xl font-bold text-text-primary flex items-center space-x-2">
-              <Search className="h-5 w-5 md:h-6 md:w-6 text-primary" />
+            <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-text-primary flex items-center space-x-2">
+              <Search className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-primary" />
               <span>Smart Search</span>
               <ContextualTooltip
                 title="AI-Powered Smart Search"
@@ -1519,14 +1519,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           <div className="mb-4 md:mb-6">
             <form onSubmit={handleSearchSubmit} className="relative">
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 md:pl-4 flex items-center pointer-events-none">
+                <div className="absolute inset-y-0 left-0 pl-2 sm:pl-3 md:pl-4 flex items-center pointer-events-none">
                   <Search className="h-4 w-4 md:h-5 md:w-5 text-text-secondary" />
                 </div>
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="block w-full pl-10 md:pl-12 pr-20 md:pr-24 py-2 md:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 bg-gray-50 hover:bg-white focus:bg-white text-sm md:text-base"
+                  className="block w-full pl-8 sm:pl-10 md:pl-12 pr-16 sm:pr-20 md:pr-24 py-2 md:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 bg-gray-50 hover:bg-white focus:bg-white text-sm md:text-base"
                   placeholder={window.innerWidth < 768 ? "Ask about your receipts..." : "Ask questions about your receipts: 'How much did I spend on electronics?' or 'Show me Apple receipts'"}
                 />
                 <div className="absolute inset-y-0 right-0 flex items-center pr-2 md:pr-3">
@@ -1626,11 +1626,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           {renderSearchResults()}
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-8">
+        <div className="grid lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
           {/* Warranty Alerts */}
-          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-text-primary flex items-center space-x-2">
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h2 className="text-lg sm:text-2xl font-bold text-text-primary flex items-center space-x-2">
                 <span>Upcoming Warranty Alerts</span>
                 <ContextualTooltip
                   title="Warranty Protection"
@@ -1693,9 +1693,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </div>
 
           {/* Recent Receipts */}
-          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-text-primary">Recent Receipts</h2>
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h2 className="text-lg sm:text-2xl font-bold text-text-primary">Recent Receipts</h2>
                           <button 
               onClick={() => navigate('/library')}
               className="text-primary hover:text-primary/80 font-medium transition-colors duration-200"
@@ -1733,7 +1733,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate max-w-xs" title={receipt.productName}>
+                        <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate" title={receipt.productName}>
                           {receipt.productName}
                         </h3>
                         <div className="text-sm text-text-secondary space-y-1">

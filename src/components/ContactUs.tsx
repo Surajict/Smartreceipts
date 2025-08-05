@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, MapPin, Phone, Clock, Send, User, MessageSquare } from 'lucide-react';
+import { Mail, MapPin, Clock, Send } from 'lucide-react';
 import Header from './Header';
 import HomepageFooter from './HomepageFooter';
 
@@ -134,13 +134,13 @@ const ContactUs: React.FC = () => {
       
       <main className="pt-20">
         {/* Hero Section */}
-        <section className="bg-gradient-to-br from-primary/10 to-secondary/10 py-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <section className="bg-gradient-to-br from-primary/10 to-secondary/10 py-12 sm:py-16">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
             <div className="text-center">
-              <h1 className="text-4xl md:text-5xl font-bold text-text-primary mb-6">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-text-primary mb-4 sm:mb-6">
                 Contact Us
               </h1>
-              <p className="text-xl text-text-secondary max-w-3xl mx-auto leading-relaxed">
+              <p className="text-base sm:text-lg lg:text-xl text-text-secondary max-w-3xl mx-auto leading-relaxed">
                 Have questions about Smart Receipts? Need help with your account? We're here to help! 
                 Reach out to us using any of the methods below.
               </p>
@@ -148,25 +148,25 @@ const ContactUs: React.FC = () => {
           </div>
         </section>
 
-        <div className="py-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <div className="py-12 sm:py-16">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12">
               
               {/* Contact Information */}
-              <div className="space-y-8">
+              <div className="space-y-6 sm:space-y-8">
                 <div>
-                  <h2 className="text-3xl font-bold text-text-primary mb-6">Get in Touch</h2>
-                  <p className="text-text-secondary text-lg mb-8">
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-text-primary mb-4 sm:mb-6">Get in Touch</h2>
+                  <p className="text-text-secondary text-base sm:text-lg mb-6 sm:mb-8">
                     Our customer support team is ready to help you with any questions or issues you may have. 
                     We typically respond within 24 hours during business days.
                   </p>
                 </div>
 
                 {/* Contact Methods */}
-                <div className="space-y-6">
-                  <div className="flex items-start space-x-4 p-6 bg-white rounded-lg shadow-card">
-                    <div className="bg-primary/10 rounded-full p-3">
-                      <Mail className="h-6 w-6 text-primary" />
+                <div className="space-y-4 sm:space-y-6">
+                  <div className="flex items-start space-x-3 sm:space-x-4 p-4 sm:p-6 bg-white rounded-lg shadow-card">
+                    <div className="bg-primary/10 rounded-full p-3 flex-shrink-0">
+                      <Mail className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold text-text-primary mb-2">Email Support</h3>
@@ -182,9 +182,9 @@ const ContactUs: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-start space-x-4 p-6 bg-white rounded-lg shadow-card">
-                    <div className="bg-secondary/10 rounded-full p-3">
-                      <MapPin className="h-6 w-6 text-secondary" />
+                  <div className="flex items-start space-x-3 sm:space-x-4 p-4 sm:p-6 bg-white rounded-lg shadow-card">
+                    <div className="bg-secondary/10 rounded-full p-3 flex-shrink-0">
+                      <MapPin className="h-5 w-5 sm:h-6 sm:w-6 text-secondary" />
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold text-text-primary mb-2">Office Address</h3>
@@ -196,9 +196,9 @@ const ContactUs: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-start space-x-4 p-6 bg-white rounded-lg shadow-card">
-                    <div className="bg-accent/10 rounded-full p-3">
-                      <Clock className="h-6 w-6 text-accent" />
+                  <div className="flex items-start space-x-3 sm:space-x-4 p-4 sm:p-6 bg-white rounded-lg shadow-card">
+                    <div className="bg-accent/10 rounded-full p-3 flex-shrink-0">
+                      <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-accent" />
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold text-text-primary mb-2">Support Hours</h3>
@@ -212,8 +212,8 @@ const ContactUs: React.FC = () => {
                 </div>
 
                 {/* Quick Links */}
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-text-primary mb-4">Quick Support</h3>
+                <div className="bg-gray-50 rounded-lg p-4 sm:p-6">
+                  <h3 className="text-base sm:text-lg font-semibold text-text-primary mb-3 sm:mb-4">Quick Support</h3>
                   <div className="space-y-2">
                     <Link to="/help-center" className="block text-primary hover:text-primary/80">
                       → Visit our Help Center
@@ -232,8 +232,8 @@ const ContactUs: React.FC = () => {
               </div>
 
               {/* Contact Form */}
-              <div className="bg-white rounded-lg shadow-card p-8">
-                <h3 className="text-2xl font-bold text-text-primary mb-6">Send us a Message</h3>
+              <div className="bg-white rounded-lg shadow-card p-4 sm:p-6 lg:p-8">
+                <h3 className="text-xl sm:text-2xl font-bold text-text-primary mb-4 sm:mb-6">Send us a Message</h3>
                 
                 {isSubmitted ? (
                   <div className="text-center py-8">
@@ -252,8 +252,8 @@ const ContactUs: React.FC = () => {
                     </button>
                   </div>
                 ) : (
-                  <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                       <div>
                         <label htmlFor="name" className="block text-sm font-medium text-text-primary mb-2">
                           Full Name *
@@ -265,7 +265,7 @@ const ContactUs: React.FC = () => {
                           required
                           value={formData.name}
                           onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                          className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm sm:text-base"
                           placeholder="Your full name"
                         />
                       </div>
@@ -280,7 +280,7 @@ const ContactUs: React.FC = () => {
                           required
                           value={formData.email}
                           onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                          className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm sm:text-base"
                           placeholder="your.email@example.com"
                         />
                       </div>
@@ -296,7 +296,7 @@ const ContactUs: React.FC = () => {
                         required
                         value={formData.subject}
                         onChange={handleInputChange}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm sm:text-base"
                       >
                         <option value="">Select a subject</option>
                         <option value="general">General Inquiry</option>

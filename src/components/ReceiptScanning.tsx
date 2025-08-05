@@ -780,22 +780,22 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
       {/* Header */}
       <header className="bg-white shadow-card border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
+          <div className="flex justify-between items-center h-16 min-w-0">
             {/* Logo */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0">
               <img 
                 src="/Smart Receipt Logo.png" 
                 alt="Smart Receipts Logo" 
-                className="h-10 w-10 object-contain"
+                className="h-8 w-8 sm:h-10 sm:w-10 object-contain flex-shrink-0"
               />
-              <span className="text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent">
+              <span className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent truncate">
                 Smart Receipts
               </span>
             </div>
 
             {/* Header Actions */}
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Notifications */}
               {user && <NotificationDropdown userId={user.id} />}
               
@@ -814,7 +814,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
               {/* Back Button */}
               <button
                 onClick={onBackToDashboard}
-                className="flex items-center space-x-2 bg-white text-text-primary border-2 border-gray-300 hover:border-primary px-4 py-2 rounded-lg font-medium transition-all duration-200"
+                className="flex items-center space-x-1 sm:space-x-2 bg-white text-text-primary border-2 border-gray-300 hover:border-primary px-2 sm:px-4 py-2 rounded-lg font-medium transition-all duration-200"
               >
                 <ArrowLeft className="h-4 w-4" />
                 <span className="hidden sm:inline">Back to Dashboard</span>
@@ -844,7 +844,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
 
                 {/* User Dropdown */}
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                  <div className="absolute right-0 mt-2 w-44 sm:w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 max-w-[calc(100vw-2rem)] mr-2">
                     <div className="px-4 py-2 border-b border-gray-200">
                       <p className="text-sm font-medium text-text-primary">
                         {user?.user_metadata?.full_name || 'User'}
@@ -885,13 +885,13 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
       </header>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 py-6 sm:py-8">
         {/* Page Title */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
+        <div className="text-center mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-text-primary mb-3 sm:mb-4">
             Add Your Receipt
           </h1>
-          <p className="text-xl text-text-secondary">
+          <p className="text-base sm:text-lg lg:text-xl text-text-secondary">
             Capture, upload, or manually enter your receipt details
           </p>
         </div>
@@ -930,10 +930,10 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
 
         {/* Camera Modal */}
         {showCamera && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-card max-w-2xl w-full">
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h2 className="text-xl font-bold text-text-primary">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card max-w-2xl w-full max-h-[95vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+                <h2 className="text-lg sm:text-xl font-bold text-text-primary">
                   {captureMode === 'long' ? 'Capture Long Receipt' : 'Capture Receipt'}
                 </h2>
                 <button
@@ -944,7 +944,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                 </button>
               </div>
               
-              <div className="p-6">
+              <div className="p-4 sm:p-6">
                 {/* Capture Mode Toggle */}
                 <div className="flex justify-center mb-4">
                   <div className="bg-gray-100 rounded-lg p-1 flex">

@@ -247,20 +247,20 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
+          <div className="flex items-center justify-between h-16 min-w-0">
+            <div className="flex items-center space-x-2 sm:space-x-4 min-w-0 flex-1">
               <button
                 onClick={onBackToDashboard}
-                className="text-text-secondary hover:text-text-primary"
+                className="text-text-secondary hover:text-text-primary flex-shrink-0"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
-              <h1 className="text-2xl font-bold text-text-primary">Subscription Management</h1>
+              <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-text-primary truncate">Subscription Management</h1>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
               {subscriptionSystem === 'code_based' ? (
                 <div className="flex items-center space-x-2 px-3 py-1 bg-blue-100 rounded-full">
                   <Key className="h-4 w-4 text-blue-600" />
@@ -277,35 +277,35 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto p-6 space-y-8">
+      <div className="max-w-4xl mx-auto p-3 sm:p-4 lg:p-6 space-y-6 sm:space-y-8">
         {/* Code Redemption Section - Only show for code-based system */}
         {subscriptionSystem === 'code_based' && subscriptionInfo.plan === 'free' && (
-          <section className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <Gift className="h-6 w-6 text-blue-600" />
-              <h2 className="text-xl font-semibold text-gray-900">Redeem Subscription Code</h2>
+          <section className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border p-4 sm:p-6">
+            <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4">
+              <Gift className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 flex-shrink-0" />
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Redeem Subscription Code</h2>
             </div>
             
-            <p className="text-gray-600 mb-4">
+            <p className="text-sm sm:text-base text-gray-600 mb-3 sm:mb-4">
               Have a subscription code? Enter it below to activate your premium features.
             </p>
 
-            <div className="flex space-x-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <div className="flex-1">
                 <input
                   type="text"
                   value={redemptionCode}
                   onChange={(e) => setRedemptionCode(e.target.value.toUpperCase())}
-                  placeholder="Enter 16-digit subscription code"
+                  placeholder="Enter 16-digit code"
                   maxLength={16}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-center tracking-widest"
+                  className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-center tracking-widest text-sm sm:text-base"
                   style={{ letterSpacing: '0.1em' }}
                 />
               </div>
               <button
                 onClick={handleRedeemCode}
                 disabled={isRedeeming || !redemptionCode.trim()}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                className="px-4 sm:px-6 py-2 sm:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-sm sm:text-base whitespace-nowrap"
               >
                 {isRedeeming ? (
                   <>

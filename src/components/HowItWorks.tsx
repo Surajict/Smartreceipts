@@ -2,12 +2,9 @@ import React from 'react';
 import { Camera, Cpu, Bell } from 'lucide-react';
 import { Step } from '../types';
 
-interface HowItWorksProps {
-  onShowLogin: () => void;
-  onShowSignUp: () => void;
-}
+interface HowItWorksProps {}
 
-const HowItWorks: React.FC<HowItWorksProps> = ({ onShowLogin, onShowSignUp }) => {
+const HowItWorks: React.FC<HowItWorksProps> = () => {
   const steps: Step[] = [
     {
       number: 1,
@@ -90,25 +87,6 @@ const HowItWorks: React.FC<HowItWorksProps> = ({ onShowLogin, onShowSignUp }) =>
                 )}
               </div>
             ))}
-          </div>
-        </div>
-
-        {/* Bottom Section */}
-        <div className="text-center mt-16">
-          <div className="bg-white rounded-2xl p-8 shadow-card border border-gray-100 max-w-4xl mx-auto backdrop-blur-sm">
-            <h3 className="text-2xl font-bold text-text-primary mb-4 tracking-tight">
-              Ready to Transform Your Receipt Management?
-            </h3>
-            <p className="text-text-secondary mb-6">
-              Join thousands of users who have already streamlined their warranty tracking 
-              and never miss another claim opportunity.
-            </p>
-            <button 
-              onClick={onShowSignUp}
-              className="bg-gradient-to-r from-primary to-secondary text-white px-8 py-4 rounded-lg font-medium text-lg hover:opacity-90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-1"
-            >
-              Get Started Today
-            </button>
           </div>
         </div>
       </div>

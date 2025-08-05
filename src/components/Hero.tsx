@@ -7,7 +7,7 @@ interface HeroProps {
   onShowSignUp: () => void;
 }
 
-const Hero: React.FC<HeroProps> = ({ onShowSignUp }) => {
+const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
   const trustStats: TrustStat[] = [
     {
       value: '99.5%',

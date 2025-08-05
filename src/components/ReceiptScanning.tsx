@@ -90,12 +90,31 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
   
   const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const warrantyPeriodRef = useRef<HTMLInputElement>(null);
+  const firstProductWarrantyRef = useRef<HTMLInputElement>(null);
   const captureIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const frameCountRef = useRef(0);
 
   useEffect(() => {
     checkOpenAIAvailability();
   }, []);
+
+  // Focus on warranty period field when form is shown
+  useEffect(() => {
+    if (showExtractedForm) {
+      // Small delay to ensure the form is fully rendered
+      setTimeout(() => {
+        // Focus on the appropriate warranty field based on form type
+        if (extractedData?.products && extractedData.products.length > 0) {
+          // Multi-product form - focus on first product's warranty field
+          firstProductWarrantyRef.current?.focus();
+        } else {
+          // Single product form - focus on main warranty field
+          warrantyPeriodRef.current?.focus();
+        }
+      }, 100);
+    }
+  }, [showExtractedForm, extractedData?.products]);
 
   // No longer needed - user data comes from context
 
@@ -119,8 +138,18 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
   const capture = useCallback(() => {
     const imageSrc = webcamRef.current?.getScreenshot();
     if (imageSrc) {
+      // Reset all processing-related state when capturing a new image
       setCapturedImage(imageSrc);
       setShowCamera(false);
+      setError(null);
+      setSuccess(false);
+      setExtractedText('');
+      setExtractedData(null);
+      setValidationResult(null);
+      setOcrProgress(0);
+      setShowExtractedForm(false);
+      setIsValidating(false);
+      setProcessingStep('');
     }
   }, [webcamRef]);
 
@@ -162,19 +191,39 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
       // For now, use the middle frame as the best capture
       // In a real implementation, you'd stitch the frames together
       const bestFrame = capturedFrames[Math.floor(capturedFrames.length / 2)];
+      
+      // Reset all processing-related state when capturing a new long image
       setCapturedImage(bestFrame);
       setShowCamera(false);
       setCapturedFrames([]);
       setCaptureProgress(0);
       setLongCaptureInstructions('');
+      setError(null);
+      setSuccess(false);
+      setExtractedText('');
+      setExtractedData(null);
+      setValidationResult(null);
+      setOcrProgress(0);
+      setShowExtractedForm(false);
+      setIsValidating(false);
+      setProcessingStep('');
     }
   }, [capturedFrames]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    
+    // Reset all processing-related state when uploading a new file
     setUploadedFile(file);
     setError(null);
+    setSuccess(false);
+    setExtractedText('');
+    setExtractedData(null);
+    setValidationResult(null);
+    setOcrProgress(0);
+    setShowExtractedForm(false);
+    setIsValidating(false);
     setIsProcessing(true);
     setProcessingStep('Processing file...');
 
@@ -381,7 +430,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
       // Step 3: Validate data with Perplexity (NEW STEP)
       setIsValidating(true);
       const productName = structuredData.product_description || 'product';
-      setProcessingStep(`Validating "${productName}" with Perplexity AI...`);
+      setProcessingStep(`Validating "${productName}" details...`);
       
       try {
         const validation = await PerplexityValidationService.validateReceiptData(structuredData);
@@ -738,7 +787,18 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
   };
 
   const startManualEntry = () => {
+    // Reset all processing-related state when starting manual entry
     setInputMode('manual');
+    setError(null);
+    setSuccess(false);
+    setExtractedText('');
+    setValidationResult(null);
+    setOcrProgress(0);
+    setIsValidating(false);
+    setProcessingStep('');
+    setCapturedImage(null);
+    setUploadedFile(null);
+    
     setExtractedData({
       product_description: '',
       brand_name: '',
@@ -756,7 +816,18 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
   };
 
   const startMultiProductEntry = () => {
+    // Reset all processing-related state when starting multi-product manual entry
     setInputMode('manual');
+    setError(null);
+    setSuccess(false);
+    setExtractedText('');
+    setValidationResult(null);
+    setOcrProgress(0);
+    setIsValidating(false);
+    setProcessingStep('');
+    setCapturedImage(null);
+    setUploadedFile(null);
+    
     setExtractedData({
       store_name: '',
       purchase_location: '',
@@ -1515,6 +1586,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                               Warranty Period *
                             </label>
                             <input
+                              ref={index === 0 ? firstProductWarrantyRef : undefined}
                               type="text"
                               value={product.warranty_period || ''}
                               onChange={(e) => updateProductInArray(index, 'warranty_period', e.target.value)}
@@ -1633,6 +1705,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     Warranty Period *
                   </label>
                   <input
+                    ref={warrantyPeriodRef}
                     type="text"
                     value={extractedData.warranty_period}
                     onChange={(e) => updateExtractedData('warranty_period', e.target.value)}

@@ -31,10 +31,7 @@ const Homepage: React.FC = () => {
           onShowSignUp={handleShowSignUp}
         />
         
-        <HowItWorks 
-          onShowLogin={handleShowLogin}
-          onShowSignUp={handleShowSignUp}
-        />
+        <HowItWorks />
         
         <Benefits 
           onShowLogin={handleShowLogin}

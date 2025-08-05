@@ -89,12 +89,12 @@ const Pricing: React.FC = () => {
       
       <main className="pt-20">
         {/* Hero Section */}
-        <section className="bg-gradient-to-br from-primary/10 to-secondary/10 py-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h1 className="text-4xl md:text-5xl font-bold text-text-primary mb-6">
+        <section className="bg-gradient-to-br from-primary/10 to-secondary/10 py-12 sm:py-16">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 text-center">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-text-primary mb-4 sm:mb-6">
               Choose Your Plan
             </h1>
-            <p className="text-xl text-text-secondary max-w-3xl mx-auto leading-relaxed mb-8">
+            <p className="text-base sm:text-lg lg:text-xl text-text-secondary max-w-3xl mx-auto leading-relaxed mb-6 sm:mb-8">
               Transform your receipt management with AI-powered scanning, smart warranty tracking, 
               and intelligent search. Try free with 5 receipts, then AU$7/month for unlimited scanning.
             </p>
@@ -127,15 +127,15 @@ const Pricing: React.FC = () => {
         </section>
 
         {/* Pricing Cards */}
-        <section className="py-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <section className="py-12 sm:py-16">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 max-w-4xl mx-auto">
               {plans.map((plan, index) => (
                 <div
                   key={plan.name}
-                  className={`relative bg-white rounded-xl shadow-card p-8 ${
+                  className={`relative bg-white rounded-xl shadow-card p-6 sm:p-8 ${
                     plan.popular
-                      ? 'border-2 border-primary transform scale-105'
+                      ? 'border-2 border-primary transform sm:scale-105'
                       : 'border border-gray-200'
                   }`}
                 >

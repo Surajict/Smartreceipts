@@ -442,22 +442,22 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="bg-white shadow-card border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
+          <div className="flex justify-between items-center h-16 min-w-0">
             {/* Logo */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0">
               <img 
                 src="/Smart Receipt Logo.png" 
                 alt="Smart Receipts Logo" 
-                className="h-10 w-10 object-contain"
+                className="h-8 w-8 sm:h-10 sm:w-10 object-contain flex-shrink-0"
               />
-              <span className="text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent">
+              <span className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent truncate">
                 Smart Receipts
               </span>
             </div>
 
             {/* Header Actions */}
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Notifications */}
               <div className="relative">
                 <button className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
@@ -480,7 +480,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
               {/* Back Button */}
               <button
                 onClick={onBackToDashboard}
-                className="flex items-center space-x-2 bg-white text-text-primary border-2 border-gray-300 hover:border-primary px-4 py-2 rounded-lg font-medium transition-all duration-200"
+                className="flex items-center space-x-1 sm:space-x-2 bg-white text-text-primary border-2 border-gray-300 hover:border-primary px-2 sm:px-4 py-2 rounded-lg font-medium transition-all duration-200"
               >
                 <ArrowLeft className="h-4 w-4" />
                 <span className="hidden sm:inline">Back to Dashboard</span>
@@ -511,7 +511,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
 
                 {/* User Dropdown */}
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                  <div className="absolute right-0 mt-2 w-44 sm:w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 max-w-[calc(100vw-2rem)] mr-2">
                     <div className="px-4 py-2 border-b border-gray-200">
                       <p className="text-sm font-medium text-text-primary">
                         {user?.user_metadata?.full_name || 'User'}
@@ -551,11 +551,11 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 py-6 sm:py-8">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8">
           <div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-2">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-text-primary mb-2">
               Warranty Management
             </h1>
             <div className="flex items-center space-x-4 text-text-secondary">
@@ -570,10 +570,10 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
         </div>
 
         {/* Search and Filter Controls */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-3 sm:space-y-4 lg:space-y-0">
             {/* Search */}
-            <div className="flex-1 max-w-md">
+            <div className="flex-1 lg:max-w-md">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-text-secondary" />
                 <input

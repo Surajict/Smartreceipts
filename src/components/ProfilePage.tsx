@@ -418,22 +418,22 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
       {/* Header */}
       <header className="bg-white shadow-card border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
+          <div className="flex justify-between items-center h-16 min-w-0">
             {/* Logo */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0">
               <img 
                 src="/Smart Receipt Logo.png" 
                 alt="Smart Receipts Logo" 
-                className="h-10 w-10 object-contain"
+                className="h-8 w-8 sm:h-10 sm:w-10 object-contain flex-shrink-0"
               />
-              <span className="text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent">
+              <span className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent truncate">
                 Smart Receipts
               </span>
             </div>
 
             {/* Header Actions */}
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Notifications */}
               {user && <NotificationDropdown userId={user.id} />}
               {/* User Menu */}
@@ -461,7 +461,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
 
                 {/* User Dropdown */}
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+                  <div className="absolute right-0 mt-2 w-44 sm:w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 max-w-[calc(100vw-2rem)] mr-2">
                     <div className="px-4 py-2 border-b border-gray-200">
                       <p className="text-sm font-medium text-text-primary">
                         {user?.full_name || 'User'}
@@ -491,13 +491,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 py-6 sm:py-8">
         {/* Page Title */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
+        <div className="text-center mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-text-primary mb-3 sm:mb-4">
             Account Settings
           </h1>
-          <p className="text-xl text-text-secondary">
+          <p className="text-base sm:text-lg lg:text-xl text-text-secondary">
             Manage your profile, notifications, and privacy settings
           </p>
         </div>
@@ -525,9 +525,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
         )}
 
         {/* Tab Navigation */}
-        <div className="bg-white rounded-2xl shadow-card border border-gray-100 mb-8">
+        <div className="bg-white rounded-2xl shadow-card border border-gray-100 mb-6 sm:mb-8">
           <div className="border-b border-gray-200">
-            <nav className="flex space-x-8 px-6">
+            <nav className="flex flex-wrap sm:space-x-4 lg:space-x-8 px-3 sm:px-4 lg:px-6">
               {[
                 { id: 'profile', label: 'Profile', icon: User },
                 { id: 'notifications', label: 'Notifications', icon: Bell },
@@ -539,14 +539,14 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex items-center space-x-2 py-4 px-2 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                    className={`flex items-center space-x-1 sm:space-x-2 py-3 sm:py-4 px-1 sm:px-2 border-b-2 font-medium text-xs sm:text-sm transition-colors duration-200 flex-1 sm:flex-none justify-center sm:justify-start ${
                       activeTab === tab.id
                         ? 'border-primary text-primary'
                         : 'border-transparent text-text-secondary hover:text-text-primary hover:border-gray-300'
                     }`}
                   >
-                    <Icon className="h-4 w-4" />
-                    <span>{tab.label}</span>
+                    <Icon className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                    <span className="truncate">{tab.label}</span>
                   </button>
                 );
               })}
@@ -554,7 +554,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
           </div>
 
           {/* Tab Content */}
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {/* Profile Tab */}
             {activeTab === 'profile' && (
               <div className="grid lg:grid-cols-3 gap-8">

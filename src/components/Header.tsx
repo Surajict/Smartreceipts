@@ -41,28 +41,28 @@ const Header: React.FC = () => {
 
   return (
     <header className="bg-white shadow-card fixed w-full top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-3 group">
+          <Link to="/" className="flex items-center space-x-2 sm:space-x-3 group min-w-0 flex-shrink-0">
             <img 
               src="/Smart Receipt Logo.png" 
               alt="Smart Receipts Logo" 
-              className="h-10 w-10 object-contain transition-transform duration-300 group-hover:scale-110"
+              className="h-8 w-8 sm:h-10 sm:w-10 object-contain transition-transform duration-300 group-hover:scale-110 flex-shrink-0"
             />
-            <span className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+            <span className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent truncate">
               Smart Receipts
             </span>
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
+          <nav className="hidden md:flex items-center space-x-4 lg:space-x-6 xl:space-x-8">
             {navLinks.map((link) => (
               link.isExternal ? (
                 <Link
                   key={link.label}
                   to={link.href}
-                  className="text-text-secondary hover:text-primary transition-colors duration-200 font-medium"
+                  className="text-text-secondary hover:text-primary transition-colors duration-200 font-medium text-sm lg:text-base"
                 >
                   {link.label}
                 </Link>
@@ -70,7 +70,7 @@ const Header: React.FC = () => {
                 <a
                   key={link.label}
                   href={link.href}
-                  className="text-text-secondary hover:text-primary transition-colors duration-200 font-medium"
+                  className="text-text-secondary hover:text-primary transition-colors duration-200 font-medium text-sm lg:text-base"
                 >
                   {link.label}
                 </a>
@@ -78,13 +78,13 @@ const Header: React.FC = () => {
             ))}
             <button
               onClick={() => navigate('/login')}
-              className="text-text-secondary hover:text-text-link transition-colors duration-200 font-medium"
+              className="text-text-secondary hover:text-text-link transition-colors duration-200 font-medium text-sm lg:text-base"
             >
               Sign In
             </button>
             <button 
               onClick={() => navigate('/signup')}
-              className="bg-primary text-white px-6 py-2 rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover"
+              className="bg-primary text-white px-4 lg:px-6 py-2 rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover text-sm lg:text-base"
             >
               Start Free Trial
             </button>

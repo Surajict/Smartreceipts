@@ -7,7 +7,7 @@ interface HeroProps {
   onShowSignUp: () => void;
 }
 
-const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
+const Hero: React.FC<HeroProps> = ({ onShowSignUp }) => {
   const trustStats: TrustStat[] = [
     {
       value: '99.5%',
@@ -39,29 +39,29 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
   const getStatIcon = (index: number) => {
     const icons = [Shield, TrendingUp, Users, TrendingUp, Clock];
     const Icon = icons[index];
-    return <Icon className="h-6 w-6 text-secondary" />;
+    return <Icon className="h-full w-full text-secondary" />;
   };
 
   return (
-    <section className="bg-gradient-to-b from-white to-background pt-20 pb-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-12 lg:items-start">
+    <section className="bg-gradient-to-b from-white to-background pt-16 sm:pt-20 pb-6 sm:pb-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
+        <div className="grid lg:grid-cols-2 gap-8 sm:gap-12 lg:items-start">
           {/* Left Column - Content */}
           <div className="text-center lg:text-left animate-fade-in">
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-text-primary leading-tight mb-6 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold text-text-primary leading-tight mb-4 sm:mb-6 tracking-tight">
               Never Lose a Receipt or{' '}
               <span className="text-primary">Miss a Warranty Claim</span> Again
             </h1>
             
-            <p className="text-xl text-text-secondary mb-8 leading-relaxed">
+            <p className="text-base sm:text-lg lg:text-xl text-text-secondary mb-6 sm:mb-8 leading-relaxed">
               Smart Receipts uses AI to instantly scan, organize, and track your receipts 
               while sending timely warranty alerts.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start mb-12">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start mb-8 sm:mb-12">
               <button 
                 onClick={onShowSignUp}
-                className="bg-gradient-primary text-white px-8 py-4 rounded-lg font-medium text-lg hover:opacity-90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-1"
+                className="bg-gradient-primary text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-medium text-base sm:text-lg hover:opacity-90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-1"
               >
                 Start Free Trial
               </button>
@@ -69,24 +69,26 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
                 href="https://youtu.be/wJ6iOkoH-pg"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center space-x-2 text-text-secondary hover:text-secondary transition-colors duration-200 px-6 py-4 rounded-lg border-2 border-gray-300 hover:border-secondary font-medium bg-white/90 backdrop-blur-sm"
+                className="flex items-center justify-center space-x-2 text-text-secondary hover:text-secondary transition-colors duration-200 px-4 sm:px-6 py-3 sm:py-4 rounded-lg border-2 border-gray-300 hover:border-secondary font-medium bg-white/90 backdrop-blur-sm text-sm sm:text-base"
               >
-                <Play className="h-5 w-5" />
-                <span>Smart Receipts Explainer</span>
+                <Play className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                <span className="truncate">Smart Receipts Explainer</span>
               </a>
             </div>
 
             {/* Trust Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mt-8">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4 mt-6 sm:mt-8">
               {trustStats.map((stat, index) => (
                 <div
                   key={index}
-                  className="group relative bg-white p-4 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-gray-100"
+                  className="group relative bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-gray-100"
                 >
-                  <div className="flex items-center justify-center mb-3">
-                    {getStatIcon(index)}
+                  <div className="flex items-center justify-center mb-2 sm:mb-3">
+                    <div className="h-4 w-4 sm:h-6 sm:w-6">
+                      {getStatIcon(index)}
+                    </div>
                   </div>
-                  <div className="text-2xl font-bold text-text-primary mb-1">{stat.value}</div>
+                  <div className="text-lg sm:text-2xl font-bold text-text-primary mb-1">{stat.value}</div>
                   <div className="text-xs text-text-secondary font-medium leading-tight">{stat.label}</div>
                   
                   {/* Tooltip */}
@@ -101,7 +103,7 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
 
           {/* Right Column - Demo Video */}
           <div className="relative">
-            <div className="bg-white rounded-2xl shadow-card p-8 relative overflow-hidden">
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card p-4 sm:p-6 lg:p-8 relative overflow-hidden">
               {/* Background Pattern */}
               <div className="absolute inset-0 opacity-5">
                 <div className="w-full h-full bg-gradient-to-br from-primary to-secondary"></div>
@@ -119,18 +121,18 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
               </div>
               
               {/* Feature Highlights */}
-              <div className="mt-6 grid grid-cols-3 gap-4 text-center">
-                <div className="p-3">
-                  <div className="text-2xl font-bold text-secondary">AI</div>
-                  <div className="text-sm text-text-secondary">Powered</div>
+              <div className="mt-4 sm:mt-6 grid grid-cols-3 gap-2 sm:gap-4 text-center">
+                <div className="p-2 sm:p-3">
+                  <div className="text-lg sm:text-2xl font-bold text-secondary">AI</div>
+                  <div className="text-xs sm:text-sm text-text-secondary">Powered</div>
                 </div>
-                <div className="p-3">
-                  <div className="text-2xl font-bold text-primary">Secure</div>
-                  <div className="text-sm text-text-secondary">Encrypted</div>
+                <div className="p-2 sm:p-3">
+                  <div className="text-lg sm:text-2xl font-bold text-primary">Secure</div>
+                  <div className="text-xs sm:text-sm text-text-secondary">Encrypted</div>
                 </div>
-                <div className="p-3">
-                  <div className="text-2xl font-bold text-accent-purple">Smart</div>
-                  <div className="text-sm text-text-secondary">Alerts</div>
+                <div className="p-2 sm:p-3">
+                  <div className="text-lg sm:text-2xl font-bold text-accent-purple">Smart</div>
+                  <div className="text-xs sm:text-sm text-text-secondary">Alerts</div>
                 </div>
               </div>
             </div>

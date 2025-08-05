@@ -1353,19 +1353,19 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         {/* Note: Only in-app notifications are enabled. Android push notifications when app is closed have been disabled. */}
 
         {/* Quick Access Tiles */}
-        <div className="grid md:grid-cols-3 gap-6 mb-12">
+        <div className="grid md:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
           {/* Scan Receipt Card - Modified to handle free tier limits */}
           {subscriptionInfo && subscriptionInfo.plan === 'free' && subscriptionInfo.receipts_used >= subscriptionInfo.receipts_limit ? (
             // Disabled state for free users who reached limit
-            <div className="group bg-gradient-to-br from-gray-400 to-gray-500 p-8 rounded-2xl shadow-card border-2 border-red-300 relative overflow-hidden">
+            <div className="group bg-gradient-to-br from-gray-400 to-gray-500 p-6 sm:p-8 rounded-xl sm:rounded-2xl shadow-card border-2 border-red-300 relative overflow-hidden">
               {/* Upgrade Badge */}
               <div className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
                 LIMIT REACHED
               </div>
               
               <div className="flex flex-col items-center text-center">
-                <div className="bg-white/20 rounded-full p-4 mb-4 relative">
-                  <Camera className="h-8 w-8 text-white opacity-50" />
+                <div className="bg-white/20 rounded-full p-3 sm:p-4 mb-3 sm:mb-4 relative">
+                  <Camera className="h-6 w-6 sm:h-8 sm:w-8 text-white opacity-50" />
                   {/* Lock icon overlay */}
                   <div className="absolute -bottom-1 -right-1 bg-red-500 rounded-full p-1">
                     <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -1373,8 +1373,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                     </svg>
                   </div>
                 </div>
-                <h3 className="text-xl font-bold mb-2 text-white">Monthly Limit Reached</h3>
-                <p className="text-white/90 text-sm mb-4">
+                <h3 className="text-lg sm:text-xl font-bold mb-2 text-white">Monthly Limit Reached</h3>
+                <p className="text-white/90 text-xs sm:text-sm mb-4">
                   You've used {subscriptionInfo.receipts_used}/{subscriptionInfo.receipts_limit} receipts this month
                 </p>
                 <button
@@ -1390,15 +1390,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             // Normal functional state
             <button 
               onClick={onShowReceiptScanning}
-              className="group bg-gradient-to-br from-primary to-teal-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+              className="group bg-gradient-to-br from-primary to-teal-600 p-6 sm:p-8 rounded-xl sm:rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
               data-tour="scan-receipt"
             >
               <div className="flex flex-col items-center text-center">
-                <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
-                  <Camera className="h-8 w-8" />
+                <div className="bg-white/20 rounded-full p-3 sm:p-4 mb-3 sm:mb-4 group-hover:bg-white/30 transition-colors duration-300">
+                  <Camera className="h-6 w-6 sm:h-8 sm:w-8" />
                 </div>
-                <h3 className="text-xl font-bold mb-2">Scan Receipt</h3>
-                <p className="text-white/90">Capture and digitize your receipts instantly</p>
+                <h3 className="text-lg sm:text-xl font-bold mb-2">Scan Receipt</h3>
+                <p className="text-white/90 text-sm sm:text-base">Capture and digitize your receipts instantly</p>
                 {/* Show remaining scans for free users */}
                 {subscriptionInfo && subscriptionInfo.plan === 'free' && (
                   <div className="mt-2 bg-white/20 rounded-full px-3 py-1">
@@ -1413,78 +1413,78 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
           <button 
             onClick={onShowLibrary}
-            className="group bg-gradient-to-br from-secondary to-purple-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+            className="group bg-gradient-to-br from-secondary to-purple-600 p-6 sm:p-8 rounded-xl sm:rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
             data-tour="my-library"
           >
             <div className="flex flex-col items-center text-center">
-              <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
-                <FolderOpen className="h-8 w-8" />
+              <div className="bg-white/20 rounded-full p-3 sm:p-4 mb-3 sm:mb-4 group-hover:bg-white/30 transition-colors duration-300">
+                <FolderOpen className="h-6 w-6 sm:h-8 sm:w-8" />
               </div>
-              <h3 className="text-xl font-bold mb-2">My Library</h3>
-              <p className="text-white/90">Browse and organize your receipt collection</p>
+              <h3 className="text-lg sm:text-xl font-bold mb-2">My Library</h3>
+              <p className="text-white/90 text-sm sm:text-base">Browse and organize your receipt collection</p>
             </div>
           </button>
 
           <button 
             onClick={onShowWarranty}
-            className="group bg-gradient-to-br from-red-500 to-orange-600 p-8 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+            className="group bg-gradient-to-br from-red-500 to-orange-600 p-6 sm:p-8 rounded-xl sm:rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
             data-tour="warranty-manager"
           >
             <div className="flex flex-col items-center text-center">
-              <div className="bg-white/20 rounded-full p-4 mb-4 group-hover:bg-white/30 transition-colors duration-300">
-                <Shield className="h-8 w-8" />
+              <div className="bg-white/20 rounded-full p-3 sm:p-4 mb-3 sm:mb-4 group-hover:bg-white/30 transition-colors duration-300">
+                <Shield className="h-6 w-6 sm:h-8 sm:w-8" />
               </div>
-              <h3 className="text-xl font-bold mb-2">Warranty Manager</h3>
-              <p className="text-white/90">Track and manage your product warranties</p>
+              <h3 className="text-lg sm:text-xl font-bold mb-2">Warranty Manager</h3>
+              <p className="text-white/90 text-sm sm:text-base">Track and manage your product warranties</p>
             </div>
           </button>
         </div>
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8 md:mb-12" data-tour="stats-overview">
-          <div className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl shadow-card border border-gray-100">
-            <div className="flex items-center justify-between mb-3 md:mb-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-6 sm:mb-8 lg:mb-12" data-tour="stats-overview">
+          <div className="bg-white p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl shadow-card border border-gray-100">
+            <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
               <div className="bg-gradient-to-br from-primary/10 to-primary/20 rounded-lg p-2 sm:p-3 flex-shrink-0">
-                <Receipt className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-primary" />
+                <Receipt className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-primary" />
               </div>
             </div>
-            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-text-primary mb-1">
+            <div className="text-lg sm:text-xl lg:text-2xl xl:text-3xl font-bold text-text-primary mb-1">
               {summaryStats.receiptsScanned}
             </div>
             <div className="text-xs sm:text-sm text-text-secondary">Receipts Scanned</div>
           </div>
 
-          <div className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl shadow-card border border-gray-100">
-            <div className="flex items-center justify-between mb-3 md:mb-4">
+          <div className="bg-white p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl shadow-card border border-gray-100">
+            <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
               <div className="bg-gradient-to-br from-secondary/10 to-secondary/20 rounded-lg p-2 sm:p-3 flex-shrink-0">
-                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-secondary" />
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-secondary" />
               </div>
             </div>
-            <div className="text-lg sm:text-xl md:text-3xl font-bold text-text-primary mb-1 break-words">
+            <div className="text-sm sm:text-lg lg:text-xl xl:text-3xl font-bold text-text-primary mb-1 break-words">
               {formatCurrency(summaryStats.totalAmount)}
             </div>
             <div className="text-xs sm:text-sm text-text-secondary">Total Amount Captured</div>
           </div>
 
-          <div className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl shadow-card border border-gray-100">
-            <div className="flex items-center justify-between mb-3 md:mb-4">
+          <div className="bg-white p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl shadow-card border border-gray-100">
+            <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
               <div className="bg-gradient-to-br from-accent-yellow/10 to-accent-yellow/20 rounded-lg p-2 sm:p-3 flex-shrink-0">
-                <Tag className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-accent-yellow" />
+                <Tag className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-accent-yellow" />
               </div>
             </div>
-            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-text-primary mb-1">
+            <div className="text-lg sm:text-xl lg:text-2xl xl:text-3xl font-bold text-text-primary mb-1">
               {summaryStats.itemsCaptured}
             </div>
             <div className="text-xs sm:text-sm text-text-secondary">Items Captured</div>
           </div>
 
-          <div className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl shadow-card border border-gray-100">
-            <div className="flex items-center justify-between mb-3 md:mb-4">
+          <div className="bg-white p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl shadow-card border border-gray-100">
+            <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
               <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-lg p-2 sm:p-3 flex-shrink-0">
-                <Shield className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-green-600" />
+                <Shield className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-green-600" />
               </div>
             </div>
-            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-text-primary mb-1">
+            <div className="text-lg sm:text-xl lg:text-2xl xl:text-3xl font-bold text-text-primary mb-1">
               {summaryStats.warrantiesClaimed}
             </div>
             <div className="text-xs sm:text-sm text-text-secondary">Warranties Claimed</div>
@@ -1492,9 +1492,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         </div>
 
         {/* Smart Search Section */}
-        <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-4 md:p-6 mb-8" data-tour="smart-search">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6 space-y-3 sm:space-y-0">
-            <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-text-primary flex items-center space-x-2">
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-card border border-gray-100 p-3 sm:p-4 lg:p-6 mb-6 sm:mb-8" data-tour="smart-search">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 space-y-2 sm:space-y-0">
+            <h2 className="text-base sm:text-lg lg:text-xl xl:text-2xl font-bold text-text-primary flex items-center space-x-2">
               <Search className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-primary" />
               <span>Smart Search</span>
               <ContextualTooltip
@@ -1626,57 +1626,59 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           {renderSearchResults()}
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
+        <div className="grid lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 max-w-full overflow-hidden">
           {/* Warranty Alerts */}
-          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <h2 className="text-lg sm:text-2xl font-bold text-text-primary flex items-center space-x-2">
-                <span>Upcoming Warranty Alerts</span>
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-card border border-gray-100 p-3 sm:p-4 lg:p-6 min-w-0 max-w-full overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 space-y-2 sm:space-y-0 min-w-0">
+              <h2 className="text-base sm:text-lg lg:text-2xl font-bold text-text-primary flex items-center space-x-2 min-w-0">
+                <span className="truncate">Upcoming Warranty Alerts</span>
                 <ContextualTooltip
                   title="Warranty Protection"
                   content="Smart Receipts automatically tracks warranty periods for your purchases and sends alerts before they expire. Never miss a warranty claim again!"
                   position="bottom"
                 />
               </h2>
-              <span className="text-sm text-text-secondary">Next 6 Months</span>
+              <span className="text-xs sm:text-sm text-text-secondary">Next 6 Months</span>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {warrantyAlerts.length === 0 ? (
-                <div className="text-center py-8">
-                  <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-text-primary mb-2">All warranties are current</h3>
-                  <p className="text-text-secondary">No warranties expiring in the next 6 months</p>
+                <div className="text-center py-6 sm:py-8">
+                  <CheckCircle className="h-10 w-10 sm:h-12 sm:w-12 text-green-500 mx-auto mb-3 sm:mb-4" />
+                  <h3 className="text-base sm:text-lg font-medium text-text-primary mb-2">All warranties are current</h3>
+                  <p className="text-sm sm:text-base text-text-secondary">No warranties expiring in the next 6 months</p>
                 </div>
               ) : (
                 warrantyAlerts.map((alert) => (
                   <div
                     key={alert.id}
-                    className={`p-4 rounded-lg border-2 ${getUrgencyColor(alert.urgency)} hover:shadow-md transition-shadow duration-200 cursor-pointer`}
+                    className={`p-3 sm:p-4 rounded-lg border-2 ${getUrgencyColor(alert.urgency)} hover:shadow-md transition-shadow duration-200 cursor-pointer min-w-0 max-w-full overflow-hidden`}
                     onClick={() => navigate('/warranty', { state: { id: alert.id } })}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          {getUrgencyIcon(alert.urgency)}
-                          <h3 className="font-bold text-text-primary">{alert.itemName}</h3>
+                    <div className="flex items-start justify-between min-w-0 max-w-full">
+                      <div className="flex-1 min-w-0 max-w-full overflow-hidden">
+                        <div className="flex items-center space-x-2 mb-2 min-w-0">
+                          <div className="flex-shrink-0">
+                            {getUrgencyIcon(alert.urgency)}
+                          </div>
+                          <h3 className="text-sm sm:text-base font-bold text-text-primary truncate min-w-0">{alert.itemName}</h3>
                         </div>
-                        <div className="text-sm text-text-secondary space-y-1">
-                          <div className="flex items-center space-x-2">
-                            <Calendar className="h-4 w-4" />
-                            <span>Purchased: {formatDate(alert.purchaseDate)}</span>
+                        <div className="text-xs sm:text-sm text-text-secondary space-y-1 min-w-0">
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <Calendar className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                            <span className="truncate min-w-0">Purchased: {formatDate(alert.purchaseDate)}</span>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <Clock className="h-4 w-4" />
-                            <span>Expires: {formatDate(alert.expiryDate)}</span>
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <Clock className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                            <span className="truncate min-w-0">Expires: {formatDate(alert.expiryDate)}</span>
                           </div>
-                          <div className="font-medium text-text-primary">
+                          <div className="font-medium text-text-primary text-xs sm:text-sm truncate">
                             {alert.daysLeft} days remaining
                           </div>
                         </div>
                       </div>
-                      <button className="text-primary hover:text-primary/80 transition-colors duration-200">
-                        <ChevronRight className="h-5 w-5" />
+                      <button className="text-primary hover:text-primary/80 transition-colors duration-200 flex-shrink-0 ml-1 sm:ml-2">
+                        <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
                     </div>
                   </div>
@@ -1693,26 +1695,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </div>
 
           {/* Recent Receipts */}
-          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <h2 className="text-lg sm:text-2xl font-bold text-text-primary">Recent Receipts</h2>
-                          <button 
-              onClick={() => navigate('/library')}
-              className="text-primary hover:text-primary/80 font-medium transition-colors duration-200"
-            >
-              View All
-            </button>
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-card border border-gray-100 p-3 sm:p-4 lg:p-6 min-w-0 max-w-full overflow-hidden">
+            <div className="flex items-center justify-between mb-4 sm:mb-6 min-w-0">
+              <h2 className="text-base sm:text-lg lg:text-2xl font-bold text-text-primary truncate min-w-0">Recent Receipts</h2>
+              <button 
+                onClick={() => navigate('/library')}
+                className="text-primary hover:text-primary/80 font-medium transition-colors duration-200 text-sm sm:text-base flex-shrink-0 ml-2"
+              >
+                View All
+              </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {recentReceipts.length === 0 ? (
-                <div className="text-center py-8">
-                  <Receipt className="h-12 w-12 text-text-secondary mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-text-primary mb-2">No receipts yet</h3>
-                  <p className="text-text-secondary mb-4">Start by scanning your first receipt</p>
+                <div className="text-center py-6 sm:py-8">
+                  <Receipt className="h-10 w-10 sm:h-12 sm:w-12 text-text-secondary mx-auto mb-3 sm:mb-4" />
+                  <h3 className="text-base sm:text-lg font-medium text-text-primary mb-2">No receipts yet</h3>
+                  <p className="text-sm sm:text-base text-text-secondary mb-4">Start by scanning your first receipt</p>
                   <button
                     onClick={onShowReceiptScanning}
-                    className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200"
+                    className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 text-sm sm:text-base"
                   >
                     Scan Receipt
                   </button>
@@ -1721,58 +1723,60 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                 recentReceipts.map((receipt) => (
                   <div
                     key={receipt.id}
-                    className="flex items-center justify-between p-4 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer group"
+                    className="flex items-center justify-between p-3 sm:p-4 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer group min-w-0 max-w-full overflow-hidden"
                     onClick={() => navigate('/library', { state: { openReceiptId: receipt.id } })}
                   >
-                    <div className="flex items-center space-x-4">
-                      <div className="bg-gradient-feature rounded-lg p-3">
+                    <div className="flex items-center space-x-2 sm:space-x-4 min-w-0 flex-1 max-w-full overflow-hidden">
+                      <div className="bg-gradient-feature rounded-lg p-2 sm:p-3 flex-shrink-0">
                         {receipt.type === 'group' ? (
-                          <Package className="h-5 w-5 text-primary" />
+                          <Package className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                         ) : (
-                          <Receipt className="h-5 w-5 text-primary" />
+                          <Receipt className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate" title={receipt.productName}>
+                      <div className="flex-1 min-w-0 max-w-full overflow-hidden">
+                        <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate min-w-0" title={receipt.productName}>
                           {receipt.productName}
                         </h3>
-                        <div className="text-sm text-text-secondary space-y-1">
-                          <div className="flex items-center space-x-1">
-                            <span className="font-medium">Store:</span>
-                            <span className="truncate">{receipt.storeName}</span>
+                        <div className="text-xs sm:text-sm text-text-secondary space-y-1 min-w-0">
+                          <div className="flex items-center space-x-1 min-w-0">
+                            <span className="font-medium flex-shrink-0">Store:</span>
+                            <span className="truncate min-w-0">{receipt.storeName}</span>
                           </div>
-                          <div className="flex items-center space-x-1">
-                            <span className="font-medium">
+                          <div className="flex items-center space-x-1 min-w-0">
+                            <span className="font-medium flex-shrink-0">
                               {receipt.type === 'group' ? 'Products:' : 'Brand:'}
                             </span>
-                            <span className="truncate">
+                            <span className="truncate min-w-0">
                               {receipt.type === 'group' 
                                 ? `${receipt.product_count} items` 
                                 : receipt.brandName
                               }
                             </span>
                           </div>
-                          <div className="text-xs text-text-secondary">
+                          <div className="text-xs text-text-secondary truncate">
                             {formatDate(receipt.date)} • {receipt.items} {receipt.items === 1 ? 'item' : 'items'}
                           </div>
                           {receipt.type === 'group' && receipt.receipts && (
-                            <div className="text-xs text-text-secondary bg-blue-50 rounded px-2 py-1 mt-2">
-                              Products: {receipt.receipts.map(r => r.product_description).join(', ')}
+                            <div className="text-xs text-text-secondary bg-blue-50 rounded px-2 py-1 mt-2 max-w-full overflow-hidden">
+                              <span className="truncate block">
+                                Products: {receipt.receipts.map(r => r.product_description).join(', ')}
+                              </span>
                             </div>
                           )}
                         </div>
                       </div>
                     </div>
-                    <div className="text-right flex-shrink-0 ml-4">
-                      <div className="font-bold text-text-primary">
+                    <div className="text-right flex-shrink-0 ml-1 sm:ml-2">
+                      <div className="text-sm sm:text-base font-bold text-text-primary whitespace-nowrap">
                         {formatCurrency(receipt.amount)}
                       </div>
                       {receipt.type === 'group' && (
-                        <div className="text-xs text-text-secondary">
+                        <div className="text-xs text-text-secondary whitespace-nowrap">
                           Total Receipt
                         </div>
                       )}
-                      <ChevronRight className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 ml-auto" />
+                      <ChevronRight className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 ml-auto mt-1" />
                     </div>
                   </div>
                 ))

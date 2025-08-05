@@ -119,8 +119,18 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
   const capture = useCallback(() => {
     const imageSrc = webcamRef.current?.getScreenshot();
     if (imageSrc) {
+      // Reset all processing-related state when capturing a new image
       setCapturedImage(imageSrc);
       setShowCamera(false);
+      setError(null);
+      setSuccess(false);
+      setExtractedText('');
+      setExtractedData(null);
+      setValidationResult(null);
+      setOcrProgress(0);
+      setShowExtractedForm(false);
+      setIsValidating(false);
+      setProcessingStep('');
     }
   }, [webcamRef]);
 
@@ -162,19 +172,39 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
       // For now, use the middle frame as the best capture
       // In a real implementation, you'd stitch the frames together
       const bestFrame = capturedFrames[Math.floor(capturedFrames.length / 2)];
+      
+      // Reset all processing-related state when capturing a new long image
       setCapturedImage(bestFrame);
       setShowCamera(false);
       setCapturedFrames([]);
       setCaptureProgress(0);
       setLongCaptureInstructions('');
+      setError(null);
+      setSuccess(false);
+      setExtractedText('');
+      setExtractedData(null);
+      setValidationResult(null);
+      setOcrProgress(0);
+      setShowExtractedForm(false);
+      setIsValidating(false);
+      setProcessingStep('');
     }
   }, [capturedFrames]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    
+    // Reset all processing-related state when uploading a new file
     setUploadedFile(file);
     setError(null);
+    setSuccess(false);
+    setExtractedText('');
+    setExtractedData(null);
+    setValidationResult(null);
+    setOcrProgress(0);
+    setShowExtractedForm(false);
+    setIsValidating(false);
     setIsProcessing(true);
     setProcessingStep('Processing file...');
 
@@ -738,7 +768,18 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
   };
 
   const startManualEntry = () => {
+    // Reset all processing-related state when starting manual entry
     setInputMode('manual');
+    setError(null);
+    setSuccess(false);
+    setExtractedText('');
+    setValidationResult(null);
+    setOcrProgress(0);
+    setIsValidating(false);
+    setProcessingStep('');
+    setCapturedImage(null);
+    setUploadedFile(null);
+    
     setExtractedData({
       product_description: '',
       brand_name: '',
@@ -756,7 +797,18 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
   };
 
   const startMultiProductEntry = () => {
+    // Reset all processing-related state when starting multi-product manual entry
     setInputMode('manual');
+    setError(null);
+    setSuccess(false);
+    setExtractedText('');
+    setValidationResult(null);
+    setOcrProgress(0);
+    setIsValidating(false);
+    setProcessingStep('');
+    setCapturedImage(null);
+    setUploadedFile(null);
+    
     setExtractedData({
       store_name: '',
       purchase_location: '',

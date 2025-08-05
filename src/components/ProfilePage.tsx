@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { supabase, signOut } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
+import { useSubscription } from '../contexts/SubscriptionContext';
 import NotificationDropdown from './NotificationDropdown';
 import Footer from './Footer';
 
@@ -55,6 +56,7 @@ interface PrivacySettings {
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   const { user, profilePicture, refreshUser, updateProfilePicture } = useUser();
+  const { subscriptionInfo } = useSubscription();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
@@ -430,9 +432,17 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
                 alt="Smart Receipts Logo" 
                 className="h-8 w-8 sm:h-10 sm:w-10 object-contain flex-shrink-0"
               />
-              <span className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent truncate">
-                Smart Receipts
-              </span>
+              <div className="relative">
+                <span className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent truncate">
+                  Smart Receipts
+                </span>
+                {/* Premium Label */}
+                {subscriptionInfo?.plan === 'premium' && (
+                  <div className="absolute -top-3 right-0 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-lg">
+                    PREMIUM
+                  </div>
+                )}
+              </div>
             </button>
 
             {/* Header Actions */}

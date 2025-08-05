@@ -31,6 +31,7 @@ import { MultiProductReceiptService } from '../services/multiProductReceiptServi
 import subscriptionService from '../services/subscriptionService';
 import onboardingService, { OnboardingProgress } from '../services/onboardingService';
 import { UserSubscriptionInfo } from '../types/subscription';
+import { useSubscription } from '../contexts/SubscriptionContext';
 import UsageIndicator from './UsageIndicator';
 import OnboardingTour from './OnboardingTour';
 import GettingStartedChecklist from './GettingStartedChecklist';
@@ -96,6 +97,7 @@ interface RAGResult {
 
 const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning, onShowProfile, onShowLibrary, onShowWarranty }) => {
   const { user, profilePicture } = useUser();
+  const { subscriptionInfo: globalSubscriptionInfo } = useSubscription();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [alertsCount, setAlertsCount] = useState(0);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -1160,9 +1162,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                 alt="Smart Receipts Logo" 
                 className="h-8 w-8 sm:h-10 sm:w-10 object-contain flex-shrink-0"
               />
-              <span className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent truncate">
-                Smart Receipts
-              </span>
+              <div className="relative">
+                <span className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent truncate">
+                  Smart Receipts
+                </span>
+                {/* Premium Label */}
+                {globalSubscriptionInfo?.plan === 'premium' && (
+                  <div className="absolute -top-3 right-0 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-lg">
+                    PREMIUM
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Header Actions */}
@@ -1329,8 +1339,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
           </p>
         </div>
 
-        {/* Usage Indicator - Freemium Model */}
-        {!loadingSubscription && subscriptionInfo && (
+        {/* Usage Indicator - Freemium Model - Only show for free users */}
+        {!loadingSubscription && subscriptionInfo && subscriptionInfo.plan === 'free' && (
           <div className="mb-8" data-tour="usage-indicator">
             <div className="flex items-center space-x-2">
               <UsageIndicator

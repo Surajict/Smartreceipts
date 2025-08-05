@@ -90,12 +90,31 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
   
   const webcamRef = useRef<Webcam>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const warrantyPeriodRef = useRef<HTMLInputElement>(null);
+  const firstProductWarrantyRef = useRef<HTMLInputElement>(null);
   const captureIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const frameCountRef = useRef(0);
 
   useEffect(() => {
     checkOpenAIAvailability();
   }, []);
+
+  // Focus on warranty period field when form is shown
+  useEffect(() => {
+    if (showExtractedForm) {
+      // Small delay to ensure the form is fully rendered
+      setTimeout(() => {
+        // Focus on the appropriate warranty field based on form type
+        if (extractedData?.products && extractedData.products.length > 0) {
+          // Multi-product form - focus on first product's warranty field
+          firstProductWarrantyRef.current?.focus();
+        } else {
+          // Single product form - focus on main warranty field
+          warrantyPeriodRef.current?.focus();
+        }
+      }, 100);
+    }
+  }, [showExtractedForm, extractedData?.products]);
 
   // No longer needed - user data comes from context
 
@@ -411,7 +430,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
       // Step 3: Validate data with Perplexity (NEW STEP)
       setIsValidating(true);
       const productName = structuredData.product_description || 'product';
-      setProcessingStep(`Validating "${productName}" with Perplexity AI...`);
+      setProcessingStep(`Validating "${productName}" details...`);
       
       try {
         const validation = await PerplexityValidationService.validateReceiptData(structuredData);
@@ -1567,6 +1586,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                               Warranty Period *
                             </label>
                             <input
+                              ref={index === 0 ? firstProductWarrantyRef : undefined}
                               type="text"
                               value={product.warranty_period || ''}
                               onChange={(e) => updateProductInArray(index, 'warranty_period', e.target.value)}
@@ -1685,6 +1705,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     Warranty Period *
                   </label>
                   <input
+                    ref={warrantyPeriodRef}
                     type="text"
                     value={extractedData.warranty_period}
                     onChange={(e) => updateExtractedData('warranty_period', e.target.value)}

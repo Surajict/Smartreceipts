@@ -1201,7 +1201,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     {extractedText ? <Check className="h-3 w-3 text-white" /> : <Eye className="h-3 w-3 text-white" />}
                   </div>
                   <span className={`text-sm ${extractedText ? 'text-green-700' : 'text-text-secondary'}`}>
-                    OCR Text Extraction
+                  Extracting Text from Receipt
                   </span>
                 </div>
 
@@ -1210,7 +1210,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     {extractedData && !isValidating ? <Check className="h-3 w-3 text-white" /> : <Brain className="h-3 w-3 text-white" />}
                   </div>
                   <span className={`text-sm ${extractedData && !isValidating ? 'text-green-700' : 'text-text-secondary'}`}>
-                    AI Data Structuring
+                  Organizing Receipt Details
                   </span>
                 </div>
 
@@ -1219,7 +1219,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     {validationResult ? <Check className="h-3 w-3 text-white" /> : (isValidating ? <Loader2 className="h-3 w-3 text-white animate-spin" /> : <Zap className="h-3 w-3 text-white" />)}
                   </div>
                   <span className={`text-sm ${validationResult ? 'text-green-700' : (isValidating ? 'text-blue-700' : 'text-text-secondary')}`}>
-                    Perplexity Validation
+                  Verifying Information Accuracy
                   </span>
                 </div>
 
@@ -1228,7 +1228,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     {success ? <Check className="h-3 w-3 text-white" /> : <Save className="h-3 w-3 text-white" />}
                   </div>
                   <span className={`text-sm ${success ? 'text-green-700' : 'text-text-secondary'}`}>
-                    Save to Database
+                  Saving Receipt Securely
                   </span>
                 </div>
               </div>

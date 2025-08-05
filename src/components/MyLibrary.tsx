@@ -627,8 +627,11 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
       <header className="bg-white shadow-card border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
           <div className="flex justify-between items-center h-16 min-w-0">
-            {/* Logo */}
-            <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0">
+            {/* Logo - Clickable to Dashboard */}
+            <button 
+              onClick={onBackToDashboard}
+              className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0 hover:opacity-80 transition-opacity duration-200"
+            >
               <img 
                 src="/Smart Receipt Logo.png" 
                 alt="Smart Receipts Logo" 
@@ -637,7 +640,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
               <span className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent truncate">
                 Smart Receipts
               </span>
-            </div>
+            </button>
 
             {/* Header Actions */}
             <div className="flex items-center space-x-2 sm:space-x-4">
@@ -735,14 +738,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                 <Settings className="h-6 w-6" />
               </button>
 
-              {/* Back Button */}
-              <button
-                onClick={onBackToDashboard}
-                className="flex items-center space-x-1 sm:space-x-2 bg-white text-text-primary border-2 border-gray-300 hover:border-primary px-2 sm:px-4 py-2 rounded-lg font-medium transition-all duration-200"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Back to Dashboard</span>
-              </button>
+
 
               {/* User Menu */}
               <div className="relative">
@@ -787,13 +783,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                       <User className="h-4 w-4" />
                       <span>Profile Settings</span>
                     </button>
-                    <button
-                      onClick={onBackToDashboard}
-                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                      <span>Back to Dashboard</span>
-                    </button>
+
                     <button
                       onClick={handleSignOut}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"

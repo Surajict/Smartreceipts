@@ -3,7 +3,6 @@ import Webcam from 'react-webcam';
 import { 
   Camera, 
   Upload, 
-  ArrowLeft, 
   X, 
   Check, 
   AlertCircle, 
@@ -782,8 +781,11 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
       <header className="bg-white shadow-card border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
           <div className="flex justify-between items-center h-16 min-w-0">
-            {/* Logo */}
-            <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0">
+            {/* Logo - Clickable to Dashboard */}
+            <button 
+              onClick={onBackToDashboard}
+              className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0 hover:opacity-80 transition-opacity duration-200"
+            >
               <img 
                 src="/Smart Receipt Logo.png" 
                 alt="Smart Receipts Logo" 
@@ -792,7 +794,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
               <span className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent truncate">
                 Smart Receipts
               </span>
-            </div>
+            </button>
 
             {/* Header Actions */}
             <div className="flex items-center space-x-2 sm:space-x-4">
@@ -811,14 +813,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                 <Settings className="h-6 w-6" />
               </button>
 
-              {/* Back Button */}
-              <button
-                onClick={onBackToDashboard}
-                className="flex items-center space-x-1 sm:space-x-2 bg-white text-text-primary border-2 border-gray-300 hover:border-primary px-2 sm:px-4 py-2 rounded-lg font-medium transition-all duration-200"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Back to Dashboard</span>
-              </button>
+
               {/* User Menu */}
               <div className="relative">
                 <button
@@ -862,13 +857,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                       <User className="h-4 w-4" />
                       <span>Profile Settings</span>
                     </button>
-                    <button
-                      onClick={onBackToDashboard}
-                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                      <span>Back to Dashboard</span>
-                    </button>
+
                     <button
                       onClick={handleSignOut}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
@@ -1105,8 +1094,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
             {/* Manual Entry */}
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
               <div className="text-center">
-                <div className="bg-gradient-to-br from-accent-yellow/10 to-accent-yellow/20 rounded-xl p-4 w-fit mx-auto mb-4">
-                  <Edit3 className="h-8 w-8 text-accent-yellow" />
+                <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/20 rounded-xl p-4 w-fit mx-auto mb-4">
+                  <Edit3 className="h-8 w-8 text-blue-600" />
                 </div>
                 <h3 className="text-lg font-bold text-text-primary mb-2">Manual Entry</h3>
                 <p className="text-text-secondary text-sm mb-4">
@@ -1115,13 +1104,13 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                 <div className="space-y-2">
                   <button
                     onClick={startManualEntry}
-                    className="w-full bg-accent-yellow text-white py-3 px-4 rounded-lg font-medium hover:bg-accent-yellow/90 transition-colors duration-200"
+                    className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors duration-200"
                   >
                     Single Product
                   </button>
                   <button
                     onClick={startMultiProductEntry}
-                    className="w-full bg-accent-yellow/80 text-white py-3 px-4 rounded-lg font-medium hover:bg-accent-yellow transition-colors duration-200 flex items-center justify-center space-x-2"
+                    className="w-full bg-blue-500 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-600 transition-colors duration-200 flex items-center justify-center space-x-2"
                   >
                     <Plus className="h-4 w-4" />
                     <span>Multiple Products</span>
@@ -1212,7 +1201,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     {extractedText ? <Check className="h-3 w-3 text-white" /> : <Eye className="h-3 w-3 text-white" />}
                   </div>
                   <span className={`text-sm ${extractedText ? 'text-green-700' : 'text-text-secondary'}`}>
-                    OCR Text Extraction
+                  Extracting Text from Receipt
                   </span>
                 </div>
 
@@ -1221,7 +1210,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     {extractedData && !isValidating ? <Check className="h-3 w-3 text-white" /> : <Brain className="h-3 w-3 text-white" />}
                   </div>
                   <span className={`text-sm ${extractedData && !isValidating ? 'text-green-700' : 'text-text-secondary'}`}>
-                    AI Data Structuring
+                  Organizing Receipt Details
                   </span>
                 </div>
 
@@ -1230,7 +1219,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     {validationResult ? <Check className="h-3 w-3 text-white" /> : (isValidating ? <Loader2 className="h-3 w-3 text-white animate-spin" /> : <Zap className="h-3 w-3 text-white" />)}
                   </div>
                   <span className={`text-sm ${validationResult ? 'text-green-700' : (isValidating ? 'text-blue-700' : 'text-text-secondary')}`}>
-                    Perplexity Validation
+                  Verifying Information Accuracy
                   </span>
                 </div>
 
@@ -1239,7 +1228,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     {success ? <Check className="h-3 w-3 text-white" /> : <Save className="h-3 w-3 text-white" />}
                   </div>
                   <span className={`text-sm ${success ? 'text-green-700' : 'text-text-secondary'}`}>
-                    Save to Database
+                  Saving Receipt Securely
                   </span>
                 </div>
               </div>

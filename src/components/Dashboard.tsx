@@ -1390,7 +1390,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             // Normal functional state
             <button 
               onClick={onShowReceiptScanning}
-              className="group bg-gradient-to-br from-primary to-teal-600 p-6 sm:p-8 rounded-xl sm:rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+              className="group bg-gradient-to-br from-blue-500 to-blue-700 p-6 sm:p-8 rounded-xl sm:rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
               data-tour="scan-receipt"
             >
               <div className="flex flex-col items-center text-center">
@@ -1427,7 +1427,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
           <button 
             onClick={onShowWarranty}
-            className="group bg-gradient-to-br from-red-500 to-orange-600 p-6 sm:p-8 rounded-xl sm:rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+            className="group bg-gradient-to-br from-primary to-teal-600 p-6 sm:p-8 rounded-xl sm:rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
             data-tour="warranty-manager"
           >
             <div className="flex flex-col items-center text-center">
@@ -1475,19 +1475,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             <div className="text-lg sm:text-xl lg:text-2xl xl:text-3xl font-bold text-text-primary mb-1">
               {summaryStats.itemsCaptured}
             </div>
-            <div className="text-xs sm:text-sm text-text-secondary">Items Captured</div>
+            <div className="text-xs sm:text-sm text-text-secondary">Products Captured</div>
           </div>
 
-          <div className="bg-white p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl shadow-card border border-gray-100">
+          <div className="bg-gray-100 p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl shadow-card border border-gray-200 relative opacity-60 cursor-not-allowed">
+            {/* Coming Soon Ribbon */}
+            <div className="absolute -top-1 -right-1 bg-gradient-to-r from-orange-400 to-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg transform rotate-12 z-10">
+              Coming Soon
+            </div>
+            
             <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
-              <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-lg p-2 sm:p-3 flex-shrink-0">
-                <Shield className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-green-600" />
+              <div className="bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg p-2 sm:p-3 flex-shrink-0">
+                <Shield className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-gray-500" />
               </div>
             </div>
-            <div className="text-lg sm:text-xl lg:text-2xl xl:text-3xl font-bold text-text-primary mb-1">
+            <div className="text-lg sm:text-xl lg:text-2xl xl:text-3xl font-bold text-gray-500 mb-1">
               {summaryStats.warrantiesClaimed}
             </div>
-            <div className="text-xs sm:text-sm text-text-secondary">Warranties Claimed</div>
+            <div className="text-xs sm:text-sm text-gray-400">Warranties Claimed</div>
           </div>
         </div>
 

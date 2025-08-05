@@ -1094,8 +1094,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
             {/* Manual Entry */}
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
               <div className="text-center">
-                <div className="bg-gradient-to-br from-accent-yellow/10 to-accent-yellow/20 rounded-xl p-4 w-fit mx-auto mb-4">
-                  <Edit3 className="h-8 w-8 text-accent-yellow" />
+                <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/20 rounded-xl p-4 w-fit mx-auto mb-4">
+                  <Edit3 className="h-8 w-8 text-blue-600" />
                 </div>
                 <h3 className="text-lg font-bold text-text-primary mb-2">Manual Entry</h3>
                 <p className="text-text-secondary text-sm mb-4">
@@ -1104,13 +1104,13 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                 <div className="space-y-2">
                   <button
                     onClick={startManualEntry}
-                    className="w-full bg-accent-yellow text-white py-3 px-4 rounded-lg font-medium hover:bg-accent-yellow/90 transition-colors duration-200"
+                    className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors duration-200"
                   >
                     Single Product
                   </button>
                   <button
                     onClick={startMultiProductEntry}
-                    className="w-full bg-accent-yellow/80 text-white py-3 px-4 rounded-lg font-medium hover:bg-accent-yellow transition-colors duration-200 flex items-center justify-center space-x-2"
+                    className="w-full bg-blue-500 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-600 transition-colors duration-200 flex items-center justify-center space-x-2"
                   >
                     <Plus className="h-4 w-4" />
                     <span>Multiple Products</span>

@@ -129,7 +129,7 @@ const Login: React.FC<LoginProps> = ({ onBackToHome, onShowSignUp }) => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-background flex items-center justify-center px-3 sm:px-4 lg:px-6 xl:px-8">
       {/* Background Pattern */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute inset-0" style={{
@@ -138,54 +138,55 @@ const Login: React.FC<LoginProps> = ({ onBackToHome, onShowSignUp }) => {
       </div>
 
       {/* Top Navigation */}
-      <div className="fixed top-4 left-4 right-4 z-50 flex justify-between items-center">
+      <div className="fixed top-3 left-3 right-3 sm:top-4 sm:left-4 sm:right-4 z-50 flex justify-between items-center">
         <button
           onClick={onBackToHome}
-          className="flex items-center space-x-2 bg-white text-text-primary px-4 py-2 rounded-lg shadow-card hover:shadow-card-hover transition-all duration-200 font-medium border border-gray-200 hover:border-primary"
+          className="flex items-center space-x-1 sm:space-x-2 bg-white text-text-primary px-2 sm:px-4 py-2 rounded-lg shadow-card hover:shadow-card-hover transition-all duration-200 font-medium border border-gray-200 hover:border-primary text-sm sm:text-base"
         >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Back to Home</span>
+          <ArrowLeft className="h-4 w-4 flex-shrink-0" />
+          <span className="hidden xs:inline">Back to Home</span>
+          <span className="xs:hidden">Back</span>
         </button>
         
-        <div className="flex items-center space-x-3">
-          <span className="text-text-secondary text-sm hidden sm:inline">Don't have an account?</span>
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          <span className="text-text-secondary text-xs sm:text-sm hidden sm:inline">Don't have an account?</span>
           <button
             onClick={onShowSignUp}
-            className="bg-primary text-white px-4 py-2 rounded-lg shadow-card hover:shadow-card-hover transition-all duration-200 font-medium hover:bg-primary/90"
+            className="bg-primary text-white px-3 sm:px-4 py-2 rounded-lg shadow-card hover:shadow-card-hover transition-all duration-200 font-medium hover:bg-primary/90 text-sm sm:text-base"
           >
             Sign Up
           </button>
         </div>
       </div>
 
-      <div className="max-w-md w-full space-y-8 relative z-10">
+      <div className="max-w-md w-full space-y-6 sm:space-y-8 relative z-10">
         {/* Logo and Header */}
         <div className="text-center">
           <button 
             onClick={onBackToHome}
-            className="flex items-center justify-center space-x-3 mb-6 mx-auto hover:opacity-80 transition-opacity duration-200"
+            className="flex items-center justify-center space-x-2 sm:space-x-3 mb-4 sm:mb-6 mx-auto hover:opacity-80 transition-opacity duration-200"
           >
             <img 
               src="/Smart Receipt Logo.png" 
               alt="Smart Receipts Logo" 
-              className="h-12 w-12 object-contain"
+              className="h-10 w-10 sm:h-12 sm:w-12 object-contain flex-shrink-0"
             />
-            <span className="text-3xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent">
+            <span className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent">
               Smart Receipts
             </span>
           </button>
-          <p className="text-text-secondary text-sm">
+          <p className="text-text-secondary text-xs sm:text-sm">
             Never Lose a Receipt or Miss a Warranty Claim
           </p>
         </div>
 
         {/* Login Card */}
-        <div className="bg-white rounded-2xl shadow-card p-8 border border-gray-100">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold text-text-primary mb-2">
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-card p-6 sm:p-8 border border-gray-100">
+          <div className="text-center mb-6 sm:mb-8">
+            <h2 className="text-xl sm:text-2xl font-bold text-text-primary mb-2">
               Sign In to Your Account
             </h2>
-            <p className="text-text-secondary">
+            <p className="text-sm sm:text-base text-text-secondary">
               Welcome back! Please enter your details.
             </p>
           </div>

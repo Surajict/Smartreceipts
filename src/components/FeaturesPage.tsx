@@ -149,33 +149,33 @@ const FeaturesPage: React.FC = () => {
       
       <main className="pt-20">
         {/* Hero Section */}
-        <section className="bg-gradient-to-br from-primary/10 to-secondary/10 py-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h1 className="text-4xl md:text-5xl font-bold text-text-primary mb-6">
+        <section className="bg-gradient-to-br from-primary/10 to-secondary/10 py-12 sm:py-16">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 text-center">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-text-primary mb-4 sm:mb-6">
               Powerful Features for Smart Receipt Management
             </h1>
-            <p className="text-xl text-text-secondary max-w-3xl mx-auto leading-relaxed mb-8">
+            <p className="text-base sm:text-lg lg:text-xl text-text-secondary max-w-3xl mx-auto leading-relaxed mb-6 sm:mb-8">
               Discover all the intelligent features that make Smart Receipts the most advanced 
               receipt management solution available.
             </p>
             <Link 
               to="/signup"
-              className="inline-flex items-center bg-primary text-white px-8 py-4 rounded-xl font-semibold hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover text-lg"
+              className="inline-flex items-center bg-primary text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-semibold hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover text-base sm:text-lg"
             >
               Try All Features Free
-              <ArrowRight className="ml-2 h-5 w-5" />
+              <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
             </Link>
           </div>
         </section>
 
         {/* Main Features */}
-        <section className="py-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold text-text-primary mb-6">
+        <section className="py-12 sm:py-16 lg:py-20">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
+            <div className="text-center mb-12 sm:mb-16">
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-text-primary mb-4 sm:mb-6">
                 Core Features
               </h2>
-              <p className="text-xl text-text-secondary max-w-3xl mx-auto">
+              <p className="text-base sm:text-lg lg:text-xl text-text-secondary max-w-3xl mx-auto">
                 The essential features that make receipt management effortless
               </p>
             </div>

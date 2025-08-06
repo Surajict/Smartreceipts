@@ -228,7 +228,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-3 sm:px-4 lg:px-6 xl:px-8">
+    <div className="min-h-screen bg-background flex items-center justify-center px-2 sm:px-4 lg:px-6 xl:px-8">
       {/* Background Pattern */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute inset-0" style={{
@@ -237,16 +237,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
       </div>
 
       {/* Top Navigation */}
-      <div className="fixed top-3 left-3 right-3 sm:top-4 sm:left-4 sm:right-4 z-50 flex justify-between items-center">
-        <button
-          onClick={onBackToHome}
-          className="flex items-center space-x-1 sm:space-x-2 bg-white text-text-primary px-2 sm:px-4 py-2 rounded-lg shadow-card hover:shadow-card-hover transition-all duration-200 font-medium border border-gray-200 hover:border-primary text-sm sm:text-base"
-        >
-          <ArrowLeft className="h-4 w-4 flex-shrink-0" />
-          <span className="hidden xs:inline">Back to Home</span>
-          <span className="xs:hidden">Back</span>
-        </button>
-        
+      <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-50 flex justify-end items-center">
         <div className="flex items-center space-x-2 sm:space-x-3">
           <span className="text-text-secondary text-xs sm:text-sm hidden sm:inline">Already have an account?</span>
           <button
@@ -258,13 +249,10 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
         </div>
       </div>
 
-      <div className="max-w-md w-full space-y-6 sm:space-y-8 relative z-10">
+      <div className="max-w-md w-full space-y-4 sm:space-y-6 relative z-10 mx-2">
         {/* Logo and Header */}
         <div className="text-center">
-          <button 
-            onClick={onBackToHome}
-            className="flex items-center justify-center space-x-2 sm:space-x-3 mb-4 sm:mb-6 mx-auto hover:opacity-80 transition-opacity duration-200"
-          >
+          <div className="flex items-center justify-center space-x-2 sm:space-x-3 mb-4 sm:mb-6 mx-auto">
             <img 
               src="/Smart Receipt Logo.png" 
               alt="Smart Receipts Logo" 
@@ -273,19 +261,19 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
             <span className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent">
               Smart Receipts
             </span>
-          </button>
+          </div>
           <p className="text-text-secondary text-xs sm:text-sm">
             Never Lose a Receipt or Miss a Warranty Claim
           </p>
         </div>
 
         {/* Sign Up Card */}
-        <div className="bg-white rounded-xl sm:rounded-2xl shadow-card p-6 sm:p-8 border border-gray-100">
-          <div className="text-center mb-6 sm:mb-8">
-            <h2 className="text-xl sm:text-2xl font-bold text-text-primary mb-2">
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-card p-4 sm:p-6 lg:p-8 border border-gray-100">
+          <div className="text-center mb-4 sm:mb-6">
+            <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-text-primary mb-2">
               Create Your Account
             </h2>
-            <p className="text-sm sm:text-base text-text-secondary">
+            <p className="text-xs sm:text-sm lg:text-base text-text-secondary">
               Join thousands of users who never miss warranty claims
             </p>
           </div>
@@ -319,10 +307,10 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
             {/* Full Name Field */}
             <div>
-              <label htmlFor="fullName" className="block text-sm font-medium text-text-primary mb-2">
+              <label htmlFor="fullName" className="block text-xs sm:text-sm font-medium text-text-primary mb-1 sm:mb-2">
                 Full Name
               </label>
               <div className="relative">
@@ -335,7 +323,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
                   type="text"
                   value={formData.fullName}
                   onChange={handleInputChange('fullName')}
-                  className={`block w-full pl-10 pr-3 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
+                  className={`block w-full pl-10 pr-3 py-2.5 sm:py-3 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
                     errors.fullName 
                       ? 'border-accent-red bg-red-50' 
                       : 'border-gray-300 bg-white hover:border-gray-400'
@@ -353,7 +341,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
 
             {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-text-primary mb-2">
+              <label htmlFor="email" className="block text-xs sm:text-sm font-medium text-text-primary mb-1 sm:mb-2">
                 Email Address
               </label>
               <div className="relative">
@@ -366,7 +354,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
                   type="email"
                   value={formData.email}
                   onChange={handleInputChange('email')}
-                  className={`block w-full pl-10 pr-3 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
+                  className={`block w-full pl-10 pr-3 py-2.5 sm:py-3 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
                     errors.email 
                       ? 'border-accent-red bg-red-50' 
                       : 'border-gray-300 bg-white hover:border-gray-400'
@@ -384,7 +372,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
 
             {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-text-primary mb-2">
+              <label htmlFor="password" className="block text-xs sm:text-sm font-medium text-text-primary mb-1 sm:mb-2">
                 Password
               </label>
               <div className="relative">
@@ -397,7 +385,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
                   type={showPassword ? 'text' : 'password'}
                   value={formData.password}
                   onChange={handleInputChange('password')}
-                  className={`block w-full pl-10 pr-10 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
+                  className={`block w-full pl-10 pr-10 py-2.5 sm:py-3 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 ${
                     errors.password 
                       ? 'border-accent-red bg-red-50' 
                       : 'border-gray-300 bg-white hover:border-gray-400'
@@ -446,7 +434,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
             <button
               type="submit"
               disabled={isLoading || supabaseConnected === false}
-              className="group relative w-full flex justify-center items-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all duration-200 shadow-card hover:shadow-card-hover transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              className="group relative w-full flex justify-center items-center py-2.5 sm:py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all duration-200 shadow-card hover:shadow-card-hover transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
               {isLoading ? (
                 <>
@@ -463,7 +451,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
           </form>
           
           {/* Social Login Divider */}
-          <div className="mt-6 relative">
+          <div className="mt-4 sm:mt-6 relative">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-gray-300"></div>
             </div>
@@ -473,11 +461,11 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
           </div>
           
           {/* Google Sign In Button */}
-          <div className="mt-6">
+          <div className="mt-4 sm:mt-6">
             <button
               onClick={handleGoogleSignIn}
               disabled={isGoogleLoading}
-              className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-text-primary hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex justify-center items-center py-2.5 sm:py-3 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-text-primary hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isGoogleLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -507,8 +495,8 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
           </div>
 
           {/* Sign In Link */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-text-secondary">
+          <div className="mt-4 sm:mt-6 text-center">
+            <p className="text-xs sm:text-sm text-text-secondary">
               Already have an account?{' '}
               <button
                 onClick={onShowLogin}
@@ -521,8 +509,8 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
         </div>
 
         {/* Terms & Privacy */}
-        <div className="text-center">
-          <p className="text-xs text-text-secondary leading-relaxed">
+        <div className="text-center px-2">
+          <p className="text-[10px] sm:text-xs text-text-secondary leading-relaxed">
             By signing up, you agree to our{' '}
             <a href="#terms" className="text-text-link hover:text-secondary transition-colors duration-200">
               Terms of Service

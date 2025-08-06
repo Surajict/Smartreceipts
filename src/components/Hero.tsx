@@ -1,6 +1,5 @@
 import React from 'react';
-import { Play, TrendingUp, Users, Shield, Clock } from 'lucide-react';
-import { TrustStat } from '../types';
+import { Play } from 'lucide-react';
 
 interface HeroProps {
   onShowLogin: () => void;
@@ -8,39 +7,7 @@ interface HeroProps {
 }
 
 const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
-  const trustStats: TrustStat[] = [
-    {
-      value: '99.5%',
-      label: 'Scanning accuracy',
-      description: 'AI-powered precision in receipt digitization'
-    },
-    {
-      value: '$2.3M',
-      label: 'Potential claim recovery',
-      description: 'Total warranty claims our users have recovered'
-    },
-    {
-      value: '50k+',
-      label: 'Active users within 1 year',
-      description: 'Growing community of smart receipt users'
-    },
-    {
-      value: '94%',
-      label: 'Claim success rate',
-      description: 'Successful warranty claims with our support'
-    },
-    {
-      value: '< 3 sec',
-      label: 'Processing time',
-      description: 'Lightning-fast receipt scanning and analysis'
-    }
-  ];
 
-  const getStatIcon = (index: number) => {
-    const icons = [Shield, TrendingUp, Users, TrendingUp, Clock];
-    const Icon = icons[index];
-    return <Icon className="h-full w-full text-secondary" />;
-  };
 
   return (
     <section className="bg-gradient-to-b from-white to-background pt-16 sm:pt-20 pb-6 sm:pb-8">
@@ -76,29 +43,7 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
               </a>
             </div>
 
-            {/* Trust Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4 mt-6 sm:mt-8">
-              {trustStats.map((stat, index) => (
-                <div
-                  key={index}
-                  className="group relative bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-gray-100"
-                >
-                  <div className="flex items-center justify-center mb-2 sm:mb-3">
-                    <div className="h-4 w-4 sm:h-6 sm:w-6">
-                      {getStatIcon(index)}
-                    </div>
-                  </div>
-                  <div className="text-lg sm:text-2xl font-bold text-text-primary mb-1">{stat.value}</div>
-                  <div className="text-xs text-text-secondary font-medium leading-tight">{stat.label}</div>
-                  
-                  {/* Tooltip */}
-                  <div className="absolute invisible group-hover:visible bg-text-primary text-white text-xs rounded-lg px-3 py-2 -mt-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap z-10">
-                    {stat.description}
-                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-text-primary"></div>
-                  </div>
-                </div>
-              ))}
-            </div>
+
           </div>
 
           {/* Right Column - Demo Video */}

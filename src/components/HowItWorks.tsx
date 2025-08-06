@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, Cpu, Bell } from 'lucide-react';
+import { Camera, Cpu, Bell, ArrowRight } from 'lucide-react';
 import { Step } from '../types';
 
 interface HowItWorksProps {}
@@ -34,8 +34,8 @@ const HowItWorks: React.FC<HowItWorksProps> = () => {
       <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
         <div className="text-center mb-12 sm:mb-16">
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-text-primary mb-4 tracking-tight">
-            From Chaos to Organized in{' '}
-            <span className="text-primary">3 Simple Steps</span>
+            From Chaos to Organized{' '}
+            <span className="text-primary">Seamlessly</span>
           </h2>
           <p className="text-base sm:text-lg lg:text-xl text-text-secondary max-w-3xl mx-auto">
             Our streamlined process makes receipt management effortless, 
@@ -44,48 +44,52 @@ const HowItWorks: React.FC<HowItWorksProps> = () => {
         </div>
 
         <div className="relative">
-          {/* Connection Lines - Desktop */}
-          <div className="hidden lg:block absolute top-1/2 left-1/4 right-1/4 h-1 bg-gradient-to-r from-primary to-secondary transform -translate-y-1/2 z-0 rounded-full opacity-70"></div>
-          
-          <div className="grid md:grid-cols-3 gap-6 sm:gap-8 lg:gap-12 relative z-10">
+          <div className="flex flex-col md:flex-row items-center justify-center gap-4 sm:gap-6 lg:gap-8 relative z-10">
             {steps.map((step, index) => (
-              <div key={step.number} className="text-center group">
-                {/* Step Circle */}
-                <div className="relative mb-6 sm:mb-8">
-                  <div className="bg-gradient-to-br from-primary to-secondary rounded-full w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center mx-auto shadow-lg group-hover:shadow-xl transition-all duration-300 transform group-hover:scale-110">
-                    <div className="h-6 w-6 sm:h-8 sm:w-8">
-                      {getIcon(step.number)}
+              <React.Fragment key={step.number}>
+                {/* Step Card */}
+                <div className="text-center group flex-1 max-w-sm w-full">
+                  {/* Step Circle */}
+                  <div className="relative mb-6 sm:mb-8">
+                    <div className="bg-gradient-to-br from-primary to-secondary rounded-full w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center mx-auto shadow-lg group-hover:shadow-xl transition-all duration-300 transform group-hover:scale-110">
+                      <div className="h-6 w-6 sm:h-8 sm:w-8">
+                        {getIcon(step.number)}
+                      </div>
                     </div>
                   </div>
-                  
-                  {/* Step Number Badge */}
-                  <div className="absolute -bottom-2 -right-2 bg-white border-4 border-primary rounded-full w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-primary font-bold text-xs sm:text-sm shadow-lg">
-                    {step.number}
+
+                  {/* Content */}
+                  <div className="bg-white p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-card group-hover:shadow-card-hover transition-all duration-300 transform group-hover:-translate-y-2 h-48 sm:h-52 flex flex-col justify-center">
+                    <h3 className="text-lg sm:text-xl font-bold text-text-primary mb-3 sm:mb-4 group-hover:text-primary transition-colors duration-300">
+                      {step.title}
+                    </h3>
+                    
+                    <p className="text-sm sm:text-base text-text-secondary leading-relaxed flex-1">
+                      {step.description}
+                    </p>
                   </div>
                 </div>
 
-                {/* Content */}
-                <div className="bg-white p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-card group-hover:shadow-card-hover transition-all duration-300 transform group-hover:-translate-y-2">
-                  <h3 className="text-lg sm:text-xl font-bold text-text-primary mb-3 sm:mb-4 group-hover:text-primary transition-colors duration-300">
-                    {step.title}
-                  </h3>
-                  
-                  <p className="text-sm sm:text-base text-text-secondary leading-relaxed">
-                    {step.description}
-                  </p>
-                </div>
-
-                {/* Arrow - Mobile */}
+                {/* Arrow - Between cards */}
                 {index < steps.length - 1 && (
-                  <div className="lg:hidden flex justify-center mt-8 mb-4">
-                    <div className="bg-primary rounded-full p-2">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="hidden md:flex items-center justify-center">
+                    <div className="bg-gradient-to-r from-primary to-secondary rounded-full p-3 lg:p-4 shadow-lg transition-all duration-300 hover:scale-110">
+                      <ArrowRight className="w-5 h-5 lg:w-6 lg:h-6 text-white" />
+                    </div>
+                  </div>
+                )}
+
+                {/* Arrow - Mobile (below cards) */}
+                {index < steps.length - 1 && (
+                  <div className="md:hidden flex justify-center mt-6 mb-4">
+                    <div className="bg-gradient-to-r from-primary to-secondary rounded-full p-3 shadow-lg transition-all duration-300 hover:scale-110">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                       </svg>
                     </div>
                   </div>
                 )}
-              </div>
+              </React.Fragment>
             ))}
           </div>
         </div>

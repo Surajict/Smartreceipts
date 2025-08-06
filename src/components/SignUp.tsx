@@ -252,7 +252,10 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
       <div className="max-w-md w-full space-y-4 sm:space-y-6 relative z-10 mx-2">
         {/* Logo and Header */}
         <div className="text-center">
-          <div className="flex items-center justify-center space-x-2 sm:space-x-3 mb-4 sm:mb-6 mx-auto">
+          <button
+            onClick={onBackToHome}
+            className="flex items-center justify-center space-x-2 sm:space-x-3 mb-4 sm:mb-6 mx-auto hover:opacity-80 transition-opacity duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-lg p-2"
+          >
             <img 
               src="/Smart Receipt Logo.png" 
               alt="Smart Receipts Logo" 
@@ -261,7 +264,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToHome, onShowLogin }) => {
             <span className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent">
               Smart Receipts
             </span>
-          </div>
+          </button>
           <p className="text-text-secondary text-xs sm:text-sm">
             Never Lose a Receipt or Miss a Warranty Claim
           </p>

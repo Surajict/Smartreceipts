@@ -153,7 +153,10 @@ const Login: React.FC<LoginProps> = ({ onBackToHome, onShowSignUp }) => {
       <div className="max-w-md w-full space-y-4 sm:space-y-6 relative z-10 mx-2">
         {/* Logo and Header */}
         <div className="text-center">
-          <div className="flex items-center justify-center space-x-2 sm:space-x-3 mb-4 sm:mb-6 mx-auto">
+          <button
+            onClick={onBackToHome}
+            className="flex items-center justify-center space-x-2 sm:space-x-3 mb-4 sm:mb-6 mx-auto hover:opacity-80 transition-opacity duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-lg p-2"
+          >
             <img 
               src="/Smart Receipt Logo.png" 
               alt="Smart Receipts Logo" 
@@ -162,7 +165,7 @@ const Login: React.FC<LoginProps> = ({ onBackToHome, onShowSignUp }) => {
             <span className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-teal-500 to-blue-600 bg-clip-text text-transparent truncate">
               Smart Receipts
             </span>
-          </div>
+          </button>
           <p className="text-text-secondary text-xs sm:text-sm">
             Never Lose a Receipt or Miss a Warranty Claim
           </p>
@@ -286,27 +289,19 @@ const Login: React.FC<LoginProps> = ({ onBackToHome, onShowSignUp }) => {
               )}
             </div>
 
-            {/* Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                />
-                <label htmlFor="remember-me" className="ml-2 block text-xs sm:text-sm text-text-secondary">
-                  Remember me
-                </label>
-              </div>
-              <a
-                href="#forgot-password"
-                className="text-xs sm:text-sm text-text-link hover:text-secondary transition-colors duration-200 font-medium"
-              >
-                Forgot password?
-              </a>
+            {/* Remember Me */}
+            <div className="flex items-center">
+              <input
+                id="remember-me"
+                name="remember-me"
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+              />
+              <label htmlFor="remember-me" className="ml-2 block text-xs sm:text-sm text-text-secondary">
+                Remember me
+              </label>
             </div>
 
             {/* Sign In Button */}

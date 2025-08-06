@@ -10,6 +10,8 @@ export interface OnboardingProgress {
 }
 
 class OnboardingService {
+  private sessionDismissals = new Set<string>();
+
   // Check if user is first-time (no onboarding record exists)
   async isFirstTimeUser(userId: string): Promise<boolean> {
     try {
@@ -222,6 +224,49 @@ class OnboardingService {
   async shouldShowTour(userId: string): Promise<boolean> {
     const progress = await this.getOnboardingProgress(userId);
     return progress ? progress.first_login && !progress.tour_completed : true;
+  }
+
+  // Mark checklist as dismissed for current session
+  dismissChecklistForSession(userId: string): void {
+    this.sessionDismissals.add(userId);
+  }
+
+  // Check if checklist was dismissed in current session
+  isChecklistDismissedForSession(userId: string): boolean {
+    return this.sessionDismissals.has(userId);
+  }
+
+  // Check if user should see getting started checklist
+  async shouldShowGettingStarted(userId: string): Promise<boolean> {
+    // Don't show if dismissed in current session
+    if (this.isChecklistDismissedForSession(userId)) {
+      return false;
+    }
+
+    const progress = await this.getOnboardingProgress(userId);
+    if (!progress) return true;
+
+    // Don't show if onboarding is completed
+    if (progress.onboarding_completed) {
+      return false;
+    }
+
+    // Don't show if tour should be shown instead
+    const shouldShowTour = await this.shouldShowTour(userId);
+    if (shouldShowTour) {
+      return false;
+    }
+
+    // Show if user has incomplete items
+    const allItems = ['take-tour', 'scan-first-receipt', 'try-smart-search', 'check-warranty', 'complete-profile'];
+    const incompleteItems = allItems.filter(item => !progress.completed_items.includes(item));
+    
+    return incompleteItems.length > 0;
+  }
+
+  // Clear session dismissals (useful for testing or when user logs out/in)
+  clearSessionDismissals(): void {
+    this.sessionDismissals.clear();
   }
 
   // Auto-detect completed items based on user activity

@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, ChevronLeft, ChevronRight, Play, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { X, ChevronLeft, ChevronRight, Play, CheckCircle, ArrowDown, ArrowUp, ArrowLeft, ArrowRight } from 'lucide-react';
 
 interface TourStep {
   id: string;
   title: string;
   content: string;
   target: string; // CSS selector for the element to highlight
-  position: 'top' | 'bottom' | 'left' | 'right';
+  position: 'top' | 'bottom' | 'left' | 'right' | 'center';
   action?: string; // Optional action text
+  scrollToTarget?: boolean; // Whether to scroll the target into view
 }
 
 interface OnboardingTourProps {
@@ -23,14 +24,8 @@ const tourSteps: TourStep[] = [
     content: 'Let\'s take a quick tour to help you get started with managing your receipts and warranties like a pro!',
     target: '[data-tour="welcome-section"]',
     position: 'bottom',
-    action: 'Start Tour'
-  },
-  {
-    id: 'usage-indicator',
-    title: 'Track Your Usage',
-    content: 'Keep an eye on your receipt scanning usage. Free users get 5 receipts to try the service, then upgrade to Premium for unlimited scanning.',
-    target: '[data-tour="usage-indicator"]',
-    position: 'bottom'
+    action: 'Start Tour',
+    scrollToTarget: true
   },
   {
     id: 'scan-receipt',
@@ -38,21 +33,32 @@ const tourSteps: TourStep[] = [
     content: 'This is where the magic happens! Click here to scan or upload your receipts. Our AI will extract all the important information automatically.',
     target: '[data-tour="scan-receipt"]',
     position: 'bottom',
-    action: 'Try Scanning'
+    action: 'Next',
+    scrollToTarget: true
   },
   {
     id: 'my-library',
     title: 'Your Receipt Library',
     content: 'All your scanned receipts are organized here. Search, filter, and manage your purchase history with ease.',
     target: '[data-tour="my-library"]',
-    position: 'bottom'
+    position: 'bottom',
+    scrollToTarget: true
   },
   {
     id: 'warranty-manager',
     title: 'Never Miss a Warranty',
     content: 'Smart Receipts automatically tracks warranty periods and sends you alerts before they expire. No more missed claims!',
     target: '[data-tour="warranty-manager"]',
-    position: 'bottom'
+    position: 'bottom',
+    scrollToTarget: true
+  },
+  {
+    id: 'stats-overview',
+    title: 'Your Purchase Analytics',
+    content: 'Get insights into your spending habits with automatically calculated statistics from your receipts.',
+    target: '[data-tour="stats-overview"]',
+    position: 'top',
+    scrollToTarget: true
   },
   {
     id: 'smart-search',
@@ -60,21 +66,16 @@ const tourSteps: TourStep[] = [
     content: 'Ask questions about your receipts in natural language! Try "How much did I spend on electronics?" or "Show me Apple products".',
     target: '[data-tour="smart-search"]',
     position: 'top',
-    action: 'Try Search'
-  },
-  {
-    id: 'stats-overview',
-    title: 'Your Purchase Analytics',
-    content: 'Get insights into your spending habits with automatically calculated statistics from your receipts.',
-    target: '[data-tour="stats-overview"]',
-    position: 'top'
+    action: 'Next',
+    scrollToTarget: true
   },
   {
     id: 'notifications',
     title: 'Stay Informed',
     content: 'Important warranty alerts and system notifications appear here. Never miss an important update!',
     target: '[data-tour="notifications"]',
-    position: 'bottom'
+    position: 'bottom',
+    scrollToTarget: true
   }
 ];
 
@@ -82,130 +83,149 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ isActive, onComplete, o
   const [currentStep, setCurrentStep] = useState(0);
   const [highlightElement, setHighlightElement] = useState<HTMLElement | null>(null);
   const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
+  const [isScrolling, setIsScrolling] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  const scrollToElement = useCallback((element: HTMLElement) => {
+    if (!element) return;
+    
+    setIsScrolling(true);
+    
+    // Calculate the position to center the element in the viewport
+    const elementRect = element.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const targetScrollY = window.scrollY + elementRect.top - (viewportHeight / 2) + (elementRect.height / 2);
+    
+    // Smooth scroll to the target position
+    window.scrollTo({
+      top: Math.max(0, targetScrollY),
+      behavior: 'smooth'
+    });
+    
+    // Wait for scroll to complete
+    setTimeout(() => {
+      setIsScrolling(false);
+    }, 800);
+  }, []);
+
+  const updateHighlight = useCallback(() => {
+    if (!isActive || isScrolling) return;
+    
+    const step = tourSteps[currentStep];
+    if (!step) return;
+
+    const element = document.querySelector(step.target) as HTMLElement;
+    if (!element) {
+      console.warn(`Tour target not found: ${step.target}`);
+      return;
+    }
+
+    setHighlightElement(element);
+
+    // Scroll to element if needed
+    if (step.scrollToTarget) {
+      scrollToElement(element);
+    }
+
+    // Calculate tooltip position
+    setTimeout(() => {
+      const rect = element.getBoundingClientRect();
+      const tooltipEl = tooltipRef.current;
+      if (!tooltipEl) return;
+
+      const tooltipRect = tooltipEl.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      let top = 0;
+      let left = 0;
+      
+      // Calculate position based on step position and available space
+      switch (step.position) {
+        case 'top':
+          top = rect.top - tooltipRect.height - 20;
+          left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+          break;
+        case 'bottom':
+          top = rect.bottom + 20;
+          left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+          break;
+        case 'left':
+          top = rect.top + (rect.height / 2) - (tooltipRect.height / 2);
+          left = rect.left - tooltipRect.width - 20;
+          break;
+        case 'right':
+          top = rect.top + (rect.height / 2) - (tooltipRect.height / 2);
+          left = rect.right + 20;
+          break;
+        case 'center':
+          top = viewportHeight / 2 - tooltipRect.height / 2;
+          left = viewportWidth / 2 - tooltipRect.width / 2;
+          break;
+      }
+
+      // Ensure tooltip stays within viewport bounds
+      if (left < 10) left = 10;
+      if (left + tooltipRect.width > viewportWidth - 10) {
+        left = viewportWidth - tooltipRect.width - 10;
+      }
+      if (top < 10) top = 10;
+      if (top + tooltipRect.height > viewportHeight - 10) {
+        top = viewportHeight - tooltipRect.height - 10;
+      }
+
+      setTooltipStyle({
+        position: 'fixed',
+        top: `${top}px`,
+        left: `${left}px`,
+        zIndex: 10001,
+      });
+    }, 100);
+  }, [isActive, currentStep, isScrolling, scrollToElement]);
 
   useEffect(() => {
     if (isActive) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = 'auto'; // Allow scrolling during tour
       updateHighlight();
     } else {
       document.body.style.overflow = '';
+      setHighlightElement(null);
     }
 
     return () => {
       document.body.style.overflow = '';
     };
-  }, [isActive, currentStep]);
+  }, [isActive, currentStep, updateHighlight]);
 
-  // Handle window resize for mobile orientation changes
+  // Handle window resize and scroll
   useEffect(() => {
-    if (isActive) {
-      const handleResize = () => {
-        setTimeout(updateHighlight, 100); // Small delay to allow layout to settle
-      };
+    if (!isActive) return;
 
-      window.addEventListener('resize', handleResize);
-      window.addEventListener('orientationchange', handleResize);
+    const handleResize = () => {
+      setTimeout(updateHighlight, 100);
+    };
 
-      return () => {
-        window.removeEventListener('resize', handleResize);
-        window.removeEventListener('orientationchange', handleResize);
-      };
-    }
-  }, [isActive, currentStep]);
+    const handleScroll = () => {
+      if (!isScrolling) {
+        setTimeout(updateHighlight, 50);
+      }
+    };
 
-  const updateHighlight = () => {
-    const step = tourSteps[currentStep];
-    const element = document.querySelector(step.target) as HTMLElement;
-    
-    if (element) {
-      setHighlightElement(element);
-      
-      // Calculate tooltip position with responsive sizing
-      const rect = element.getBoundingClientRect();
-      const isMobile = window.innerWidth < 768; // Tailwind md breakpoint
-      const tooltipWidth = isMobile ? Math.min(320, window.innerWidth - 32) : 400;
-      const tooltipHeight = isMobile ? 250 : 200;
-      
-      let style: React.CSSProperties = {};
-      
-      // On mobile, prefer bottom positioning for better usability, with exceptions for specific steps
-      const position = isMobile && step.id !== 'smart-search' && step.id !== 'stats-overview' ? 'bottom' : step.position;
-      
-      switch (position) {
-        case 'top':
-          style = {
-            top: rect.top - tooltipHeight - 20,
-            left: rect.left + (rect.width / 2) - (tooltipWidth / 2),
-          };
-          break;
-        case 'bottom':
-          style = {
-            top: rect.bottom + 20,
-            left: rect.left + (rect.width / 2) - (tooltipWidth / 2),
-          };
-          break;
-        case 'left':
-          style = {
-            top: rect.top + (rect.height / 2) - (tooltipHeight / 2),
-            left: rect.left - tooltipWidth - 20,
-          };
-          break;
-        case 'right':
-          style = {
-            top: rect.top + (rect.height / 2) - (tooltipHeight / 2),
-            left: rect.right + 20,
-          };
-          break;
-      }
-      
-      // Ensure tooltip stays within viewport with mobile-friendly margins
-      const margin = isMobile ? 16 : 20;
-      if (style.left! < margin) style.left = margin;
-      if (style.left! + tooltipWidth > window.innerWidth - margin) {
-        style.left = window.innerWidth - tooltipWidth - margin;
-      }
-      if (style.top! < margin) style.top = margin;
-      if (style.top! + tooltipHeight > window.innerHeight - margin) {
-        style.top = window.innerHeight - tooltipHeight - margin;
-      }
-      
-      // On mobile, if tooltip would be too close to bottom, move it up
-      if (isMobile && style.top! + tooltipHeight > window.innerHeight - 100) {
-        style.top = Math.max(margin, rect.top - tooltipHeight - 20);
-      }
-      
-      // Special handling for Smart Search on mobile - ensure it's visible
-      if (isMobile && step.id === 'smart-search') {
-        // If the Smart Search section is large, position tooltip at the top of viewport with margin
-        if (rect.height > 200) {
-          style.top = margin + 60; // Account for mobile header height
-          style.left = margin;
-          style.right = 'auto';
-        }
-      }
-      
-      // Special handling for Stats Overview on mobile - handle wide grid layout
-      if (isMobile && step.id === 'stats-overview') {
-        // For wide grid layouts, position tooltip at the center but ensure it's visible
-        if (rect.width > window.innerWidth * 0.8) {
-          // Grid is very wide, center the tooltip and adjust for better visibility
-          style.left = margin;
-          style.right = 'auto';
-          // Position above the grid with some spacing
-          style.top = Math.max(margin + 60, rect.top - tooltipHeight - 30);
-        }
-      }
-      
-      setTooltipStyle(style);
-    }
-  };
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleScroll);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [isActive, updateHighlight, isScrolling]);
 
   const nextStep = () => {
     if (currentStep < tourSteps.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
-      completeTour();
+      onComplete();
     }
   };
 
@@ -215,14 +235,20 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ isActive, onComplete, o
     }
   };
 
-  const completeTour = () => {
-    onComplete();
+  const handleSkip = () => {
     setCurrentStep(0);
+    setHighlightElement(null);
+    onSkip();
   };
 
-  const skipTour = () => {
-    onSkip();
-    setCurrentStep(0);
+  const getPositionIcon = (position: string) => {
+    switch (position) {
+      case 'top': return <ArrowUp className="h-4 w-4" />;
+      case 'bottom': return <ArrowDown className="h-4 w-4" />;
+      case 'left': return <ArrowLeft className="h-4 w-4" />;
+      case 'right': return <ArrowRight className="h-4 w-4" />;
+      default: return <Play className="h-4 w-4" />;
+    }
   };
 
   if (!isActive) return null;
@@ -232,110 +258,83 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ isActive, onComplete, o
   const isLastStep = currentStep === tourSteps.length - 1;
 
   return (
-    <div className="fixed inset-0 z-50">
-      {/* Overlay with highlight cutout */}
-      <div 
+    <>
+      {/* Overlay */}
+      <div
         ref={overlayRef}
-        className="absolute inset-0 bg-black/70"
-        style={{
-          background: highlightElement 
-            ? (() => {
-                const rect = highlightElement.getBoundingClientRect();
-                const centerX = rect.left + rect.width/2;
-                const centerY = rect.top + rect.height/2;
-                const isMobile = window.innerWidth < 768;
-                
-                // For large elements on mobile, use appropriate radius calculation
-                let radius;
-                if (isMobile) {
-                  if (rect.width > 300) {
-                    // For wide elements like Smart Search or Stats Grid
-                    if (rect.width > rect.height * 2) {
-                      // Very wide element (like stats grid) - use height-based radius
-                      radius = rect.height / 2 + 30;
-                    } else {
-                      // Moderately wide element - use conservative radius
-                      radius = Math.min(rect.width, rect.height) / 2 + 20;
-                    }
-                  } else {
-                    radius = Math.max(rect.width, rect.height) / 2 + 10;
-                  }
-                } else {
-                  radius = Math.max(rect.width, rect.height) / 2 + 10;
-                }
-                
-                return `radial-gradient(circle at ${centerX}px ${centerY}px, transparent ${radius}px, rgba(0,0,0,0.7) ${radius + 10}px)`;
-              })()
-            : 'rgba(0,0,0,0.7)'
-        }}
-      />
-      
-      {/* Highlight border */}
-      {highlightElement && (
-        <div
-          className="absolute border-2 md:border-4 border-primary rounded-lg animate-pulse"
-          style={{
-            top: highlightElement.getBoundingClientRect().top - (window.innerWidth < 768 ? 2 : 4),
-            left: highlightElement.getBoundingClientRect().left - (window.innerWidth < 768 ? 2 : 4),
-            width: highlightElement.getBoundingClientRect().width + (window.innerWidth < 768 ? 4 : 8),
-            height: highlightElement.getBoundingClientRect().height + (window.innerWidth < 768 ? 4 : 8),
-            pointerEvents: 'none'
-          }}
-        />
-      )}
+        className="fixed inset-0 bg-black/60 z-10000 transition-opacity duration-300"
+        style={{ zIndex: 10000 }}
+      >
+        {/* Highlight cutout */}
+        {highlightElement && (
+          <div
+            className="absolute border-4 border-primary rounded-lg transition-all duration-300 pointer-events-none"
+            style={{
+              top: highlightElement.getBoundingClientRect().top - 8,
+              left: highlightElement.getBoundingClientRect().left - 8,
+              width: highlightElement.getBoundingClientRect().width + 16,
+              height: highlightElement.getBoundingClientRect().height + 16,
+              boxShadow: `
+                0 0 0 4px rgba(0, 196, 140, 0.3),
+                0 0 0 9999px rgba(0, 0, 0, 0.6)
+              `,
+              zIndex: 10001,
+            }}
+          />
+        )}
+      </div>
 
       {/* Tooltip */}
       <div
-        className="absolute bg-white rounded-xl shadow-2xl p-4 md:p-6 max-w-sm md:max-w-md z-10 border-2 border-primary/20"
+        ref={tooltipRef}
+        className="fixed bg-white rounded-xl shadow-2xl border border-gray-200 p-4 sm:p-6 max-w-sm sm:max-w-md mx-4 transition-all duration-300"
         style={tooltipStyle}
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-3 md:mb-4">
-          <div className="flex items-center space-x-2 md:space-x-3">
-            <div className="bg-primary/10 rounded-full p-1.5 md:p-2">
-              <Play className="h-3 w-3 md:h-4 md:w-4 text-primary" />
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center space-x-2 flex-1 min-w-0">
+            <div className="flex-shrink-0 w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+              {getPositionIcon(step.position)}
             </div>
-            <div>
-              <h3 className="font-bold text-text-primary text-base md:text-lg">{step.title}</h3>
-              <p className="text-xs text-text-secondary">
-                Step {currentStep + 1} of {tourSteps.length}
-              </p>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
+                {step.title}
+              </h3>
+              <div className="flex items-center space-x-2 mt-1">
+                <span className="text-xs text-gray-500">
+                  Step {currentStep + 1} of {tourSteps.length}
+                </span>
+                <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                  <div
+                    className="bg-primary h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${((currentStep + 1) / tourSteps.length) * 100}%` }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
           <button
-            onClick={skipTour}
-            className="text-text-secondary hover:text-text-primary transition-colors p-1"
+            onClick={handleSkip}
+            className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 transition-colors duration-200"
           >
-            <X className="h-4 w-4 md:h-5 md:w-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Content */}
-        <p className="text-text-secondary mb-4 md:mb-6 leading-relaxed text-sm md:text-base">
-          {step.content}
-        </p>
-
-        {/* Progress bar */}
-        <div className="mb-4 md:mb-6">
-          <div className="flex justify-between text-xs text-text-secondary mb-2">
-            <span>Progress</span>
-            <span>{Math.round(((currentStep + 1) / tourSteps.length) * 100)}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-1.5 md:h-2">
-            <div 
-              className="bg-gradient-to-r from-primary to-secondary h-1.5 md:h-2 rounded-full transition-all duration-300"
-              style={{ width: `${((currentStep + 1) / tourSteps.length) * 100}%` }}
-            />
-          </div>
+        <div className="mb-6">
+          <p className="text-sm sm:text-base text-gray-700 leading-relaxed">
+            {step.content}
+          </p>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between space-y-2 md:space-y-0">
+        {/* Actions */}
+        <div className="flex items-center justify-between space-x-3">
           <div className="flex items-center space-x-2">
             {!isFirstStep && (
               <button
                 onClick={prevStep}
-                className="flex items-center space-x-2 px-3 md:px-4 py-2 text-text-secondary hover:text-primary transition-colors text-sm"
+                className="flex items-center space-x-1 px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors duration-200"
               >
                 <ChevronLeft className="h-4 w-4" />
                 <span>Back</span>
@@ -343,35 +342,30 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ isActive, onComplete, o
             )}
           </div>
 
-          <div className="flex items-center justify-between md:justify-end space-x-2 md:space-x-3">
+          <div className="flex items-center space-x-2">
             <button
-              onClick={skipTour}
-              className="text-text-secondary hover:text-primary transition-colors text-sm px-2 py-1"
+              onClick={handleSkip}
+              className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors duration-200"
             >
               Skip Tour
             </button>
-            
             <button
               onClick={nextStep}
-              className="bg-gradient-to-r from-primary to-secondary text-white px-4 md:px-6 py-2 rounded-lg font-semibold hover:shadow-lg transition-all duration-200 flex items-center space-x-2 text-sm md:text-base flex-1 md:flex-none justify-center"
+              className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 text-sm"
             >
-              {isLastStep ? (
-                <>
-                  <CheckCircle className="h-4 w-4" />
-                  <span>Finish</span>
-                </>
-              ) : (
-                <>
-                  <span>{step.action || 'Next'}</span>
-                  <ChevronRight className="h-4 w-4" />
-                </>
-              )}
+              <span>
+                {isFirstStep && step.action ? step.action : 
+                 isLastStep ? 'Complete Tour' : 
+                 step.action || 'Next'}
+              </span>
+              {!isLastStep && <ChevronRight className="h-4 w-4" />}
+              {isLastStep && <CheckCircle className="h-4 w-4" />}
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
-export default OnboardingTour; 
+export default OnboardingTour;

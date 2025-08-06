@@ -23,18 +23,17 @@ import {
   Lightbulb,
   Package
 } from 'lucide-react';
-import { signOut, supabase, getUserReceipts, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
+import { signOut, supabase, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
 import { checkEmbeddingStatus } from '../utils/generateEmbeddings';
 import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import subscriptionService from '../services/subscriptionService';
-import onboardingService, { OnboardingProgress } from '../services/onboardingService';
+import onboardingService from '../services/onboardingService';
 import { UserSubscriptionInfo } from '../types/subscription';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import UsageIndicator from './UsageIndicator';
 import OnboardingTour from './OnboardingTour';
-import GettingStartedChecklist from './GettingStartedChecklist';
 import ContextualTooltip from './ContextualTooltip';
 import { useNavigate } from 'react-router-dom';
 import Footer from './Footer';
@@ -99,7 +98,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const { user, profilePicture } = useUser();
   const { subscriptionInfo: globalSubscriptionInfo } = useSubscription();
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [alertsCount, setAlertsCount] = useState(0);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotificationMenu, setShowNotificationMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -129,10 +127,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [loadingSubscription, setLoadingSubscription] = useState(true);
   
   // Onboarding state
-  const [onboardingProgress, setOnboardingProgress] = useState<OnboardingProgress | null>(null);
   const [showOnboardingTour, setShowOnboardingTour] = useState(false);
-  const [showGettingStarted, setShowGettingStarted] = useState(false);
-  const [isFirstTimeUser, setIsFirstTimeUser] = useState(false);
   
   const navigate = useNavigate();
 
@@ -143,7 +138,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       loadEmbeddingStatus(user.id);
       loadNotifications(user.id);
       loadSubscriptionData(user.id);
-      loadOnboardingData(user.id);
+      checkAndShowTour(user.id);
     }
   }, [user]);
 
@@ -218,7 +213,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         .map((receipt => {
           if (receipt.type === 'group') {
             // Multi-product receipt group
-            const firstProduct = receipt.receipts[0];
             return {
               id: receipt.id,
               type: 'group',
@@ -258,7 +252,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         if (alertsError) {
           console.error('Error loading warranty alerts:', alertsError);
           setWarrantyAlerts([]);
-          setAlertsCount(0);
         } else {
           console.log('Database warranty alerts found:', alertsData?.length || 0, alertsData);
           
@@ -274,12 +267,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
           console.log('✅ Warranty alerts loaded successfully:', alerts.length);
           setWarrantyAlerts(alerts);
-          setAlertsCount(alerts.length);
         }
       } catch (alertsError) {
         console.error('Failed to load warranty alerts:', alertsError);
         setWarrantyAlerts([]);
-        setAlertsCount(0);
       }
 
     } catch (error) {
@@ -320,49 +311,28 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     }
   };
 
-  // Load onboarding data and determine if user should see tour/checklist
-  const loadOnboardingData = async (userId: string) => {
+  // Check and show tour for first-time users
+  const checkAndShowTour = async (userId: string) => {
     try {
-      const progress = await onboardingService.getOnboardingProgress(userId);
-      const isFirstTime = await onboardingService.isFirstTimeUser(userId);
-      
-      setOnboardingProgress(progress);
-      setIsFirstTimeUser(isFirstTime);
-
-      // Auto-detect progress based on user activity
-      await onboardingService.autoDetectProgress(userId);
-      
-      // Reload progress after auto-detection
-      const updatedProgress = await onboardingService.getOnboardingProgress(userId);
-      setOnboardingProgress(updatedProgress);
-
       // Show tour for first-time users who haven't completed it
-      if (progress && progress.first_login && !progress.tour_completed) {
+      const shouldShowTour = await onboardingService.shouldShowTour(userId);
+      if (shouldShowTour) {
         // Small delay to let the UI render first
         setTimeout(() => {
           setShowOnboardingTour(true);
         }, 1000);
       }
-
-      // Show getting started checklist if onboarding not completed
-      if (progress && !progress.onboarding_completed) {
-        setShowGettingStarted(true);
-      }
-      
     } catch (error) {
-      console.error('Error loading onboarding data:', error);
+      console.error('Error checking tour status:', error);
     }
   };
+
 
   // Handle onboarding tour completion
   const handleTourComplete = async () => {
     if (user) {
       await onboardingService.completeTour(user.id);
       setShowOnboardingTour(false);
-      
-      // Reload progress
-      const progress = await onboardingService.getOnboardingProgress(user.id);
-      setOnboardingProgress(progress);
     }
   };
 
@@ -371,47 +341,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     if (user) {
       await onboardingService.skipTour(user.id);
       setShowOnboardingTour(false);
-      
-      // Reload progress
-      const progress = await onboardingService.getOnboardingProgress(user.id);
-      setOnboardingProgress(progress);
     }
-  };
-
-  // Handle checklist item actions
-  const handleChecklistItemAction = async (itemId: string) => {
-    if (!user) return;
-
-    switch (itemId) {
-      case 'scan-first-receipt':
-        onShowReceiptScanning();
-        break;
-      case 'try-smart-search':
-        // Focus on search input and mark as completed
-        const searchInput = document.querySelector('[data-tour="smart-search"] input') as HTMLInputElement;
-        if (searchInput) {
-          searchInput.focus();
-          searchInput.placeholder = 'Try asking: "What did I buy last month?" or "Show me electronics"';
-        }
-        await onboardingService.completeChecklistItem(user.id, 'try-smart-search');
-        break;
-      case 'check-warranty':
-        onShowWarranty();
-        await onboardingService.completeChecklistItem(user.id, 'check-warranty');
-        break;
-      case 'complete-profile':
-        onShowProfile();
-        break;
-    }
-    
-    // Reload progress
-    const progress = await onboardingService.getOnboardingProgress(user.id);
-    setOnboardingProgress(progress);
-  };
-
-  // Handle starting tour from checklist
-  const handleShowTour = () => {
-    setShowOnboardingTour(true);
   };
 
   const loadEmbeddingStatus = async (userId: string) => {
@@ -785,7 +715,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             </span>
           </div>
           <div className="space-y-3 max-h-96 overflow-y-auto">
-            {searchResults.map((result, index) => (
+            {searchResults.map((result) => (
               <div
                 key={result.id}
                 className="flex items-start justify-between p-4 rounded-lg border border-gray-200 hover:border-primary/30 hover:bg-gray-50 transition-all duration-200 cursor-pointer group"
@@ -1193,41 +1123,45 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
                 {/* Notification Dropdown */}
                 {showNotificationMenu && (
-                  <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 max-w-[calc(100vw-2rem)] mr-2">
-                    <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-between">
-                      <h3 className="font-medium text-text-primary">Notifications</h3>
+                  <div className="mobile-dropdown-fix fixed sm:absolute right-2 sm:right-0 top-16 sm:top-auto sm:mt-2 left-2 sm:left-auto sm:w-72 md:w-80 lg:w-96 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 max-w-none sm:max-w-[calc(100vw-1rem)]">
+                    <div className="px-3 sm:px-4 py-2 border-b border-gray-200 flex items-center justify-between">
+                      <h3 className="font-medium text-text-primary text-sm sm:text-base">Notifications</h3>
                       {notifications.length > 0 && (
                         <button
                           onClick={handleArchiveAllNotifications}
                           disabled={archivingAll}
-                          className="text-xs text-primary hover:underline disabled:opacity-50"
+                          className="text-xs text-primary hover:underline disabled:opacity-50 flex-shrink-0"
                         >
                           {archivingAll ? 'Clearing...' : 'Clear All'}
                         </button>
                       )}
                     </div>
-                    <div className="max-h-80 overflow-y-auto">
+                    <div className="max-h-48 xs:max-h-56 sm:max-h-80 overflow-y-auto">
                       {notificationsLoading ? (
-                        <div className="px-4 py-8 text-center text-text-secondary">Loading...</div>
+                        <div className="px-3 sm:px-4 py-6 sm:py-8 text-center text-text-secondary">
+                          <div className="text-sm">Loading...</div>
+                        </div>
                       ) : notificationsError ? (
-                        <div className="px-4 py-8 text-center text-red-500">{notificationsError}</div>
+                        <div className="px-3 sm:px-4 py-6 sm:py-8 text-center text-red-500">
+                          <div className="text-sm">{notificationsError}</div>
+                        </div>
                       ) : notifications.length === 0 ? (
-                        <div className="px-4 py-8 text-center">
-                          <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                          <p className="text-sm text-text-secondary">No notifications at this time</p>
+                        <div className="px-3 sm:px-4 py-6 sm:py-8 text-center">
+                          <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-500 mx-auto mb-2" />
+                          <p className="text-xs sm:text-sm text-text-secondary">No notifications at this time</p>
                         </div>
                       ) : (
                         notifications.map((n) => (
-                          <div key={n.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="text-sm font-medium text-text-primary mb-1">{n.message}</div>
+                          <div key={n.id} className="px-3 sm:px-4 py-2 sm:py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 flex items-start justify-between min-w-0">
+                            <div className="flex-1 min-w-0 pr-2">
+                              <div className="text-xs sm:text-sm font-medium text-text-primary mb-1 break-words">{n.message}</div>
                               <div className="text-xs text-text-secondary">
-                                {n.type.replace('_', ' ')} • {new Date(n.created_at).toLocaleString()}
+                                {n.type.replace('_', ' ')} • {new Date(n.created_at).toLocaleDateString()}
                               </div>
                             </div>
                             <button
                               onClick={() => handleArchiveNotification(n.id)}
-                              className="ml-4 text-xs text-primary hover:underline"
+                              className="text-xs text-primary hover:underline flex-shrink-0"
                             >
                               Clear
                             </button>
@@ -1275,49 +1209,49 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
                 {/* User Dropdown */}
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-44 sm:w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 max-w-[calc(100vw-2rem)] mr-2">
-                    <div className="px-4 py-2 border-b border-gray-200">
-                      <p className="text-sm font-medium text-text-primary">
+                  <div className="fixed sm:absolute right-2 sm:right-0 top-16 sm:top-auto sm:mt-2 left-auto sm:left-auto w-44 sm:w-48 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 max-w-none sm:max-w-[calc(100vw-1rem)]">
+                    <div className="px-3 sm:px-4 py-2 border-b border-gray-200">
+                      <p className="text-sm font-medium text-text-primary truncate">
                         {user?.user_metadata?.full_name || 'User'}
                       </p>
-                      <p className="text-xs text-text-secondary">{user?.email}</p>
+                      <p className="text-xs text-text-secondary truncate">{user?.email}</p>
                     </div>
                     <button
                       onClick={() => {
                         onShowProfile();
                         setShowUserMenu(false);
                       }}
-                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                      className="w-full text-left px-3 sm:px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
                     >
-                      <User className="h-4 w-4" />
-                      <span>Profile Settings</span>
+                      <User className="h-4 w-4 flex-shrink-0" />
+                      <span className="truncate">Profile Settings</span>
                     </button>
                     <button
                       onClick={() => {
                         navigate('/subscription');
                         setShowUserMenu(false);
                       }}
-                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                      className="w-full text-left px-3 sm:px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
                     >
-                      <Shield className="h-4 w-4" />
-                      <span>Subscription</span>
+                      <Shield className="h-4 w-4 flex-shrink-0" />
+                      <span className="truncate">Subscription</span>
                       {subscriptionInfo && subscriptionInfo.plan === 'free' && (
-                        <span className="ml-auto bg-primary text-white text-xs px-2 py-0.5 rounded-full">
+                        <span className="ml-auto bg-primary text-white text-xs px-2 py-0.5 rounded-full flex-shrink-0">
                           Free
                         </span>
                       )}
                       {subscriptionInfo && subscriptionInfo.plan === 'premium' && (
-                        <span className="ml-auto bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
+                        <span className="ml-auto bg-green-500 text-white text-xs px-2 py-0.5 rounded-full flex-shrink-0">
                           Pro
                         </span>
                       )}
                     </button>
                     <button
                       onClick={handleSignOut}
-                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                      className="w-full text-left px-3 sm:px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
                     >
-                      <LogOut className="h-4 w-4" />
-                      <span>Sign Out</span>
+                      <LogOut className="h-4 w-4 flex-shrink-0" />
+                      <span className="truncate">Sign Out</span>
                     </button>
                   </div>
                 )}
@@ -1807,14 +1741,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         isActive={showOnboardingTour}
         onComplete={handleTourComplete}
         onSkip={handleTourSkip}
-      />
-
-      <GettingStartedChecklist
-        isVisible={showGettingStarted}
-        onClose={() => setShowGettingStarted(false)}
-        onItemAction={handleChecklistItemAction}
-        completedItems={onboardingProgress?.completed_items || []}
-        onShowTour={handleShowTour}
       />
 
       {/* Click outside to close menus */}

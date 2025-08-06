@@ -359,7 +359,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     
     setIsGeneratingEmbeddings(true);
     try {
-      console.log('🔄 Indexing existing receipts for AI search...');
+      console.log('🔄 Processing existing receipts for smart search...');
       
       // Get all receipts without embeddings
       const { data: receipts, error: fetchError } = await supabase
@@ -373,7 +373,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       }
 
       if (!receipts || receipts.length === 0) {
-        alert('✅ All receipts are already indexed for AI search!');
+        alert('✅ All receipts are already processed!');
         await loadEmbeddingStatus(user.id);
         return;
       }
@@ -453,10 +453,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       await loadEmbeddingStatus(user.id);
       
       // Show success message
-      const message = `✅ Indexing completed!\n\n` +
-        `Successfully indexed: ${successful} receipts\n` +
+      const message = `✅ Processing completed!\n\n` +
+        `Successfully processed: ${successful} receipts\n` +
         `Errors: ${errors} receipts\n\n` +
-        `🎉 Your AI search is now ready! Try questions like "Show me Nintendo products" or "How much did I spend on electronics?"`;
+        `🎉 Your smart search is now ready! Try questions like "Show me Nintendo products" or "How much did I spend on electronics?"`;
       
       alert(message);
       
@@ -1517,58 +1517,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             )}
 
             {/* Embedding Status and Generate Button */}
-            {embeddingStatus && embeddingStatus.withoutEmbeddings > 0 && (
-              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-yellow-800">
-                      <strong>{embeddingStatus.withoutEmbeddings}</strong> receipts need to be indexed for AI search
-                    </p>
-                    <p className="text-xs text-yellow-700 mt-1">
-                      These are existing receipts that need one-time indexing. New receipts are automatically indexed.
-                    </p>
-                  </div>
-                  <div>
-                    <button
-                      onClick={handleIndexExistingReceipts}
-                      disabled={isGeneratingEmbeddings}
-                      className="bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                    >
-                      {isGeneratingEmbeddings ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Indexing...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Database className="h-4 w-4" />
-                          <span>Index Now</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {/* AI Search Status - Show when all receipts are indexed */}
-            {embeddingStatus && embeddingStatus.withoutEmbeddings === 0 && embeddingStatus.total > 0 && (
-              <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Brain className="h-4 w-4 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-green-800 font-medium">
-                      ✅ All {embeddingStatus.total} receipts are indexed for AI search
-                    </p>
-                    <p className="text-xs text-green-700 mt-1">
-                      New receipts will be automatically indexed when added.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+
+
           </div>
 
           {/* Smart Search Results */}

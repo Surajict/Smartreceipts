@@ -34,6 +34,7 @@ import Footer from './Footer';
 
 interface WarrantyPageProps {
   onBackToDashboard: () => void;
+  onShowProfile: () => void;
 }
 
 interface WarrantyItem {
@@ -57,7 +58,7 @@ interface WarrantyItem {
 type FilterType = 'all' | 'active' | 'expiring' | 'expired';
 type SortType = 'daysLeft' | 'purchaseDate' | 'itemName' | 'amount';
 
-const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
+const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard, onShowProfile }) => {
   const { user, profilePicture } = useUser();
   const { subscriptionInfo } = useSubscription();
   const [warrantyItems, setWarrantyItems] = useState<WarrantyItem[]>([]);
@@ -478,8 +479,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
               {/* Settings Button */}
               <button
                 onClick={() => {
-                  // Navigate to profile settings - for now using onBackToDashboard as placeholder
-                  onBackToDashboard();
+                  onShowProfile();
                 }}
                 className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
                 title="Settings"
@@ -523,8 +523,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
                     </div>
                     <button
                       onClick={() => {
-                        // Navigate to profile settings - for now using onBackToDashboard as placeholder
-                        onBackToDashboard();
+                        onShowProfile();
                         setShowUserMenu(false);
                       }}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"

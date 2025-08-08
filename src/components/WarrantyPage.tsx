@@ -29,6 +29,7 @@ import { useUser } from '../contexts/UserContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { useLocation } from 'react-router-dom';
+import NotificationDropdown from './NotificationDropdown';
 import Footer from './Footer';
 
 interface WarrantyPageProps {
@@ -472,11 +473,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
             {/* Header Actions */}
             <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Notifications */}
-              <div className="relative">
-                <button className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
-                  <Bell className="h-6 w-6" />
-                </button>
-              </div>
+              {user && <NotificationDropdown userId={user.id} />}
 
               {/* Settings Button */}
               <button

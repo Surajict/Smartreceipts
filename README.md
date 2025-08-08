@@ -112,12 +112,17 @@ Smart Receipts is an intelligent receipt management application that uses AI to 
 - **Perplexity AI** - Data validation and correction
 - **Tesseract.js 5.0.4** - OCR text recognition
 - **Google Cloud Vision** - Enhanced OCR capabilities
+- **Stripe (scaffolded)** - Subscription and billing (mocked locally until configured)
 
 ### **AI & Machine Learning**
 - **Vector Embeddings**: 384-dimension embeddings for semantic search
 - **RAG (Retrieval-Augmented Generation)**: Intelligent question answering
 - **Multi-Model AI**: OpenAI for extraction, Perplexity for validation
 - **Semantic Search**: pgvector for fast similarity search
+
+### **Notifications & PWA**
+- Push notifications via service worker and Supabase Edge Function
+- Installable PWA with offline support and runtime caching for Supabase API
 
 ### **Development Tools**
 - **ESLint** - Code linting and formatting
@@ -150,6 +155,7 @@ To enable Google Sign-In:
 8. Click "Create" and note your Client ID and Client Secret
 9. In your Supabase dashboard, go to Authentication > Providers
 10. Enable Google provider and enter your Client ID and Client Secret
+11. In the web app, set `VITE_GOOGLE_OAUTH_CLIENT_ID` to the same Client ID so the in-app OAuth flow works correctly
 
 ### **Environment Setup**
 
@@ -180,6 +186,16 @@ To enable Google Sign-In:
    
    # Google Cloud Vision (for enhanced OCR)
    VITE_GOOGLE_CLOUD_VISION_API_KEY=your_google_cloud_vision_key_here
+
+   # Google OAuth (used by the web client OAuth flow)
+   VITE_GOOGLE_OAUTH_CLIENT_ID=your_google_oauth_client_id_here
+
+   # Stripe (optional: enable when integrating real billing)
+   VITE_STRIPE_ENVIRONMENT=test
+   VITE_STRIPE_TEST_PUBLISHABLE_KEY=your_stripe_test_pk_here
+   # For production billing, set:
+   # VITE_STRIPE_ENVIRONMENT=live
+   # VITE_STRIPE_LIVE_PUBLISHABLE_KEY=your_stripe_live_pk_here
    ```
 
 4. **Database Setup**
@@ -241,44 +257,41 @@ To enable Google Sign-In:
 
 ```
 Smart_Receipts_Suraj_V5/
-├── public/                     # Static assets
-│   ├── Smart Receipt Logo.png  # App logo
-│   └── vite.svg               # Vite logo
+├── public/                       # Static assets
+│   ├── Smart Receipt Logo.png    # App logo
+│   └── favicon.svg               # PWA icon
 ├── src/
-│   ├── components/            # React components
-│   │   ├── Dashboard.tsx      # Main user dashboard with smart search
-│   │   ├── ReceiptScanning.tsx # Core scanning functionality
-│   │   ├── MyLibrary.tsx      # Receipt library view
-│   │   ├── ProfilePage.tsx    # User profile management
-│   │   ├── WarrantyPage.tsx   # Warranty management
-│   │   ├── AdminPortal.tsx    # NEW: Admin subscription management portal
-│   │   ├── Login.tsx          # Authentication
-│   │   ├── SignUp.tsx         # User registration
-│   │   └── ...               # Additional UI components
+│   ├── components/               # React components (Dashboard, AdminPortal, etc.)
+│   ├── contexts/                 # React contexts
+│   ├── hooks/                    # Custom hooks
 │   ├── lib/
-│   │   └── supabase.ts       # Supabase client configuration
+│   │   └── supabase.ts           # Supabase client, Google OAuth, DB helpers
 │   ├── services/
-│   │   ├── ocrService.ts     # OCR processing logic
-│   │   ├── multiProductReceiptService.ts # Multi-product receipt handling
+│   │   ├── ocrService.ts         # OCR processing logic
+│   │   ├── multiProductReceiptService.ts  # Multi-product handling
 │   │   ├── perplexityValidationService.ts # AI validation service
-│   │   └── ragService.ts     # RAG (Retrieval-Augmented Generation)
-│   ├── types/                # TypeScript type definitions
-│   ├── utils/                # Utility functions
-│   ├── App.tsx               # Main app component
-│   ├── main.tsx              # App entry point
-│   └── index.css             # Global styles
+│   │   ├── ragService.ts         # RAG (Retrieval-Augmented Generation)
+│   │   ├── subscriptionService.ts# Subscription state helpers
+│   │   ├── stripeService.ts      # Stripe scaffolding (mocked locally)
+│   │   └── duplicateDetectionService.ts    # Duplicate receipt detection
+│   ├── types/                    # TypeScript type definitions
+│   ├── utils/                    # Utility functions
+│   ├── sw.ts                     # Service worker (PWA + push notifications)
+│   ├── App.tsx                   # Main app component
+│   ├── main.tsx                  # App entry point
+│   └── index.css                 # Global styles
 ├── supabase/
-│   ├── migrations/           # Database migrations
-│   │   ├── *_admin_portal_setup.sql          # NEW: Admin portal tables
-│   │   ├── *_subscription_codes.sql          # NEW: Subscription code management
-│   │   ├── *_admin_settings.sql              # NEW: Admin configuration
-│   │   ├── *_subscription_functions.sql      # NEW: Database functions
-│   └── functions/            # Edge functions (smart-search, etc.)
-├── package.json              # Dependencies and scripts
-├── tailwind.config.js        # Tailwind CSS configuration
-├── tsconfig.json             # TypeScript configuration
-├── vite.config.ts            # Vite configuration
-└── README.md                 # This file
+│   ├── migrations/               # Database migrations
+│   └── functions/                # Edge functions
+│       ├── smart-search          # AI search endpoint
+│       ├── generate-embedding    # Per-receipt embeddings
+│       ├── backfill-embeddings   # Batch embed backfill
+│       └── send-push-notification# Push notification sender
+├── package.json                  # Dependencies and scripts
+├── tailwind.config.js            # Tailwind CSS configuration
+├── tsconfig.json                 # TypeScript configuration
+├── vite.config.ts                # Vite configuration (PWA)
+└── README.md                     # This file
 ```
 
 ## 🎮 How to Use the App
@@ -592,6 +605,7 @@ The project includes comprehensive database migrations in `supabase/migrations/`
 - **Admin portal setup** - Admin tables and functions (NEW!)
 - **Subscription management** - Subscription codes and user linking (NEW!)
 - **Admin settings** - System configuration table (NEW!)
+ - **Notifications** - User notifications tables and helpers (NEW!)
 
 To apply migrations:
 ```bash
@@ -607,9 +621,17 @@ supabase db push
 4. **Generate embeddings** for existing receipts
 
 ### **Edge Functions**
-Deploy the smart-search edge function:
+Deploy Edge Functions:
 ```bash
+# Core smart search
 supabase functions deploy smart-search
+
+# Embedding helpers
+supabase functions deploy generate-embedding
+supabase functions deploy backfill-embeddings
+
+# Push notifications
+supabase functions deploy send-push-notification
 ```
 
 ### **Embedding Generation**
@@ -635,6 +657,14 @@ The app automatically generates embeddings for new receipts. For existing receip
 - **AI Data Handling**: Receipt data is processed securely and not stored by AI providers
 - **Admin Portal Security**: Hardcoded credentials for administrative access (NEW!)
 - **Database Function Security**: SECURITY DEFINER functions bypass RLS safely (NEW!)
+
+## 🔔 Push Notifications
+
+To enable push notifications:
+- Open the app and visit settings or the onboarding flow to grant notification permissions
+- Ensure service worker `src/sw.ts` is registered (handled by Vite PWA config)
+- Deploy the `send-push-notification` Edge Function and configure triggers as needed
+- Warranty alerts use milestones (90, 30, 7 days) and deduplicate notifications
 
 ## 📱 Browser Compatibility
 
@@ -696,6 +726,17 @@ The app automatically generates embeddings for new receipts. For existing receip
    - Check if Supabase project is active
    - Ensure migrations are applied
 
+9. **Push notifications not showing**
+   - Verify browser permission for notifications is granted
+   - Check that `send-push-notification` function is deployed
+   - Ensure the service worker `src/sw.ts` is being served and registered
+   - Test from a secure origin (HTTPS or localhost)
+
+10. **Google sign-in redirect issues**
+    - Confirm `VITE_GOOGLE_OAUTH_CLIENT_ID` matches your Google OAuth Client ID
+    - Verify redirect URIs include `/auth/v1/callback` and your app domain
+    - Ensure Google provider is enabled in Supabase
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -728,6 +769,10 @@ VITE_SUPABASE_ANON_KEY=your_production_supabase_key
 VITE_OPENAI_API_KEY=your_openai_api_key
 VITE_PERPLEXITY_API_KEY=your_perplexity_api_key
 VITE_GOOGLE_CLOUD_VISION_API_KEY=your_google_cloud_key
+VITE_GOOGLE_OAUTH_CLIENT_ID=your_google_oauth_client_id
+# Stripe (optional)
+VITE_STRIPE_ENVIRONMENT=live
+VITE_STRIPE_LIVE_PUBLISHABLE_KEY=your_stripe_live_pk
 ```
 
 ### **Edge Functions Deployment**
@@ -756,6 +801,8 @@ supabase functions deploy smart-search
 - [ ] Get OpenAI API key for AI features
 - [ ] Get Perplexity API key for validation
 - [ ] Create `.env.local` with all required keys
+- [ ] Add `VITE_GOOGLE_OAUTH_CLIENT_ID` for Google Sign-In
+- [ ] (Optional) Add Stripe publishable key(s) for billing UI
 - [ ] Run database migrations with `supabase db push`
 - [ ] Deploy edge functions with `supabase functions deploy`
 - [ ] Run `npm run dev` to start development
@@ -765,12 +812,20 @@ supabase functions deploy smart-search
 - [ ] Explore the warranty management features
 - [ ] **NEW**: Access Admin Portal at `/admin` with provided credentials
 - [ ] **NEW**: Test subscription code generation and management
+ - [ ] **NEW**: Enable push notifications and receive warranty alerts
 
 **Need help?** [Create an issue](https://github.com/Surajict/Smartreceipts/issues) or contact the development team.
 
 ---
 
 ## 🔄 Version History
+
+### **v5.3.0 (2025-07-14) - Notifications, OAuth & Billing Scaffold** (NEW!)
+- 🔔 Push notifications via service worker and Edge Function
+- 🔐 Google OAuth improvements with `VITE_GOOGLE_OAUTH_CLIENT_ID`
+- 💳 Stripe billing scaffolding (mocked flows; real keys optional)
+- 🧭 Duplicate detection service to warn on re-uploads
+- 🧪 Testing scripts added (`npm run test`, `test:ui`, `test:coverage`)
 
 ### **v5.2.0 (2025-01-23) - Admin Portal & Subscription Management** (NEW!)
 - 🛡️ **Complete Admin Portal System** with secure authentication and real-time dashboard

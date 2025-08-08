@@ -1000,7 +1000,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
         {/* Camera Modal */}
         {showCamera && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card max-w-2xl w-full max-h-[95vh] overflow-y-auto">
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card max-w-2xl w-full max-h-[95vh] flex flex-col overflow-hidden">
               <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
                 <h2 className="text-lg sm:text-xl font-bold text-text-primary">
                   {captureMode === 'long' ? 'Capture Long Receipt' : 'Capture Receipt'}
@@ -1013,9 +1013,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                 </button>
               </div>
               
-              <div className="p-4 sm:p-6">
+              <div className="flex-1 flex flex-col p-4 sm:p-6 overflow-hidden">
                 {/* Capture Mode Toggle */}
-                <div className="flex justify-center mb-4">
+                <div className="flex justify-center mb-3 sm:mb-4">
                   <div className="bg-gray-100 rounded-lg p-1 flex">
                     <button
                       onClick={() => setCaptureMode('normal')}
@@ -1039,14 +1039,14 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     </button>
                   </div>
                 </div>
-
-                <div className="relative">
+ 
+                <div className="relative flex-1 min-h-0">
                   <Webcam
                     ref={webcamRef}
                     audio={false}
                     screenshotFormat="image/jpeg"
-                    className="w-full rounded-lg"
-                    style={{ width: '100%', height: 'auto', maxHeight: '60vh', borderRadius: '0.5rem', objectFit: 'cover' }}
+                    className="w-full h-full rounded-lg"
+                    style={{ width: '100%', height: '100%', borderRadius: '0.5rem', objectFit: 'cover' }}
                     videoConstraints={{
                       facingMode: 'environment',
                       width: captureMode === 'long' ? 1920 : 1280,
@@ -1076,7 +1076,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                   )}
                 </div>
                 
-                <div className="sticky bottom-0 bg-white pt-4 mt-6 border-t">
+                <div className="bg-white pt-4 mt-4 border-t">
                   <div className="flex justify-center">
                   {captureMode === 'normal' ? (
                     <button

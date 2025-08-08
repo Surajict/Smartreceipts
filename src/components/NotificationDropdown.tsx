@@ -117,7 +117,9 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ userId }) =
         )}
       </button>
       {showDropdown && (
-        <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50">
+        <div
+          className="absolute right-0 mt-2 w-96 max-w-[calc(100vw-1rem)] bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 mobile-dropdown-fix"
+        >
           <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-between">
             <h3 className="font-medium text-text-primary">Notifications</h3>
             {notifications.length > 0 && (
@@ -130,7 +132,7 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ userId }) =
               </button>
             )}
           </div>
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-[60vh] sm:max-h-80 overflow-y-auto overscroll-contain">
             {loading ? (
               <div className="px-4 py-8 text-center text-text-secondary">
                 <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />

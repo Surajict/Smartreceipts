@@ -29,12 +29,10 @@ import { useUser } from '../contexts/UserContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { useLocation } from 'react-router-dom';
-import NotificationDropdown from './NotificationDropdown';
 import Footer from './Footer';
 
 interface WarrantyPageProps {
   onBackToDashboard: () => void;
-  onShowProfile: () => void;
 }
 
 interface WarrantyItem {
@@ -58,7 +56,7 @@ interface WarrantyItem {
 type FilterType = 'all' | 'active' | 'expiring' | 'expired';
 type SortType = 'daysLeft' | 'purchaseDate' | 'itemName' | 'amount';
 
-const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard, onShowProfile }) => {
+const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
   const { user, profilePicture } = useUser();
   const { subscriptionInfo } = useSubscription();
   const [warrantyItems, setWarrantyItems] = useState<WarrantyItem[]>([]);
@@ -474,12 +472,17 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard, onShowPr
             {/* Header Actions */}
             <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Notifications */}
-              {user && <NotificationDropdown userId={user.id} />}
+              <div className="relative">
+                <button className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
+                  <Bell className="h-6 w-6" />
+                </button>
+              </div>
 
               {/* Settings Button */}
               <button
                 onClick={() => {
-                  onShowProfile();
+                  // Navigate to profile settings - for now using onBackToDashboard as placeholder
+                  onBackToDashboard();
                 }}
                 className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
                 title="Settings"
@@ -523,7 +526,8 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard, onShowPr
                     </div>
                     <button
                       onClick={() => {
-                        onShowProfile();
+                        // Navigate to profile settings - for now using onBackToDashboard as placeholder
+                        onBackToDashboard();
                         setShowUserMenu(false);
                       }}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"

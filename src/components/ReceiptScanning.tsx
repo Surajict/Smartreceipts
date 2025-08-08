@@ -1047,6 +1047,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     audio={false}
                     screenshotFormat="image/jpeg"
                     className="w-full rounded-lg"
+                    style={{ width: '100%', height: 'auto', maxHeight: '60vh', borderRadius: '0.5rem', objectFit: 'cover' }}
                     videoConstraints={{
                       facingMode: 'environment',
                       width: captureMode === 'long' ? 1920 : 1280,
@@ -1076,7 +1077,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                   )}
                 </div>
                 
-                <div className="flex justify-center mt-6">
+                <div className="sticky bottom-0 bg-white pt-4 mt-6 border-t">
+                  <div className="flex justify-center">
                   {captureMode === 'normal' ? (
                     <button
                       onClick={capture}
@@ -1104,6 +1106,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                       </span>
                     </button>
                   )}
+                  </div>
                 </div>
 
                 {captureMode === 'long' && (

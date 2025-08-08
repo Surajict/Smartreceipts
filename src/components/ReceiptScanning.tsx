@@ -1001,8 +1001,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
         {/* Camera Modal */}
         {showCamera && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card max-w-2xl w-full max-h-[95vh] flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 flex-shrink-0">
                 <h2 className="text-lg sm:text-xl font-bold text-text-primary">
                   {captureMode === 'long' ? 'Capture Long Receipt' : 'Capture Receipt'}
                 </h2>
@@ -1014,9 +1015,10 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                 </button>
               </div>
               
-              <div className="flex-1 flex flex-col p-4 sm:p-6 overflow-hidden">
+              {/* Content Area */}
+              <div className="flex-1 flex flex-col overflow-hidden p-4 sm:p-6">
                 {/* Capture Mode Toggle */}
-                <div className="flex justify-center mb-3 sm:mb-4">
+                <div className="flex justify-center mb-4 flex-shrink-0">
                   <div className="bg-gray-100 rounded-lg p-1 flex">
                     <button
                       onClick={() => setCaptureMode('normal')}
@@ -1040,20 +1042,22 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     </button>
                   </div>
                 </div>
- 
-                <div className="relative flex-1 min-h-0">
-                  <Webcam
-                    ref={webcamRef}
-                    audio={false}
-                    screenshotFormat="image/jpeg"
-                    className="w-full h-full rounded-lg"
-                    style={{ width: '100%', height: '100%', borderRadius: '0.5rem', objectFit: 'cover' }}
-                    videoConstraints={{
-                      facingMode: 'environment',
-                      width: captureMode === 'long' ? 1920 : 1280,
-                      height: captureMode === 'long' ? 1080 : 720
-                    }}
-                  />
+
+                {/* Camera Container */}
+                <div className="flex-1 relative min-h-0 mb-4">
+                  <div className="w-full h-full rounded-lg overflow-hidden bg-gray-100">
+                    <Webcam
+                      ref={webcamRef}
+                      audio={false}
+                      screenshotFormat="image/jpeg"
+                      className="w-full h-full object-cover"
+                      videoConstraints={{
+                        facingMode: 'environment',
+                        width: captureMode === 'long' ? 1920 : 1280,
+                        height: captureMode === 'long' ? 1080 : 720
+                      }}
+                    />
+                  </div>
                   
                   {captureMode === 'long' && (
                     <div className="absolute inset-0 border-2 border-dashed border-primary rounded-lg pointer-events-none">
@@ -1076,46 +1080,47 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     </div>
                   )}
                 </div>
-                
-                <div className="bg-white pt-4 mt-4 border-t">
-                  <div className="flex justify-center">
-                  {captureMode === 'normal' ? (
-                    <button
-                      onClick={capture}
-                      className="bg-primary text-white px-8 py-4 rounded-full font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
-                    >
-                      <Camera className="h-5 w-5" />
-                      <span>Capture</span>
-                    </button>
-                  ) : (
-                    <button
-                      onMouseDown={startLongCapture}
-                      onMouseUp={stopLongCapture}
-                      onTouchStart={startLongCapture}
-                      onTouchEnd={stopLongCapture}
-                      disabled={isCapturingLong && captureProgress >= 100}
-                      className={`px-8 py-4 rounded-full font-medium transition-colors duration-200 flex items-center space-x-2 ${
-                        isCapturingLong 
-                          ? 'bg-accent-red text-white' 
-                          : 'bg-primary text-white hover:bg-primary/90'
-                      }`}
-                    >
-                      <Maximize2 className="h-5 w-5" />
-                      <span>
-                        {isCapturingLong ? 'Capturing...' : 'Hold to Capture Long Receipt'}
-                      </span>
-                    </button>
-                  )}
-                  </div>
-                </div>
 
-                {captureMode === 'long' && (
-                  <div className="mt-4 text-center">
-                    <p className="text-sm text-text-secondary">
-                      Hold the button and slowly move your camera across the entire length of the receipt
-                    </p>
+                {/* Capture Button Area */}
+                <div className="flex-shrink-0 pt-4 border-t border-gray-200">
+                  <div className="flex justify-center">
+                    {captureMode === 'normal' ? (
+                      <button
+                        onClick={capture}
+                        className="bg-primary text-white px-8 py-4 rounded-full font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
+                      >
+                        <Camera className="h-5 w-5" />
+                        <span>Capture</span>
+                      </button>
+                    ) : (
+                      <button
+                        onMouseDown={startLongCapture}
+                        onMouseUp={stopLongCapture}
+                        onTouchStart={startLongCapture}
+                        onTouchEnd={stopLongCapture}
+                        disabled={isCapturingLong && captureProgress >= 100}
+                        className={`px-8 py-4 rounded-full font-medium transition-colors duration-200 flex items-center space-x-2 ${
+                          isCapturingLong 
+                            ? 'bg-accent-red text-white' 
+                            : 'bg-primary text-white hover:bg-primary/90'
+                        }`}
+                      >
+                        <Maximize2 className="h-5 w-5" />
+                        <span>
+                          {isCapturingLong ? 'Capturing...' : 'Hold to Capture Long Receipt'}
+                        </span>
+                      </button>
+                    )}
                   </div>
-                )}
+
+                  {captureMode === 'long' && (
+                    <div className="mt-4 text-center">
+                      <p className="text-sm text-text-secondary">
+                        Hold the button and slowly move your camera across the entire length of the receipt
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

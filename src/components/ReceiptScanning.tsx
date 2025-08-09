@@ -17,7 +17,8 @@ import {
   Edit3,
   RotateCcw,
   Plus,
-  Maximize2
+  Maximize2,
+  Settings
 } from 'lucide-react';
 import { signOut, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
@@ -40,7 +41,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs
 interface ReceiptScanningProps {
   onBackToDashboard: () => void;
   onReceiptSaved?: (receiptId: string) => void;
-  onShowProfile?: () => void;
 }
 
 // Use the imported type instead of local interface
@@ -49,7 +49,7 @@ type ExtractedData = ExtractedReceiptData;
 type CaptureMode = 'normal' | 'long';
 type InputMode = 'capture' | 'upload' | 'manual';
 
-const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, onReceiptSaved, onShowProfile }) => {
+const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, onReceiptSaved }) => {
   const { user, profilePicture } = useUser();
   const { subscriptionInfo } = useSubscription();
   const [inputMode, setInputMode] = useState<InputMode>('capture');
@@ -849,9 +849,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
   };
 
   return (
-    <div className="min-h-screen bg-background font-['Inter',sans-serif] flex flex-col">
+    <div className="min-h-screen bg-background font-['Inter',sans-serif]">
       {/* Header */}
-      <header className="bg-white shadow-card border-b border-gray-200 flex-shrink-0">
+      <header className="bg-white shadow-card border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
           <div className="flex justify-between items-center h-16 min-w-0">
             {/* Logo - Clickable to Dashboard */}
@@ -881,6 +881,18 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
             <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Notifications */}
               {user && <NotificationDropdown userId={user.id} />}
+
+              {/* Settings Button */}
+              <button
+                onClick={() => {
+                  // Navigate to profile settings - for now using onBackToDashboard as placeholder
+                  onBackToDashboard();
+                }}
+                className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                title="Settings"
+              >
+                <Settings className="h-6 w-6" />
+              </button>
 
               {/* User Menu */}
               <div className="relative">
@@ -916,7 +928,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     </div>
                     <button
                       onClick={() => {
-                        onShowProfile ? onShowProfile() : onBackToDashboard();
+                        // Navigate to profile settings - for now using onBackToDashboard as placeholder
+                        onBackToDashboard();
                         setShowUserMenu(false);
                       }}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
@@ -941,7 +954,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
       </header>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 py-6 sm:py-8 flex-1">
+      <main className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 py-6 sm:py-8">
         {/* Page Title */}
         <div className="text-center mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-text-primary mb-3 sm:mb-4">
@@ -987,9 +1000,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
         {/* Camera Modal */}
         {showCamera && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
-              {/* Header */}
-              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 flex-shrink-0">
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card max-w-2xl w-full max-h-[95vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
                 <h2 className="text-lg sm:text-xl font-bold text-text-primary">
                   {captureMode === 'long' ? 'Capture Long Receipt' : 'Capture Receipt'}
                 </h2>
@@ -1000,11 +1012,10 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                   <X className="h-6 w-6" />
                 </button>
               </div>
-              
-              {/* Content Area */}
-              <div className="flex-1 flex flex-col overflow-hidden p-4 sm:p-6">
+
+              <div className="p-4 sm:p-6">
                 {/* Capture Mode Toggle */}
-                <div className="flex justify-center mb-4 flex-shrink-0">
+                <div className="flex justify-center mb-4">
                   <div className="bg-gray-100 rounded-lg p-1 flex">
                     <button
                       onClick={() => setCaptureMode('normal')}
@@ -1029,22 +1040,20 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                   </div>
                 </div>
 
-                {/* Camera Container - 65% height cap to prevent overlap */}
-                <div className="relative mb-6 flex-shrink-0" style={{ height: 'min(36vh, calc(100% - 240px))' }}>
-                  <div className="w-full h-full rounded-lg overflow-hidden bg-gray-100">
-                    <Webcam
-                      ref={webcamRef}
-                      audio={false}
-                      screenshotFormat="image/jpeg"
-                      className="w-full h-full object-cover"
-                      videoConstraints={{
-                        facingMode: 'environment',
-                        width: captureMode === 'long' ? 1920 : 1280,
-                        height: captureMode === 'long' ? 1080 : 720
-                      }}
-                    />
-                  </div>
-                  
+                <div className="relative">
+                  <Webcam
+                    ref={webcamRef}
+                    audio={false}
+                    screenshotFormat="image/jpeg"
+                    className="w-full rounded-lg"
+                    style={{ width: '100%', height: 'auto', maxHeight: '60vh', borderRadius: '0.5rem', objectFit: 'cover' }}
+                    videoConstraints={{
+                      facingMode: 'environment',
+                      width: captureMode === 'long' ? 1920 : 1280,
+                      height: captureMode === 'long' ? 1080 : 720
+                    }}
+                  />
+
                   {captureMode === 'long' && (
                     <div className="absolute inset-0 border-2 border-dashed border-primary rounded-lg pointer-events-none">
                       <div className="absolute top-2 left-2 bg-primary text-white px-2 py-1 rounded text-xs">
@@ -1067,38 +1076,43 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                   )}
                 </div>
 
-                {/* Capture Button Area - Fixed height to ensure visibility */}
-                <div className="flex-shrink-0 pt-4 border-t border-gray-200 bg-white">
-                  <div className="flex justify-center pb-2">
-                    {captureMode === 'normal' ? (
-                      <button
-                        onClick={capture}
-                        className="bg-primary text-white px-8 py-4 rounded-full font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
-                      >
-                        <Camera className="h-5 w-5" />
-                        <span>Capture</span>
-                      </button>
-                    ) : (
-                      <button
-                        onMouseDown={startLongCapture}
-                        onMouseUp={stopLongCapture}
-                        onTouchStart={startLongCapture}
-                        onTouchEnd={stopLongCapture}
-                        disabled={isCapturingLong && captureProgress >= 100}
-                        className={`px-8 py-4 rounded-full font-medium transition-colors duration-200 flex items-center space-x-2 ${
-                          isCapturingLong 
-                            ? 'bg-accent-red text-white' 
-                            : 'bg-primary text-white hover:bg-primary/90'
-                        }`}
-                      >
-                        <Maximize2 className="h-5 w-5" />
-                        <span>
-                          {isCapturingLong ? 'Capturing...' : 'Hold to Capture Long Receipt'}
-                        </span>
-                      </button>
-                    )}
-                  </div>
+                <div className="flex justify-center mt-6">
+                  {captureMode === 'normal' ? (
+                    <button
+                      onClick={capture}
+                      className="bg-primary text-white px-8 py-4 rounded-full font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <Camera className="h-5 w-5" />
+                      <span>Capture</span>
+                    </button>
+                  ) : (
+                    <button
+                      onMouseDown={startLongCapture}
+                      onMouseUp={stopLongCapture}
+                      onTouchStart={startLongCapture}
+                      onTouchEnd={stopLongCapture}
+                      disabled={isCapturingLong && captureProgress >= 100}
+                      className={`px-8 py-4 rounded-full font-medium transition-colors duration-200 flex items-center space-x-2 ${
+                        isCapturingLong 
+                          ? 'bg-accent-red text-white' 
+                          : 'bg-primary text-white hover:bg-primary/90'
+                      }`}
+                    >
+                      <Maximize2 className="h-5 w-5" />
+                      <span>
+                        {isCapturingLong ? 'Capturing...' : 'Hold to Capture Long Receipt'}
+                      </span>
+                    </button>
+                  )}
                 </div>
+
+                {captureMode === 'long' && (
+                  <div className="mt-4 text-center">
+                    <p className="text-sm text-text-secondary">
+                      Hold the button and slowly move your camera across the entire length of the receipt
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

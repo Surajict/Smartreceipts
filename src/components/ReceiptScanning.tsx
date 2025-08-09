@@ -988,7 +988,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
         {/* Camera Modal */}
         {showCamera && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
               {/* Header */}
               <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 flex-shrink-0">
                 <h2 className="text-lg sm:text-xl font-bold text-text-primary">
@@ -1030,8 +1030,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                   </div>
                 </div>
 
-                {/* Camera Container */}
-                <div className="flex-1 relative min-h-0 mb-4">
+                {/* Camera Container - Fixed height to prevent overlap */}
+                <div className="flex-1 relative min-h-0 mb-6" style={{ maxHeight: 'calc(100vh - 300px)' }}>
                   <div className="w-full h-full rounded-lg overflow-hidden bg-gray-100">
                     <Webcam
                       ref={webcamRef}
@@ -1068,9 +1068,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                   )}
                 </div>
 
-                {/* Capture Button Area */}
-                <div className="flex-shrink-0 pt-4 border-t border-gray-200">
-                  <div className="flex justify-center">
+                {/* Capture Button Area - Fixed height to ensure visibility */}
+                <div className="flex-shrink-0 pt-4 border-t border-gray-200 bg-white">
+                  <div className="flex justify-center pb-2">
                     {captureMode === 'normal' ? (
                       <button
                         onClick={capture}
@@ -1099,14 +1099,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                       </button>
                     )}
                   </div>
-
-                  {captureMode === 'long' && (
-                    <div className="mt-4 text-center">
-                      <p className="text-sm text-text-secondary">
-                        Hold the button and slowly move your camera across the entire length of the receipt
-                      </p>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

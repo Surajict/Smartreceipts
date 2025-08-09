@@ -96,6 +96,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
   const captureIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const frameCountRef = useRef(0);
   const processReceiptButtonRef = useRef<HTMLButtonElement>(null);
+  const receiptImageHeadingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     checkOpenAIAvailability();
@@ -157,6 +158,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
       setTimeout(() => {
         processReceiptButtonRef.current?.focus({ preventScroll: true } as any);
         ensureProcessButtonVisible();
+        scrollReceiptHeadingIntoView();
       }, 0);
     }
   }, [webcamRef]);
@@ -870,6 +872,18 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
     }
   }, []);
 
+  const scrollReceiptHeadingIntoView = useCallback(() => {
+    const heading = receiptImageHeadingRef.current;
+    if (!heading) return;
+    try {
+      heading.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+    } catch (_) {
+      const rect = heading.getBoundingClientRect();
+      const offset = rect.top - 16; // small top padding
+      window.scrollBy({ top: offset, behavior: 'smooth' });
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-background font-['Inter',sans-serif] flex flex-col">
       {/* Header */}
@@ -1220,7 +1234,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
           <div className="grid lg:grid-cols-2 gap-8 mb-8">
             {/* Left Column - Image Preview */}
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
-              <h2 className="text-xl font-bold text-text-primary mb-6">Receipt Image</h2>
+              <h2 ref={receiptImageHeadingRef} className="text-xl font-bold text-text-primary mb-6">Receipt Image</h2>
               
               <div className="relative mb-6">
                 <img

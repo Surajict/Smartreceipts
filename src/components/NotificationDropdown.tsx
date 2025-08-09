@@ -117,46 +117,45 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ userId }) =
         )}
       </button>
       {showDropdown && (
-        <div
-          className="absolute right-0 mt-2 w-96 max-w-[calc(100vw-1rem)] bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 mobile-dropdown-fix"
-        >
-          <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="font-medium text-text-primary">Notifications</h3>
+        <div className="mobile-dropdown-fix fixed sm:absolute right-2 sm:right-0 top-16 sm:top-auto sm:mt-2 left-2 sm:left-auto sm:w-72 md:w-80 lg:w-96 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 max-w-none sm:max-w-[calc(100vw-1rem)]">
+          <div className="px-3 sm:px-4 py-2 border-b border-gray-200 flex items-center justify-between">
+            <h3 className="font-medium text-text-primary text-sm sm:text-base">Notifications</h3>
             {notifications.length > 0 && (
               <button
                 onClick={handleArchiveAll}
                 disabled={archivingAll}
-                className="text-xs text-primary hover:underline disabled:opacity-50"
+                className="text-xs text-primary hover:underline disabled:opacity-50 flex-shrink-0"
               >
                 {archivingAll ? 'Clearing...' : 'Clear All'}
               </button>
             )}
           </div>
-          <div className="max-h-[60vh] sm:max-h-80 overflow-y-auto overscroll-contain">
+          <div className="max-h-48 xs:max-h-56 sm:max-h-80 overflow-y-auto">
             {loading ? (
-              <div className="px-4 py-8 text-center text-text-secondary">
-                <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                Loading...
+              <div className="px-3 sm:px-4 py-6 sm:py-8 text-center text-text-secondary">
+                <div className="text-sm">Loading...</div>
               </div>
             ) : error ? (
-              <div className="px-4 py-8 text-center text-red-500">{error}</div>
+              <div className="px-3 sm:px-4 py-6 sm:py-8 text-center text-red-500">
+                <div className="text-sm">{error}</div>
+              </div>
             ) : notifications.length === 0 ? (
-              <div className="px-4 py-8 text-center">
-                <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                <p className="text-sm text-text-secondary">No notifications at this time</p>
+              <div className="px-3 sm:px-4 py-6 sm:py-8 text-center">
+                <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-500 mx-auto mb-2" />
+                <p className="text-xs sm:text-sm text-text-secondary">No notifications at this time</p>
               </div>
             ) : (
               notifications.map((n) => (
-                <div key={n.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-text-primary mb-1">{n.message}</div>
+                <div key={n.id} className="px-3 sm:px-4 py-2 sm:py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 flex items-start justify-between min-w-0">
+                  <div className="flex-1 min-w-0 pr-2">
+                    <div className="text-xs sm:text-sm font-medium text-text-primary mb-1 break-words">{n.message}</div>
                     <div className="text-xs text-text-secondary">
-                      {n.type.replace('_', ' ')} • {new Date(n.created_at).toLocaleString()}
+                      {n.type.replace('_', ' ')} • {new Date(n.created_at).toLocaleDateString()}
                     </div>
                   </div>
                   <button
                     onClick={() => handleArchiveNotification(n.id)}
-                    className="ml-4 text-xs text-primary hover:underline"
+                    className="text-xs text-primary hover:underline flex-shrink-0"
                   >
                     Clear
                   </button>

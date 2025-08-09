@@ -1015,10 +1015,10 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
 
       {/* Receipt Detail Modal */}
       {showReceiptModal && selectedReceipt && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-card max-w-2xl w-full max-h-[90vh] overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto p-0 sm:bg-black sm:bg-opacity-50 sm:flex sm:items-center sm:justify-center sm:p-4">
+          <div className="w-full min-h-[100svh] bg-white sm:rounded-2xl sm:shadow-card sm:max-w-2xl sm:min-h-0 sm:overflow-hidden sm:border sm:border-gray-200">
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className="sticky top-0 z-10 bg-white px-4 py-4 sm:p-6 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-2xl font-bold text-text-primary">Receipt Details</h2>
               <button
                 onClick={() => {
@@ -1032,7 +1032,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
             </div>
 
             {/* Modal Content */}
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+            <div className="px-4 py-4 sm:p-6 overflow-y-auto sm:max-h-[calc(90vh-140px)]">
               <div className="grid md:grid-cols-2 gap-6">
                 {/* Receipt Image */}
                 <div>
@@ -1284,7 +1284,8 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
             </div>
 
             {/* Modal Actions */}
-            <div className="flex items-center justify-between p-6 border-t border-gray-200">
+            {/* Desktop/Tablet actions */}
+            <div className="hidden sm:flex items-center justify-between p-6 border-t border-gray-200">
               <button
                 onClick={() => handleDeleteReceipt(selectedReceipt)}
                 disabled={isDeleting === selectedReceipt.id}
@@ -1329,6 +1330,57 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                     <span>Edit</span>
                   </button>
                 )}
+              </div>
+            </div>
+
+            {/* Mobile sticky actions */}
+            <div className="sm:hidden sticky bottom-0 z-20 bg-white/98 backdrop-blur border-t border-gray-200 px-4 pb-[max(env(safe-area-inset-bottom),12px)] pt-3">
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => handleDeleteReceipt(selectedReceipt)}
+                  disabled={isDeleting === selectedReceipt.id}
+                  className="flex items-center space-x-2 text-red-600 hover:text-red-700 transition-colors duration-200 disabled:opacity-50"
+                >
+                  {isDeleting === selectedReceipt.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  <span>Delete</span>
+                </button>
+                <div className="flex items-center space-x-3">
+                  <button
+                    className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
+                    onClick={handleDownloadReceiptImage}
+                  >
+                    <Download className="h-4 w-4" />
+                    <span>Download</span>
+                  </button>
+                  {isEditMode ? (
+                    <>
+                      <button
+                        className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200"
+                        onClick={handleSaveEdit}
+                        disabled={isSaving}
+                      >
+                        <Edit3 className="h-4 w-4" />
+                        <span>{isSaving ? 'Saving...' : 'Save'}</span>
+                      </button>
+                      <button
+                        className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors duration-200 border border-gray-300 px-4 py-2 rounded-lg"
+                        onClick={handleCancelEdit}
+                        disabled={isSaving}
+                      >
+                        <span>Cancel</span>
+                      </button>
+                    </>
+                  ) : (
+                    <button className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors duration-200" onClick={handleEditClick}>
+                      <Edit3 className="h-4 w-4" />
+                      <span>Edit</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

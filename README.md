@@ -294,6 +294,24 @@ Smart_Receipts_Suraj_V5/
 └── README.md                     # This file
 ```
 
+## 🧭 Navigation & Routes
+
+The app uses React Router with the following primary routes:
+
+- `/` Home/Landing
+- `/login` and `/signup` Authentication screens
+- `/dashboard` Main dashboard
+- `/scan` Receipt scanning and upload (`ReceiptScanning`)
+- `/profile` Profile and settings (`ProfilePage`)
+- `/library` Your saved receipts (`MyLibrary`)
+- `/warranty` Warranty manager
+- `/subscription` Subscription management
+- `/admin` Admin portal
+
+Notes:
+- The user avatar menu present in page headers provides quick access to “Profile Settings” and “Sign Out”.
+- 2025‑08‑09: The “Profile Settings” item in the `ReceiptScanning` header now correctly routes to `/profile` (previously navigated to the dashboard).
+
 ## 🎮 How to Use the App
 
 ### **1. Create Account & Login**
@@ -819,6 +837,10 @@ supabase functions deploy smart-search
 ---
 
 ## 🔄 Version History
+
+### **v5.3.1 (2025-08-09) - Navigation Fix & Minor UI Polishing** (NEW!)
+- ✅ Fixed routing in `ReceiptScanning` header: “Profile Settings” now navigates to `ProfilePage` (`/profile`).
+- 🧭 Documented app routes in README for easier onboarding.
 
 ### **v5.3.0 (2025-07-14) - Notifications, OAuth & Billing Scaffold** (NEW!)
 - 🔔 Push notifications via service worker and Edge Function

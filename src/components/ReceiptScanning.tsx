@@ -109,10 +109,10 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
         // Focus on the appropriate warranty field based on form type
         if (extractedData?.products && extractedData.products.length > 0) {
           // Multi-product form - focus on first product's warranty field
-          firstProductWarrantyRef.current?.focus();
+          firstProductWarrantyRef.current?.focus({ preventScroll: true } as any);
         } else {
           // Single product form - focus on main warranty field
-          warrantyPeriodRef.current?.focus();
+          warrantyPeriodRef.current?.focus({ preventScroll: true } as any);
         }
       }, 100);
     }
@@ -154,7 +154,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
       setProcessingStep('');
 
       // Focus the Process Receipt button as soon as preview loads
-      setTimeout(() => processReceiptButtonRef.current?.focus(), 0);
+      setTimeout(() => processReceiptButtonRef.current?.focus({ preventScroll: true } as any), 0);
     }
   }, [webcamRef]);
 
@@ -243,6 +243,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
           setCapturedImage(e.target?.result as string);
           setIsProcessing(false);
           setProcessingStep('');
+          setTimeout(() => processReceiptButtonRef.current?.focus({ preventScroll: true } as any), 0);
         };
         reader.readAsDataURL(file);
         return;
@@ -263,7 +264,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
         setCapturedImage(dataUrl);
         setIsProcessing(false);
         setProcessingStep('');
-        setTimeout(() => processReceiptButtonRef.current?.focus(), 0);
+        setTimeout(() => processReceiptButtonRef.current?.focus({ preventScroll: true } as any), 0);
         return;
       }
       if (
@@ -291,7 +292,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
         setCapturedImage(dataUrl);
         setIsProcessing(false);
         setProcessingStep('');
-        setTimeout(() => processReceiptButtonRef.current?.focus(), 0);
+        setTimeout(() => processReceiptButtonRef.current?.focus({ preventScroll: true } as any), 0);
         return;
       }
       setError('Unsupported file type. Please upload an image, PDF, or Word document.');

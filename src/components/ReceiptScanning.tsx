@@ -1030,7 +1030,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                 </div>
 
                 {/* Camera Container - 65% height cap to prevent overlap */}
-                <div className="relative mb-6 flex-shrink-0" style={{ height: 'min(55vh, calc(100% - 200px))' }}>
+                <div className="relative mb-6 flex-shrink-0" style={{ height: 'min(36vh, calc(100% - 240px))' }}>
                   <div className="w-full h-full rounded-lg overflow-hidden bg-gray-100">
                     <Webcam
                       ref={webcamRef}

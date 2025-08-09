@@ -1173,17 +1173,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                 )}
               </div>
 
-              {/* Settings Button */}
-              <button
-                onClick={() => {
-                  onShowProfile();
-                }}
-                className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
-                title="Settings"
-              >
-                <Settings className="h-6 w-6" />
-              </button>
-
               {/* User Menu */}
               <div className="relative">
                 <button

@@ -476,20 +476,6 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard, onShowPr
               {/* Notifications */}
               {user && <NotificationDropdown userId={user.id} />}
 
-              {/* Settings Button */}
-              <button
-                onClick={() => {
-                  // Navigate to profile settings - for now using onBackToDashboard as placeholder
-                  onBackToDashboard();
-                }}
-                className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
-                title="Settings"
-              >
-                <Settings className="h-6 w-6" />
-              </button>
-
-
-
               {/* User Menu */}
               <div className="relative">
                 <button

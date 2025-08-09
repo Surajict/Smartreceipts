@@ -154,7 +154,10 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
       setProcessingStep('');
 
       // Focus the Process Receipt button as soon as preview loads
-      setTimeout(() => processReceiptButtonRef.current?.focus({ preventScroll: true } as any), 0);
+      setTimeout(() => {
+        processReceiptButtonRef.current?.focus({ preventScroll: true } as any);
+        ensureProcessButtonVisible();
+      }, 0);
     }
   }, [webcamRef]);
 
@@ -853,6 +856,19 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
     });
     setShowExtractedForm(true);
   };
+
+  const ensureProcessButtonVisible = useCallback(() => {
+    const button = processReceiptButtonRef.current;
+    if (!button) return;
+    try {
+      button.scrollIntoView({ behavior: 'smooth', block: 'end', inline: 'nearest' });
+    } catch (_) {
+      // Fallback for older browsers
+      const rect = button.getBoundingClientRect();
+      const offset = Math.max(0, rect.bottom - window.innerHeight + 16);
+      if (offset > 0) window.scrollBy({ top: offset, behavior: 'smooth' });
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-background font-['Inter',sans-serif] flex flex-col">

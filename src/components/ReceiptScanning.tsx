@@ -1000,7 +1000,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
         {/* Camera Modal */}
         {showCamera && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card max-w-2xl w-full max-h-[95vh] overflow-y-auto">
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card w-full max-w-lg mx-auto max-h-[95vh] overflow-y-auto">
               <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
                 <h2 className="text-lg sm:text-xl font-bold text-text-primary">
                   {captureMode === 'long' ? 'Capture Long Receipt' : 'Capture Receipt'}
@@ -1040,13 +1040,17 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                   </div>
                 </div>
 
-                <div className="relative">
+                {/* Fixed size camera container - matches the green dotted border area */}
+                <div className="relative w-full mx-auto" style={{ 
+                  height: '320px',
+                  maxWidth: '480px'
+                }}>
                   <Webcam
                     ref={webcamRef}
                     audio={false}
                     screenshotFormat="image/jpeg"
-                    className="w-full rounded-lg"
-                    style={{ width: '100%', height: 'auto', maxHeight: '60vh', borderRadius: '0.5rem', objectFit: 'cover' }}
+                    className="w-full h-full rounded-lg object-cover"
+                    style={{ borderRadius: '0.5rem' }}
                     videoConstraints={{
                       facingMode: 'environment',
                       width: captureMode === 'long' ? 1920 : 1280,

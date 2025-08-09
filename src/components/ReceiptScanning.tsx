@@ -17,8 +17,7 @@ import {
   Edit3,
   RotateCcw,
   Plus,
-  Maximize2,
-  Settings
+  Maximize2
 } from 'lucide-react';
 import { signOut, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
@@ -1030,8 +1029,8 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                   </div>
                 </div>
 
-                {/* Camera Container - Fixed height to prevent overlap */}
-                <div className="flex-1 relative min-h-0 mb-6" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+                {/* Camera Container - 65% height cap to prevent overlap */}
+                <div className="relative mb-6 flex-shrink-0" style={{ height: 'min(55vh, calc(100% - 200px))' }}>
                   <div className="w-full h-full rounded-lg overflow-hidden bg-gray-100">
                     <Webcam
                       ref={webcamRef}

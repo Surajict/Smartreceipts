@@ -95,6 +95,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
   const firstProductWarrantyRef = useRef<HTMLInputElement>(null);
   const captureIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const frameCountRef = useRef(0);
+  const processReceiptButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     checkOpenAIAvailability();
@@ -151,6 +152,9 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
       setShowExtractedForm(false);
       setIsValidating(false);
       setProcessingStep('');
+
+      // Focus the Process Receipt button as soon as preview loads
+      setTimeout(() => processReceiptButtonRef.current?.focus(), 0);
     }
   }, [webcamRef]);
 
@@ -259,6 +263,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
         setCapturedImage(dataUrl);
         setIsProcessing(false);
         setProcessingStep('');
+        setTimeout(() => processReceiptButtonRef.current?.focus(), 0);
         return;
       }
       if (
@@ -286,6 +291,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
         setCapturedImage(dataUrl);
         setIsProcessing(false);
         setProcessingStep('');
+        setTimeout(() => processReceiptButtonRef.current?.focus(), 0);
         return;
       }
       setError('Unsupported file type. Please upload an image, PDF, or Word document.');
@@ -1217,6 +1223,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                 <button
                   onClick={processReceipt}
                   disabled={isProcessing}
+                  ref={processReceiptButtonRef}
                   className="flex-1 bg-primary text-white p-4 rounded-xl font-medium hover:bg-primary/90 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
                   {isProcessing ? (

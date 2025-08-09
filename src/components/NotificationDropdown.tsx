@@ -117,9 +117,11 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ userId }) =
         )}
       </button>
       {showDropdown && (
+
         <div className="mobile-dropdown-fix fixed sm:absolute right-2 sm:right-0 top-16 sm:top-auto sm:mt-2 left-2 sm:left-auto sm:w-72 md:w-80 lg:w-96 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 max-w-none sm:max-w-[calc(100vw-1rem)]">
           <div className="px-3 sm:px-4 py-2 border-b border-gray-200 flex items-center justify-between">
             <h3 className="font-medium text-text-primary text-sm sm:text-base">Notifications</h3>
+
             {notifications.length > 0 && (
               <button
                 onClick={handleArchiveAll}
@@ -130,7 +132,9 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ userId }) =
               </button>
             )}
           </div>
+
           <div className="max-h-48 xs:max-h-56 sm:max-h-80 overflow-y-auto">
+
             {loading ? (
               <div className="px-3 sm:px-4 py-6 sm:py-8 text-center text-text-secondary">
                 <div className="text-sm">Loading...</div>

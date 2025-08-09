@@ -93,7 +93,6 @@ const AppContent: React.FC = () => {
           <MyLibrary
             onBackToDashboard={() => window.location.href = '/dashboard'}
             onShowReceiptScanning={() => window.location.href = '/scan'}
-            onShowProfile={() => window.location.href = '/profile'}
           />
         ) : (
           <Navigate to="/login" replace />
@@ -104,7 +103,6 @@ const AppContent: React.FC = () => {
         user ? (
           <WarrantyPage
             onBackToDashboard={() => window.location.href = '/dashboard'}
-            onShowProfile={() => window.location.href = '/profile'}
           />
         ) : (
           <Navigate to="/login" replace />
@@ -136,7 +134,6 @@ const AppContent: React.FC = () => {
           <ReceiptScanning
             onBackToDashboard={() => window.location.href = '/dashboard'}
             onReceiptSaved={handleReceiptSaved}
-            onShowProfile={() => window.location.href = '/profile'}
           />
         ) : (
           <Navigate to="/login" replace />

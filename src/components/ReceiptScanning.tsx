@@ -999,23 +999,23 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
 
         {/* Camera Modal */}
         {showCamera && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card w-full max-w-lg mx-auto max-h-[95vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+            <div className="bg-white w-full h-full sm:w-full sm:max-w-lg sm:h-auto sm:max-h-[95vh] sm:rounded-2xl shadow-card sm:mx-auto sm:overflow-y-auto flex flex-col">
+              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 flex-shrink-0">
                 <h2 className="text-lg sm:text-xl font-bold text-text-primary">
                   {captureMode === 'long' ? 'Capture Long Receipt' : 'Capture Receipt'}
                 </h2>
                 <button
                   onClick={() => setShowCamera(false)}
-                  className="text-text-secondary hover:text-text-primary transition-colors duration-200"
+                  className="text-text-secondary hover:text-text-primary transition-colors duration-200 p-2"
                 >
                   <X className="h-6 w-6" />
                 </button>
               </div>
 
-              <div className="p-4 sm:p-6">
+              <div className="flex-1 flex flex-col p-4 sm:p-6 min-h-0">
                 {/* Capture Mode Toggle */}
-                <div className="flex justify-center mb-4">
+                <div className="flex justify-center mb-4 flex-shrink-0">
                   <div className="bg-gray-100 rounded-lg p-1 flex">
                     <button
                       onClick={() => setCaptureMode('normal')}
@@ -1040,17 +1040,13 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                   </div>
                 </div>
 
-                {/* Fixed size camera container - matches the green dotted border area */}
-                <div className="relative w-full mx-auto" style={{ 
-                  height: '420px',
-                  maxWidth: '480px'
-                }}>
+                {/* Camera Container - Full height on mobile, fixed on desktop */}
+                <div className="relative w-full mx-auto min-h-0 h-full sm:h-[420px] bg-gray-100 rounded-lg overflow-hidden">
                   <Webcam
                     ref={webcamRef}
                     audio={false}
                     screenshotFormat="image/jpeg"
-                    className="w-full h-full rounded-lg object-cover"
-                    style={{ borderRadius: '0.5rem' }}
+                    className="w-full h-full object-cover"
                     videoConstraints={{
                       facingMode: 'environment',
                       width: captureMode === 'long' ? 1920 : 1280,
@@ -1080,11 +1076,12 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                   )}
                 </div>
 
-                <div className="flex justify-center mt-6">
+                {/* Capture Button Area */}
+                <div className="flex justify-center mt-6 flex-shrink-0">
                   {captureMode === 'normal' ? (
                     <button
                       onClick={capture}
-                      className="bg-primary text-white px-8 py-4 rounded-full font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2"
+                      className="bg-primary text-white px-8 py-4 rounded-full font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center space-x-2 w-full sm:w-auto justify-center"
                     >
                       <Camera className="h-5 w-5" />
                       <span>Capture</span>
@@ -1096,7 +1093,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                       onTouchStart={startLongCapture}
                       onTouchEnd={stopLongCapture}
                       disabled={isCapturingLong && captureProgress >= 100}
-                      className={`px-8 py-4 rounded-full font-medium transition-colors duration-200 flex items-center space-x-2 ${
+                      className={`px-8 py-4 rounded-full font-medium transition-colors duration-200 flex items-center space-x-2 w-full sm:w-auto justify-center ${
                         isCapturingLong 
                           ? 'bg-accent-red text-white' 
                           : 'bg-primary text-white hover:bg-primary/90'
@@ -1111,7 +1108,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                 </div>
 
                 {captureMode === 'long' && (
-                  <div className="mt-4 text-center">
+                  <div className="mt-4 text-center flex-shrink-0">
                     <p className="text-sm text-text-secondary">
                       Hold the button and slowly move your camera across the entire length of the receipt
                     </p>

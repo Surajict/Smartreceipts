@@ -30,9 +30,11 @@ import { useSubscription } from '../contexts/SubscriptionContext';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { useLocation } from 'react-router-dom';
 import Footer from './Footer';
+import NotificationDropdown from './NotificationDropdown';
 
 interface WarrantyPageProps {
   onBackToDashboard: () => void;
+  onShowProfile?: () => void;
 }
 
 interface WarrantyItem {
@@ -56,7 +58,7 @@ interface WarrantyItem {
 type FilterType = 'all' | 'active' | 'expiring' | 'expired';
 type SortType = 'daysLeft' | 'purchaseDate' | 'itemName' | 'amount';
 
-const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
+const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard, onShowProfile }) => {
   const { user, profilePicture } = useUser();
   const { subscriptionInfo } = useSubscription();
   const [warrantyItems, setWarrantyItems] = useState<WarrantyItem[]>([]);
@@ -472,11 +474,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
             {/* Header Actions */}
             <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Notifications */}
-              <div className="relative">
-                <button className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200">
-                  <Bell className="h-6 w-6" />
-                </button>
-              </div>
+              {user && <NotificationDropdown userId={user.id} />}
 
               {/* Settings Button */}
               <button
@@ -526,8 +524,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard }) => {
                     </div>
                     <button
                       onClick={() => {
-                        // Navigate to profile settings - for now using onBackToDashboard as placeholder
-                        onBackToDashboard();
+                        onShowProfile ? onShowProfile() : onBackToDashboard();
                         setShowUserMenu(false);
                       }}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"

@@ -37,10 +37,12 @@ import { useUser } from '../contexts/UserContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import Footer from './Footer';
+import NotificationDropdown from './NotificationDropdown';
 
 interface MyLibraryProps {
   onBackToDashboard: () => void;
   onShowReceiptScanning: () => void;
+  onShowProfile?: () => void;
 }
 
 interface Receipt {
@@ -65,7 +67,7 @@ type ViewMode = 'grid' | 'list';
 type SortField = 'date' | 'amount' | 'name';
 type SortOrder = 'asc' | 'desc';
 
-const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptScanning }) => {
+const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptScanning, onShowProfile }) => {
   const location = useLocation();
   const { user, profilePicture } = useUser();
   const { subscriptionInfo } = useSubscription();
@@ -655,92 +657,12 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
             {/* Header Actions */}
             <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Notifications */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowNotifications(!showNotifications)}
-                  className="relative p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
-                >
-                  <Bell className="h-6 w-6" />
-                  {alertsCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-accent-red text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
-                      {alertsCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* Notifications Dropdown */}
-                {showNotifications && (
-                  <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-lg shadow-card border border-gray-200 py-2 z-50 max-h-96 overflow-y-auto max-w-[calc(100vw-2rem)] mr-2">
-                    <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200">
-                      <h3 className="font-medium text-text-primary">Notifications</h3>
-                      {notifications.length > 0 && (
-                        <button
-                          onClick={handleArchiveAllNotifications}
-                          className="text-xs text-primary hover:text-primary/80 transition-colors duration-200"
-                        >
-                          Clear All
-                        </button>
-                      )}
-                    </div>
-                    
-                    {notificationsLoading ? (
-                      <div className="px-4 py-8 text-center">
-                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-text-secondary" />
-                        <p className="text-sm text-text-secondary">Loading notifications...</p>
-                      </div>
-                    ) : notificationsError ? (
-                      <div className="px-4 py-8 text-center">
-                        <AlertCircle className="h-6 w-6 mx-auto mb-2 text-red-500" />
-                        <p className="text-sm text-red-600">{notificationsError}</p>
-                      </div>
-                    ) : notifications.length === 0 ? (
-                      <div className="px-4 py-8 text-center">
-                        <Bell className="h-6 w-6 mx-auto mb-2 text-text-secondary" />
-                        <p className="text-sm text-text-secondary">No notifications</p>
-                      </div>
-                    ) : (
-                      <div className="max-h-64 overflow-y-auto">
-                        {notifications.map((notification) => (
-                          <div
-                            key={notification.id}
-                            className={`px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 ${
-                              !notification.read ? 'bg-blue-50' : ''
-                            }`}
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm text-text-primary mb-1">
-                                  {notification.message}
-                                </p>
-                                <p className="text-xs text-text-secondary">
-                                  {new Date(notification.created_at).toLocaleDateString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })}
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => handleArchiveNotification(notification.id)}
-                                className="ml-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              {user && <NotificationDropdown userId={user.id} />}
 
               {/* Settings Button */}
               <button
                 onClick={() => {
-                  // Navigate to profile settings - for now using onBackToDashboard as placeholder
-                  onBackToDashboard();
+                  onShowProfile ? onShowProfile() : onBackToDashboard();
                 }}
                 className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
                 title="Settings"

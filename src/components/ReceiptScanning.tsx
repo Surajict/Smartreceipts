@@ -1042,7 +1042,7 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
 
                 {/* Fixed size camera container - matches the green dotted border area */}
                 <div className="relative w-full mx-auto" style={{ 
-                  height: '320px',
+                  height: '420px',
                   maxWidth: '480px'
                 }}>
                   <Webcam

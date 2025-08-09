@@ -136,6 +136,7 @@ const AppContent: React.FC = () => {
           <ReceiptScanning
             onBackToDashboard={() => window.location.href = '/dashboard'}
             onReceiptSaved={handleReceiptSaved}
+            onShowProfile={() => window.location.href = '/profile'}
           />
         ) : (
           <Navigate to="/login" replace />

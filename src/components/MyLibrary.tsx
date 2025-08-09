@@ -706,8 +706,7 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                     </div>
                     <button
                       onClick={() => {
-                        // Navigate to profile settings - for now using onBackToDashboard as placeholder
-                        onBackToDashboard();
+                        onShowProfile ? onShowProfile() : onBackToDashboard();
                         setShowUserMenu(false);
                       }}
                       className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"

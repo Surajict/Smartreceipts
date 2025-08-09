@@ -173,22 +173,20 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanInfo> 
   free: {
     id: 'free',
     name: 'Free',
-    description: 'Perfect for occasional receipt scanning',
+    description: 'Smart Receipts Trial',
     price: 0,
     currency: 'AUD',
     interval: 'month',
     receiptsLimit: 5,
     features: [
       '5 receipts per month',
-      'Basic OCR scanning',
-      'Receipt storage',
       'Basic warranty tracking'
     ]
   },
   premium: {
     id: 'premium',
     name: 'Premium',
-    description: 'Unlimited scanning for power users',
+    description: 'Unlimited scanning for all',
     price: 7,
     currency: 'AUD',
     interval: 'month',
@@ -196,11 +194,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanInfo> 
     popular: true,
     features: [
       'Unlimited receipts',
-      'Advanced AI processing',
-      'Smart search with RAG',
       'Advanced warranty alerts',
-      'Priority support',
-      'Export to multiple formats'
+      'Priority support'
     ]
   }
 };

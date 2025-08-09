@@ -882,18 +882,6 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
             <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Notifications */}
               {user && <NotificationDropdown userId={user.id} />}
-              
-              {/* Settings Button */}
-              <button
-                onClick={() => {
-                  onShowProfile ? onShowProfile() : onBackToDashboard();
-                }}
-                className="p-2 text-text-secondary hover:text-text-primary transition-colors duration-200"
-                title="Settings"
-              >
-                <Settings className="h-6 w-6" />
-              </button>
-
 
               {/* User Menu */}
               <div className="relative">

@@ -10,6 +10,22 @@ body {
   overflow-x: hidden;
 }
 
+/* Dark mode base overrides */
+.dark body {
+  background-color: #0f172a; /* slate-900 */
+  color: #e5e7eb; /* gray-200 */
+}
+
+/* Common utility overrides for dark mode to avoid refactoring existing classes */
+.dark .bg-white { background-color: #111827 !important; } /* gray-900 */
+.dark .bg-background { background-color: #0f172a !important; }
+.dark .text-text-primary { color: #e5e7eb !important; }
+.dark .text-text-secondary { color: #9ca3af !important; }
+.dark .border-gray-200 { border-color: #374151 !important; }
+.dark .card { background-color: #111827 !important; }
+.dark .shadow-card { box-shadow: 0 6px 16px rgba(0,0,0,0.6) !important; }
+.dark .hover\:bg-gray-100:hover { background-color: #1f2937 !important; }
+
 /* Prevent horizontal overflow globally */
 html, body {
   max-width: 100vw;

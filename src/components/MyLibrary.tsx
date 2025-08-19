@@ -37,6 +37,8 @@ import { useUser } from '../contexts/UserContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import Footer from './Footer';
+import { useTheme } from '../contexts/ThemeContext';
+import { Moon, Sun } from 'lucide-react';
 import NotificationDropdown from './NotificationDropdown';
 
 interface MyLibraryProps {
@@ -70,6 +72,7 @@ type SortOrder = 'asc' | 'desc';
 const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptScanning, onShowProfile }) => {
   const location = useLocation();
   const { user, profilePicture } = useUser();
+  const { theme, toggleTheme } = useTheme();
   const { subscriptionInfo } = useSubscription();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]);
@@ -700,6 +703,14 @@ const MyLibrary: React.FC<MyLibraryProps> = ({ onBackToDashboard, onShowReceiptS
                     >
                       <User className="h-4 w-4" />
                       <span>Profile Settings</span>
+                    </button>
+
+                    <button
+                      onClick={() => { toggleTheme(); setShowUserMenu(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                      <span>Night Mode {theme === 'dark' ? 'On' : 'Off'}</span>
                     </button>
 
                     <button

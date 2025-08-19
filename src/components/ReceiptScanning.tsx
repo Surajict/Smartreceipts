@@ -17,11 +17,14 @@ import {
   Edit3,
   RotateCcw,
   Plus,
-  Maximize2
+  Maximize2,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { signOut, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWithGPT } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { extractTextFromImage } from '../services/ocrService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { ExtractedReceiptData } from '../types/receipt';
@@ -51,6 +54,7 @@ type InputMode = 'capture' | 'upload' | 'manual';
 
 const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, onShowProfile, onReceiptSaved }) => {
   const { user, profilePicture } = useUser();
+  const { theme, toggleTheme } = useTheme();
   const { subscriptionInfo } = useSubscription();
   const [inputMode, setInputMode] = useState<InputMode>('capture');
   const [captureMode, setCaptureMode] = useState<CaptureMode>('normal');
@@ -960,6 +964,14 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
                     >
                       <User className="h-4 w-4" />
                       <span>Profile Settings</span>
+                    </button>
+
+                    <button
+                      onClick={() => { toggleTheme(); setShowUserMenu(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                      <span>Night Mode {theme === 'dark' ? 'On' : 'Off'}</span>
                     </button>
 
                     <button

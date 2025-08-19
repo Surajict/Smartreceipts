@@ -823,6 +823,147 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Markdown renderer component
+  const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
+    const renderMarkdown = (text: string) => {
+      // Split text into paragraphs
+      const paragraphs = text.split('\n\n').filter(p => p.trim());
+      
+      return paragraphs.map((paragraph, paragraphIndex) => {
+        // Process each line within the paragraph
+        const lines = paragraph.split('\n');
+        const processedLines = lines.map((line, lineIndex) => {
+          // Handle headings
+          if (line.startsWith('### ')) {
+            return (
+              <h3 key={`${paragraphIndex}-${lineIndex}`} className="text-lg font-bold text-text-primary mb-2 mt-4">
+                {line.replace('### ', '')}
+              </h3>
+            );
+          }
+          if (line.startsWith('## ')) {
+            return (
+              <h2 key={`${paragraphIndex}-${lineIndex}`} className="text-xl font-bold text-text-primary mb-2 mt-4">
+                {line.replace('## ', '')}
+              </h2>
+            );
+          }
+          if (line.startsWith('# ')) {
+            return (
+              <h1 key={`${paragraphIndex}-${lineIndex}`} className="text-2xl font-bold text-text-primary mb-3 mt-4">
+                {line.replace('# ', '')}
+              </h1>
+            );
+          }
+
+          // Handle numbered lists
+          if (/^\d+\.\s/.test(line)) {
+            const listContent = line.replace(/^\d+\.\s/, '');
+            return (
+              <div key={`${paragraphIndex}-${lineIndex}`} className="ml-4 mb-1">
+                <span className="font-medium text-primary">{line.match(/^\d+/)?.[0]}.</span>
+                <span className="ml-2">{processInlineFormatting(listContent)}</span>
+              </div>
+            );
+          }
+
+          // Handle bullet points
+          if (line.startsWith('• ') || line.startsWith('- ')) {
+            const bulletContent = line.replace(/^[•-]\s/, '');
+            return (
+              <div key={`${paragraphIndex}-${lineIndex}`} className="ml-4 mb-1 flex items-start">
+                <span className="text-primary font-bold mr-2 mt-0.5">•</span>
+                <span className="flex-1">{processInlineFormatting(bulletContent)}</span>
+              </div>
+            );
+          }
+
+          // Regular line
+          if (line.trim()) {
+            return (
+              <div key={`${paragraphIndex}-${lineIndex}`} className="mb-1">
+                {processInlineFormatting(line)}
+              </div>
+            );
+          }
+
+          return null;
+        }).filter(Boolean);
+
+        return (
+          <div key={paragraphIndex} className="mb-3">
+            {processedLines}
+          </div>
+        );
+      });
+    };
+
+    const processInlineFormatting = (text: string) => {
+      // Process bold text (**text** or __text__)
+      text = text.replace(/\*\*(.*?)\*\*/g, (_, content) => {
+        return `<BOLD>${content}</BOLD>`;
+      });
+      text = text.replace(/__(.*?)__/g, (_, content) => {
+        return `<BOLD>${content}</BOLD>`;
+      });
+
+      // Process italic text (*text* or _text_)
+      text = text.replace(/\*([^*]+)\*/g, (_, content) => {
+        return `<ITALIC>${content}</ITALIC>`;
+      });
+      text = text.replace(/_([^_]+)_/g, (_, content) => {
+        return `<ITALIC>${content}</ITALIC>`;
+      });
+
+      // Process underline text (~~text~~)
+      text = text.replace(/~~(.*?)~~/g, (_, content) => {
+        return `<UNDERLINE>${content}</UNDERLINE>`;
+      });
+
+      // Process inline code (`code`)
+      text = text.replace(/`([^`]+)`/g, (_, content) => {
+        return `<CODE>${content}</CODE>`;
+      });
+
+      // Split by our custom tags and render
+      const segments = text.split(/(<BOLD>.*?<\/BOLD>|<ITALIC>.*?<\/ITALIC>|<UNDERLINE>.*?<\/UNDERLINE>|<CODE>.*?<\/CODE>)/);
+
+      return segments.map((segment, index) => {
+        if (segment.startsWith('<BOLD>')) {
+          return (
+            <strong key={`bold-${index}`} className="font-bold text-text-primary">
+              {segment.replace(/<\/?BOLD>/g, '')}
+            </strong>
+          );
+        }
+        if (segment.startsWith('<ITALIC>')) {
+          return (
+            <em key={`italic-${index}`} className="italic text-text-primary">
+              {segment.replace(/<\/?ITALIC>/g, '')}
+            </em>
+          );
+        }
+        if (segment.startsWith('<UNDERLINE>')) {
+          return (
+            <u key={`underline-${index}`} className="underline text-text-primary">
+              {segment.replace(/<\/?UNDERLINE>/g, '')}
+            </u>
+          );
+        }
+        if (segment.startsWith('<CODE>')) {
+          return (
+            <code key={`code-${index}`} className="bg-gray-100 text-primary px-1 py-0.5 rounded text-xs font-mono">
+              {segment.replace(/<\/?CODE>/g, '')}
+            </code>
+          );
+        }
+        return segment;
+      });
+    };
+
+    return <div className="text-sm text-text-primary">{renderMarkdown(content)}</div>;
+  };
   
   // Clean up on component unmount
   useEffect(() => {
@@ -883,9 +1024,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                       AI-Generated
                     </span>
                   </div>
-                  <div className="text-sm text-text-primary whitespace-pre-wrap">
-                    {ragResult.answer}
-                  </div>
+                  <MarkdownRenderer content={ragResult.answer} />
                 </div>
               </div>
             </div>

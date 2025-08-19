@@ -31,6 +31,8 @@ import { MultiProductReceiptService } from '../services/multiProductReceiptServi
 import { useLocation } from 'react-router-dom';
 import Footer from './Footer';
 import NotificationDropdown from './NotificationDropdown';
+import { useTheme } from '../contexts/ThemeContext';
+import { Moon, Sun } from 'lucide-react';
 
 interface WarrantyPageProps {
   onBackToDashboard: () => void;
@@ -60,6 +62,7 @@ type SortType = 'daysLeft' | 'purchaseDate' | 'itemName' | 'amount';
 
 const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard, onShowProfile }) => {
   const { user, profilePicture } = useUser();
+  const { theme, toggleTheme } = useTheme();
   const { subscriptionInfo } = useSubscription();
   const [warrantyItems, setWarrantyItems] = useState<WarrantyItem[]>([]);
   const [filteredItems, setFilteredItems] = useState<WarrantyItem[]>([]);
@@ -517,6 +520,14 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard, onShowPr
                     >
                       <User className="h-4 w-4" />
                       <span>Profile Settings</span>
+                    </button>
+
+                    <button
+                      onClick={() => { toggleTheme(); setShowUserMenu(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                      <span>Night Mode {theme === 'dark' ? 'On' : 'Off'}</span>
                     </button>
 
                     <button

@@ -21,7 +21,9 @@ import {
   Database,
   Brain,
   Lightbulb,
-  Package
+  Package,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { signOut, supabase, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
@@ -32,6 +34,7 @@ import subscriptionService from '../services/subscriptionService';
 import onboardingService from '../services/onboardingService';
 import { UserSubscriptionInfo } from '../types/subscription';
 import { useSubscription } from '../contexts/SubscriptionContext';
+import { useTheme } from '../contexts/ThemeContext';
 import UsageIndicator from './UsageIndicator';
 import OnboardingTour from './OnboardingTour';
 import ContextualTooltip from './ContextualTooltip';
@@ -96,6 +99,7 @@ interface RAGResult {
 
 const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning, onShowProfile, onShowLibrary, onShowWarranty }) => {
   const { user, profilePicture } = useUser();
+  const { theme, toggleTheme } = useTheme();
   const { subscriptionInfo: globalSubscriptionInfo } = useSubscription();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -1234,6 +1238,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                           Pro
                         </span>
                       )}
+                    </button>
+                    <button
+                      onClick={() => { toggleTheme(); setShowUserMenu(false); }}
+                      className="w-full text-left px-3 sm:px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      {theme === 'dark' ? <Sun className="h-4 w-4 flex-shrink-0" /> : <Moon className="h-4 w-4 flex-shrink-0" />}
+                      <span className="truncate">Night Mode {theme === 'dark' ? 'On' : 'Off'}</span>
                     </button>
                     <button
                       onClick={handleSignOut}

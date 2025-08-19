@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { UserProvider } from './contexts/UserContext';
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import Homepage from './components/Homepage';
 import AuthLayout from './components/AuthLayout';
 import Dashboard from './components/Dashboard';
@@ -155,7 +156,9 @@ function App() {
       <ScrollToTop />
       <UserProvider>
         <SubscriptionProvider>
-          <AppContent />
+          <ThemeProvider>
+            <AppContent />
+          </ThemeProvider>
         </SubscriptionProvider>
       </UserProvider>
     </Router>

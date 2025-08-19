@@ -28,6 +28,8 @@ import { useUser } from '../contexts/UserContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import NotificationDropdown from './NotificationDropdown';
 import Footer from './Footer';
+import { useTheme } from '../contexts/ThemeContext';
+import { Moon, Sun } from 'lucide-react';
 
 interface ProfilePageProps {
   onBackToDashboard: () => void;
@@ -56,6 +58,7 @@ interface PrivacySettings {
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   const { user, profilePicture, refreshUser, updateProfilePicture } = useUser();
+  const { theme, toggleTheme } = useTheme();
   const { subscriptionInfo } = useSubscription();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -488,6 +491,14 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
                     >
                       <LogOut className="h-4 w-4" />
                       <span>Sign Out</span>
+                    </button>
+                    <div className="border-t border-gray-200 my-1"></div>
+                    <button
+                      onClick={() => { toggleTheme(); setShowUserMenu(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                      <span>Night Mode {theme === 'dark' ? 'On' : 'Off'}</span>
                     </button>
                   </div>
                 )}

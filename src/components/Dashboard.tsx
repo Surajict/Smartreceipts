@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Camera, 
   FolderOpen, 
   Search, 
   Bell, 
-  Settings, 
   User, 
   LogOut,
   Receipt,
@@ -18,12 +17,14 @@ import {
   Clock,
   X,
   Loader2,
-  Database,
   Brain,
   Lightbulb,
   Package,
   Moon,
-  Sun
+  Sun,
+  Mic,
+  MicOff,
+  Square
 } from 'lucide-react';
 import { signOut, supabase, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
@@ -108,9 +109,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [isGeneratingEmbeddings, setIsGeneratingEmbeddings] = useState(false);
   const [embeddingStatus, setEmbeddingStatus] = useState<{total: number, withEmbeddings: number, withoutEmbeddings: number} | null>(null);
   const [ragResult, setRagResult] = useState<RAGResult | null>(null);
+  
+  // Voice transcription state
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const [summaryStats, setSummaryStats] = useState<SummaryStats>({
     receiptsScanned: 0,
@@ -357,120 +366,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     }
   };
 
-  // One-time function to index existing receipts (for receipts created before automatic indexing)
-  const handleIndexExistingReceipts = async () => {
-    if (!user) return;
-    
-    setIsGeneratingEmbeddings(true);
-    try {
-      console.log('🔄 Processing existing receipts for smart search...');
-      
-      // Get all receipts without embeddings
-      const { data: receipts, error: fetchError } = await supabase
-        .from('receipts')
-        .select('id, product_description, brand_name, model_number, store_name, purchase_location, warranty_period, embedding')
-        .eq('user_id', user.id)
-        .is('embedding', null);
 
-      if (fetchError) {
-        throw new Error(`Failed to fetch receipts: ${fetchError.message}`);
-      }
-
-      if (!receipts || receipts.length === 0) {
-        alert('✅ All receipts are already processed!');
-        await loadEmbeddingStatus(user.id);
-        return;
-      }
-
-      console.log(`Found ${receipts.length} receipts to index`);
-
-      let successful = 0;
-      let errors = 0;
-
-      // Process receipts one by one
-      for (const receipt of receipts) {
-        try {
-          // Create content for embedding
-          const content = [
-            receipt.product_description || '',
-            receipt.brand_name || '',
-            receipt.model_number || '',
-            receipt.store_name || '',
-            receipt.purchase_location || '',
-            receipt.warranty_period || ''
-          ].filter(Boolean).join(' ');
-
-          if (!content.trim()) {
-            console.warn(`Skipping receipt ${receipt.id} - no content to embed`);
-            continue;
-          }
-
-          console.log(`Generating embedding for receipt ${receipt.id}: "${content.substring(0, 100)}..."`);
-
-          // Generate embedding directly using OpenAI API
-          const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
-          
-          if (!openaiApiKey) {
-            throw new Error('OpenAI API key not configured');
-          }
-
-          const response = await fetch('https://api.openai.com/v1/embeddings', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${openaiApiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'text-embedding-3-small',
-              input: content,
-              dimensions: 384
-            })
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
-          }
-
-          const result = await response.json();
-          const embedding = result.data[0].embedding;
-
-          // Save the embedding directly to the database
-          const { error: updateError } = await supabase
-            .from('receipts')
-            .update({ embedding: embedding })
-            .eq('id', receipt.id);
-
-          if (updateError) {
-            throw new Error(`Database update failed: ${updateError.message}`);
-          }
-
-          console.log(`✓ Successfully generated and saved embedding for receipt ${receipt.id}`);
-          successful++;
-        } catch (error) {
-          console.error(`Failed to generate embedding for receipt ${receipt.id}:`, error);
-          errors++;
-        }
-      }
-      
-      // Refresh embedding status
-      await loadEmbeddingStatus(user.id);
-      
-      // Show success message
-      const message = `✅ Processing completed!\n\n` +
-        `Successfully processed: ${successful} receipts\n` +
-        `Errors: ${errors} receipts\n\n` +
-        `🎉 Your smart search is now ready! Try questions like "Show me Nintendo products" or "How much did I spend on electronics?"`;
-      
-      alert(message);
-      
-    } catch (error) {
-      console.error('Failed to index existing receipts:', error);
-      alert('❌ Failed to index receipts. Please check the console for details.');
-    } finally {
-      setIsGeneratingEmbeddings(false);
-    }
-  };
 
   // Enhanced Smart Search functionality with RAG
   const performSmartSearch = async (query: string) => {
@@ -661,6 +557,292 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     setSearchResults([]);
     setSearchError(null);
     setRagResult(null);
+  };
+
+  // Voice transcription functions
+  const startRecording = async () => {
+    try {
+      setTranscriptionError(null);
+      
+      // Request microphone permission
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 16000
+        } 
+      });
+      
+      // Initialize MediaRecorder with better format support
+      let mimeType = 'audio/webm;codecs=opus';
+      
+      // Try different formats for better compatibility
+      if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        mimeType = 'audio/mp4';
+      } else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        mimeType = 'audio/webm;codecs=opus';
+      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+        mimeType = 'audio/webm';
+      }
+      
+      console.log('Using MIME type:', mimeType);
+      
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: mimeType
+      });
+      
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        await transcribeAudio(audioBlob, mimeType);
+        
+        // Clean up stream
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      // Start recording
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      
+      // Start timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime(prev => {
+          const newTime = prev + 1;
+          // Auto-stop after 30 seconds
+          if (newTime >= 30) {
+            stopRecording();
+          }
+          return newTime;
+        });
+      }, 1000);
+      
+    } catch (error: any) {
+      console.error('Error starting recording:', error);
+      setTranscriptionError(
+        error.name === 'NotAllowedError' 
+          ? 'Microphone access denied. Please allow microphone access and try again.'
+          : 'Failed to start recording. Please check your microphone.'
+      );
+    }
+  };
+  
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    }
+  };
+  
+  const transcribeAudio = async (audioBlob: Blob, originalMimeType: string) => {
+    try {
+      setIsTranscribing(true);
+      setTranscriptionError(null);
+      
+      console.log('Original audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
+      
+      // Determine the best file extension and format for OpenAI
+      let filename = 'recording.webm';
+      let processedBlob = audioBlob;
+      
+      if (originalMimeType.includes('mp4')) {
+        filename = 'recording.m4a';
+      } else if (originalMimeType.includes('webm')) {
+        filename = 'recording.webm';
+      }
+      
+      // For WebM, we might need to convert to a more compatible format
+      if (originalMimeType.includes('webm')) {
+        try {
+          // Try to convert WebM to MP3 or WAV for better OpenAI compatibility
+          processedBlob = await convertWebMToCompatibleFormat(audioBlob);
+          filename = 'recording.mp3';
+        } catch (conversionError) {
+          console.warn('Audio conversion failed, using original format:', conversionError);
+          // Fall back to original format
+          processedBlob = audioBlob;
+        }
+      }
+      
+      console.log('Processed audio blob:', processedBlob.size, 'bytes, filename:', filename);
+      
+      // Prepare form data for webhook
+      const formData = new FormData();
+      formData.append('audio_file', processedBlob, filename);
+      
+      // Call n8n webhook
+      const response = await fetch('https://n8n.srv904649.hstgr.cloud/webhook/audio-to-transcribe', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Webhook error response:', errorText);
+        throw new Error(`Transcription failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Transcription result:', result);
+      
+      // Extract transcribed text - handle different response formats
+      let transcribedText = '';
+      
+      if (Array.isArray(result) && result.length > 0) {
+        // Handle array format like [{"Transcript": "text"}]
+        const firstItem = result[0];
+        transcribedText = firstItem.Transcript || firstItem.transcript || firstItem.text || firstItem.transcription || '';
+      } else if (typeof result === 'object') {
+        // Handle object format like {"Transcript": "text"} or {"text": "text"}
+        transcribedText = result.Transcript || result.transcript || result.text || result.transcription || '';
+      } else if (typeof result === 'string') {
+        // Handle direct string response
+        transcribedText = result;
+      }
+      
+      console.log('Extracted transcribed text:', transcribedText);
+      
+      if (transcribedText && transcribedText.trim()) {
+        setSearchQuery(transcribedText.trim());
+        console.log('✅ Search query set to:', transcribedText.trim());
+      } else {
+        console.warn('❌ No transcribed text found in response:', result);
+        setTranscriptionError('No speech detected. Please try again.');
+      }
+      
+    } catch (error: any) {
+      console.error('Transcription error:', error);
+      setTranscriptionError(
+        error.message || 'Failed to transcribe audio. Please try again.'
+      );
+    } finally {
+      setIsTranscribing(false);
+      setRecordingTime(0);
+    }
+  };
+  
+  // Convert WebM to a more compatible format for OpenAI
+  const convertWebMToCompatibleFormat = async (audioBlob: Blob): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      try {
+        // Create an audio context for processing
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const fileReader = new FileReader();
+        
+        fileReader.onload = async (e) => {
+          try {
+            const arrayBuffer = e.target?.result as ArrayBuffer;
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            
+            // Convert to WAV format
+            const wavBlob = audioBufferToWav(audioBuffer);
+            resolve(wavBlob);
+          } catch (decodeError) {
+            console.error('Audio decode error:', decodeError);
+            // If conversion fails, return original blob
+            resolve(audioBlob);
+          }
+        };
+        
+        fileReader.onerror = () => {
+          reject(new Error('Failed to read audio file'));
+        };
+        
+        fileReader.readAsArrayBuffer(audioBlob);
+      } catch (error) {
+        console.error('Audio conversion error:', error);
+        // If conversion fails, return original blob
+        resolve(audioBlob);
+      }
+    });
+  };
+  
+  // Convert AudioBuffer to WAV Blob
+  const audioBufferToWav = (audioBuffer: AudioBuffer): Blob => {
+    const length = audioBuffer.length;
+    const sampleRate = audioBuffer.sampleRate;
+    const numberOfChannels = audioBuffer.numberOfChannels;
+    
+    // Create buffer for WAV file
+    const buffer = new ArrayBuffer(44 + length * numberOfChannels * 2);
+    const view = new DataView(buffer);
+    
+    // WAV header
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+    
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + length * numberOfChannels * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numberOfChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numberOfChannels * 2, true);
+    view.setUint16(32, numberOfChannels * 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, length * numberOfChannels * 2, true);
+    
+    // Convert float samples to 16-bit PCM
+    let offset = 44;
+    for (let i = 0; i < length; i++) {
+      for (let channel = 0; channel < numberOfChannels; channel++) {
+        const sample = Math.max(-1, Math.min(1, audioBuffer.getChannelData(channel)[i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+        offset += 2;
+      }
+    }
+    
+    return new Blob([buffer], { type: 'audio/wav' });
+  };
+  
+  // Format recording time as MM:SS
+  const formatRecordingTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+  
+  // Clean up on component unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+      if (mediaRecorderRef.current && isRecording) {
+        stopRecording();
+      }
+    };
+  }, []);
+
+  // Handle voice input button click
+  const handleVoiceInput = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
   };
 
   // Update the search results display section
@@ -1475,19 +1657,41 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="block w-full pl-8 sm:pl-10 md:pl-12 pr-16 sm:pr-20 md:pr-24 py-2 md:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 bg-gray-50 hover:bg-white focus:bg-white text-sm md:text-base"
+                  className="block w-full pl-8 sm:pl-10 md:pl-12 pr-20 sm:pr-28 md:pr-32 py-2 md:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors duration-200 bg-gray-50 hover:bg-white focus:bg-white text-sm md:text-base"
                   placeholder={window.innerWidth < 768 ? "Ask about your receipts..." : "Ask questions about your receipts: 'How much did I spend on electronics?' or 'Show me Apple receipts'"}
                 />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-2 md:pr-3">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-2 md:pr-3 space-x-1">
                   {searchQuery && (
                     <button
                       type="button"
                       onClick={clearSearch}
-                      className="text-text-secondary hover:text-text-primary transition-colors duration-200 p-1 mr-1 md:mr-2"
+                      className="text-text-secondary hover:text-text-primary transition-colors duration-200 p-1"
                     >
                       <X className="h-3 w-3 md:h-4 md:w-4" />
                     </button>
                   )}
+                  
+                  {/* Voice Input Button */}
+                  <button
+                    type="button"
+                    onClick={handleVoiceInput}
+                    disabled={isTranscribing}
+                    className={`p-1.5 md:p-2 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1 text-sm ${
+                      isRecording 
+                        ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse' 
+                        : 'bg-secondary text-white hover:bg-secondary/90'
+                    }`}
+                    title={isRecording ? 'Stop recording' : 'Start voice input'}
+                  >
+                    {isTranscribing ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : isRecording ? (
+                      <Square className="h-4 w-4" />
+                    ) : (
+                      <Mic className="h-4 w-4" />
+                    )}
+                  </button>
+                  
                   <button
                     type="submit"
                     disabled={isSearching || !searchQuery.trim()}
@@ -1508,6 +1712,44 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                 </div>
               </div>
             </form>
+
+            {/* Recording Indicator */}
+            {isRecording && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-3">
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-medium text-red-700">Recording...</span>
+                </div>
+                <span className="text-sm text-red-600 font-mono">{formatRecordingTime(recordingTime)}</span>
+                <div className="flex-1"></div>
+                <span className="text-xs text-red-600">Click stop or wait 30s to finish</span>
+              </div>
+            )}
+
+            {/* Transcription Status */}
+            {isTranscribing && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center space-x-3">
+                <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
+                <span className="text-sm font-medium text-blue-700">Converting speech to text...</span>
+              </div>
+            )}
+
+            {/* Transcription Error */}
+            {transcriptionError && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-3">
+                <MicOff className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-700 mb-1">Voice Input Error</p>
+                  <p className="text-sm text-red-600">{transcriptionError}</p>
+                </div>
+                <button
+                  onClick={() => setTranscriptionError(null)}
+                  className="text-red-600 hover:text-red-800 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
 
             {/* Search Error */}
             {searchError && (

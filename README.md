@@ -55,6 +55,8 @@ Smart Receipts is an intelligent receipt management application that uses AI to 
 - **Vector Search**: Uses AI embeddings for semantic search capabilities
 - **RAG (Retrieval-Augmented Generation)**: Answers complex questions about your receipts
 - **Natural Language Queries**: Ask questions like "How much did I spend on electronics?"
+- **Voice Input**: Speak your search queries using voice transcription (NEW!)
+- **Markdown Formatting**: AI responses with proper bold, italic, headings, and list formatting (NEW!)
 - **Fallback Search**: Automatically falls back to text search if AI search fails
 - **Real-time Results**: Shows search results with relevance scores
 - **Conversational Interface**: Get detailed answers about your purchase history
@@ -183,6 +185,9 @@ To enable Google Sign-In:
    
    # Perplexity AI Configuration (for data validation)
    VITE_PERPLEXITY_API_KEY=your_perplexity_api_key_here
+   
+   # Voice Transcription (uses n8n webhook - no additional API key needed)
+   # Webhook URL is configured in the application code
    
    # Google Cloud Vision (for enhanced OCR)
    VITE_GOOGLE_CLOUD_VISION_API_KEY=your_google_cloud_vision_key_here
@@ -344,11 +349,15 @@ Notes:
 
 ### **5. Use Smart Search**
 - Go to the Dashboard and find the "Smart Search" section
-- Ask natural language questions like:
+- **Text Input**: Type natural language questions like:
   - "How much did I spend on electronics this year?"
   - "Show me all Apple products I bought"
   - "What warranties expire in the next 30 days?"
-- Get AI-powered answers with relevant receipts
+- **Voice Input**: Click the microphone button and speak your question (NEW!)
+  - Supports 30-second recordings with auto-stop
+  - Real-time transcription using advanced AI
+  - Works on desktop and mobile browsers
+- Get AI-powered answers with proper formatting and relevant receipts
 
 ### **6. Track Warranties**
 - Check your dashboard for warranty alerts
@@ -496,6 +505,20 @@ Key fields in the subscription_codes table:
 - `used_by_user_id` (links to user who redeemed the code)
 
 ## 🆕 Latest Features (2024-2025)
+
+### **Voice Transcription & Enhanced Formatting (August 2025)** (NEW!)
+- **Voice Input for Smart Search**: Click the microphone button to speak your search queries
+  - **Real-time Audio Recording**: 30-second recording with visual feedback and timer
+  - **Advanced Speech-to-Text**: Integration with n8n webhook for accurate transcription
+  - **Cross-Platform Support**: Works on desktop and mobile browsers
+  - **Auto-stop Safety**: Automatic recording termination after 30 seconds
+  - **Error Handling**: Comprehensive microphone permission and network error handling
+- **Markdown Formatting in AI Responses**: Professional formatting for AI-generated answers
+  - **Rich Text Formatting**: Bold, italic, underline, and inline code support
+  - **Structured Headings**: H1, H2, H3 headings with proper hierarchy
+  - **Organized Lists**: Numbered and bullet point lists with proper styling
+  - **Clean Paragraphs**: Automatic paragraph separation with appropriate spacing
+  - **Consistent Styling**: All formatting matches the app's Tailwind design system
 
 ### **Admin Portal & Subscription Management (NEW!)**
 - **Secure Admin Interface**: Dedicated portal with hardcoded authentication for security
@@ -719,12 +742,21 @@ To enable push notifications:
    - Check that the smart-search edge function is deployed
    - Verify OpenAI API key is configured
 
-5. **Multi-product receipts not grouping**
+5. **Voice transcription not working** (NEW!)
+   - **Microphone Permission**: Grant microphone access when prompted
+   - **HTTPS Required**: Voice input only works on secure connections (HTTPS or localhost)
+   - **Browser Support**: Ensure your browser supports MediaRecorder API
+   - **n8n Webhook**: Verify the webhook endpoint is accessible and configured correctly
+   - **Audio Format**: The app automatically handles audio format conversion for compatibility
+   - **Network Issues**: Check console for transcription API errors
+   - **Recording Issues**: Try shorter recordings (under 30 seconds work best)
+
+6. **Multi-product receipts not grouping**
    - Check that the database migration was applied
    - Verify `receipt_group_id` and `is_group_receipt` columns exist
    - Review the MultiProductReceiptService logs
 
-6. **Admin Portal Issues** (NEW!)
+7. **Admin Portal Issues** (NEW!)
    - **406 "Not Acceptable" errors**: These are handled gracefully by the app
    - **Statistics not loading**: Check that `get_admin_subscription_stats()` function exists
    - **Code generation failing**: Verify `create_subscription_code()` function is available
@@ -732,25 +764,25 @@ To enable push notifications:
    - **Login issues**: Verify admin credentials are correct
    - **Database permission errors**: The app handles these with local storage fallbacks
 
-7. **Build errors**
+8. **Build errors**
    ```bash
    # Clear cache and reinstall
    rm -rf node_modules package-lock.json
    npm install
    ```
 
-8. **Database connection issues**
+9. **Database connection issues**
    - Verify Supabase URL and keys in `.env.local`
    - Check if Supabase project is active
    - Ensure migrations are applied
 
-9. **Push notifications not showing**
+10. **Push notifications not showing**
    - Verify browser permission for notifications is granted
    - Check that `send-push-notification` function is deployed
    - Ensure the service worker `src/sw.ts` is being served and registered
    - Test from a secure origin (HTTPS or localhost)
 
-10. **Google sign-in redirect issues**
+11. **Google sign-in redirect issues**
     - Confirm `VITE_GOOGLE_OAUTH_CLIENT_ID` matches your Google OAuth Client ID
     - Verify redirect URIs include `/auth/v1/callback` and your app domain
     - Ensure Google provider is enabled in Supabase
@@ -830,7 +862,9 @@ supabase functions deploy smart-search
 - [ ] Explore the warranty management features
 - [ ] **NEW**: Access Admin Portal at `/admin` with provided credentials
 - [ ] **NEW**: Test subscription code generation and management
- - [ ] **NEW**: Enable push notifications and receive warranty alerts
+- [ ] **NEW**: Enable push notifications and receive warranty alerts
+- [ ] **NEW**: Test voice transcription by clicking microphone button in Smart Search
+- [ ] **NEW**: Verify AI responses display with proper markdown formatting
 
 **Need help?** [Create an issue](https://github.com/Surajict/Smartreceipts/issues) or contact the development team.
 
@@ -838,7 +872,26 @@ supabase functions deploy smart-search
 
 ## 🔄 Version History
 
-### **v5.3.1 (2025-08-09) - Navigation Fix & Minor UI Polishing** (NEW!)
+### **v5.4.0 (2025-08-20) - Voice Transcription & Markdown Formatting** (NEW!)
+- 🎤 **Voice Input for Smart Search**: Click microphone button to speak search queries
+  - Real-time audio recording with visual feedback and 30-second auto-stop
+  - Advanced speech-to-text transcription via n8n webhook integration
+  - Cross-platform support for desktop and mobile browsers
+  - Comprehensive error handling for microphone permissions and network issues
+  - Audio format conversion for OpenAI Whisper API compatibility
+- 📝 **Enhanced AI Response Formatting**: Professional markdown rendering for AI answers
+  - Rich text formatting: **bold**, *italic*, ~~underline~~, and `inline code`
+  - Structured headings (H1, H2, H3) with proper hierarchy
+  - Organized numbered and bullet point lists with custom styling
+  - Clean paragraph separation with appropriate spacing
+  - Consistent Tailwind CSS styling matching app design system
+- 🔧 **Technical Improvements**: 
+  - Custom markdown parser with React component rendering
+  - Web Audio API integration for high-quality recording
+  - Automatic audio format detection and conversion
+  - Safe HTML rendering preventing XSS attacks
+
+### **v5.3.1 (2025-08-09) - Navigation Fix & Minor UI Polishing**
 - ✅ Fixed routing in `ReceiptScanning` header: “Profile Settings” now navigates to `ProfilePage` (`/profile`).
 - 🧭 Documented app routes in README for easier onboarding.
 

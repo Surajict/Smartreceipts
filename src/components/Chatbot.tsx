@@ -186,14 +186,14 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
 
   if (!isOpen) {
     return (
-      <div className={`fixed bottom-6 right-6 z-50 ${className}`}>
+      <div className={`fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 ${className}`}>
         <button
           onClick={toggleChatbot}
-          className="bg-gradient-to-r from-primary to-teal-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 group"
+          className="bg-gradient-to-r from-primary to-teal-600 text-white p-3 sm:p-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 group"
           aria-label="Open chat"
         >
-          <MessageCircle className="h-6 w-6 group-hover:animate-pulse" />
-          <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+          <MessageCircle className="h-5 w-5 sm:h-6 sm:w-6 group-hover:animate-pulse" />
+          <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center animate-pulse">
             ?
           </div>
         </button>
@@ -202,26 +202,28 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
   }
 
   return (
-    <div className={`fixed bottom-6 right-6 z-50 ${className}`}>
+    <div className={`fixed bottom-4 right-4 left-4 sm:left-auto sm:right-6 sm:bottom-6 z-50 ${className}`}>
       <div className={`bg-white rounded-2xl shadow-2xl border border-gray-200 transition-all duration-300 ${
-        isMinimized ? 'w-80 h-16' : 'w-96 h-[500px]'
+        isMinimized 
+          ? 'w-full sm:w-80 h-16' 
+          : 'w-full sm:w-96 h-[85vh] sm:h-[500px] max-h-[600px]'
       }`}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-primary to-teal-600 text-white rounded-t-2xl">
-          <div className="flex items-center space-x-3">
-            <div className="bg-white/20 rounded-full p-2">
-              <Bot className="h-5 w-5" />
+        <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200 bg-gradient-to-r from-primary to-teal-600 text-white rounded-t-2xl">
+          <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+            <div className="bg-white/20 rounded-full p-1.5 sm:p-2 flex-shrink-0">
+              <Bot className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
-            <div>
-              <h3 className="font-semibold text-sm">Smart Receipts Assistant</h3>
-              <p className="text-xs text-white/80">Ask me anything!</p>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold text-xs sm:text-sm truncate">Smart Receipts Assistant</h3>
+              <p className="text-xs text-white/80 hidden sm:block">Ask me anything!</p>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
             {!isMinimized && (
               <button
                 onClick={minimizeChatbot}
-                className="text-white/80 hover:text-white transition-colors p-1"
+                className="text-white/80 hover:text-white transition-colors p-1 hidden sm:block"
                 aria-label="Minimize chat"
               >
                 <Minimize2 className="h-4 w-4" />
@@ -233,7 +235,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
                 className="text-white/80 hover:text-white transition-colors p-1"
                 aria-label="Restore chat"
               >
-                <MessageCircle className="h-4 w-4" />
+                <MessageCircle className="h-3 w-3 sm:h-4 sm:w-4" />
               </button>
             )}
             <button
@@ -241,7 +243,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
               className="text-white/80 hover:text-white transition-colors p-1"
               aria-label="Close chat"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3 w-3 sm:h-4 sm:w-4" />
             </button>
           </div>
         </div>
@@ -249,32 +251,33 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
         {/* Messages Area */}
         {!isMinimized && (
           <>
-            <div className="flex-1 p-4 space-y-4 h-80 overflow-y-auto bg-gray-50">
+            <div className="flex-1 p-3 sm:p-4 space-y-3 sm:space-y-4 overflow-y-auto bg-gray-50" 
+                 style={{ height: 'calc(100% - 8rem)' }}>
               {messages.map((message) => (
                 <div
                   key={message.id}
                   className={`flex ${message.isUser ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className={`flex items-start space-x-2 max-w-[80%] ${
+                  <div className={`flex items-start space-x-2 max-w-[85%] sm:max-w-[80%] ${
                     message.isUser ? 'flex-row-reverse space-x-reverse' : ''
                   }`}>
-                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                    <div className={`flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center ${
                       message.isUser 
                         ? 'bg-primary text-white' 
                         : 'bg-gray-200 text-gray-600'
                     }`}>
                       {message.isUser ? (
-                        <User className="h-4 w-4" />
+                        <User className="h-3 w-3 sm:h-4 sm:w-4" />
                       ) : (
-                        <Bot className="h-4 w-4" />
+                        <Bot className="h-3 w-3 sm:h-4 sm:w-4" />
                       )}
                     </div>
-                    <div className={`rounded-2xl px-4 py-2 ${
+                    <div className={`rounded-2xl px-3 py-2 sm:px-4 ${
                       message.isUser
                         ? 'bg-primary text-white'
                         : 'bg-white text-gray-800 border border-gray-200'
                     }`}>
-                      <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                      <p className="text-xs sm:text-sm whitespace-pre-wrap break-words">{message.text}</p>
                       <p className={`text-xs mt-1 ${
                         message.isUser ? 'text-white/70' : 'text-gray-500'
                       }`}>
@@ -291,14 +294,14 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
               {/* Typing Indicator */}
               {isTyping && (
                 <div className="flex justify-start">
-                  <div className="flex items-start space-x-2 max-w-[80%]">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gray-200 text-gray-600">
-                      <Bot className="h-4 w-4" />
+                  <div className="flex items-start space-x-2 max-w-[85%] sm:max-w-[80%]">
+                    <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center bg-gray-200 text-gray-600">
+                      <Bot className="h-3 w-3 sm:h-4 sm:w-4" />
                     </div>
-                    <div className="rounded-2xl px-4 py-2 bg-white text-gray-800 border border-gray-200">
+                    <div className="rounded-2xl px-3 py-2 sm:px-4 bg-white text-gray-800 border border-gray-200">
                       <div className="flex items-center space-x-1">
-                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                        <p className="text-sm text-gray-600">Thinking...</p>
+                        <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin text-primary" />
+                        <p className="text-xs sm:text-sm text-gray-600">Thinking...</p>
                       </div>
                     </div>
                   </div>
@@ -309,7 +312,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
             </div>
 
             {/* Input Area */}
-            <form onSubmit={handleSubmit} className="p-4 border-t border-gray-200 bg-white rounded-b-2xl">
+            <form onSubmit={handleSubmit} className="p-3 sm:p-4 border-t border-gray-200 bg-white rounded-b-2xl">
               <div className="flex items-center space-x-2">
                 <input
                   ref={inputRef}
@@ -318,16 +321,16 @@ const Chatbot: React.FC<ChatbotProps> = ({ className = '' }) => {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder="Ask me about Smart Receipts..."
-                  className="flex-1 p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none text-sm"
+                  className="flex-1 p-2.5 sm:p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none text-xs sm:text-sm"
                   disabled={isTyping}
                 />
                 <button
                   type="submit"
                   disabled={!inputText.trim() || isTyping}
-                  className="bg-primary text-white p-3 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-primary text-white p-2.5 sm:p-3 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                   aria-label="Send message"
                 >
-                  <Send className="h-4 w-4" />
+                  <Send className="h-3 w-3 sm:h-4 sm:w-4" />
                 </button>
               </div>
             </form>

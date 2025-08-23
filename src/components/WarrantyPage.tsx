@@ -33,6 +33,7 @@ import Footer from './Footer';
 import NotificationDropdown from './NotificationDropdown';
 import { useTheme } from '../contexts/ThemeContext';
 import { Moon, Sun } from 'lucide-react';
+import PDFViewer from './PDFViewer';
 
 interface WarrantyPageProps {
   onBackToDashboard: () => void;
@@ -87,24 +88,7 @@ const WarrantyPage: React.FC<WarrantyPageProps> = ({ onBackToDashboard, onShowPr
            lowerUrl.includes('mimetype=application/pdf');
   };
 
-  // Add PDF viewer component
-  const PDFViewer: React.FC<{ url: string; alt: string; className?: string }> = ({ url, alt, className }) => {
-    return (
-      <div className={`bg-gradient-to-br from-red-50 to-red-100 rounded-lg flex flex-col items-center justify-center p-4 border-2 border-red-200 ${className}`}>
-        <FileText className="h-12 w-12 text-red-500 mb-2" />
-        <span className="text-sm text-gray-700 text-center font-medium mb-2">{alt}</span>
-        <span className="text-xs text-gray-600 mb-3">PDF Document</span>
-        <a 
-          href={url} 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className="text-xs bg-red-500 text-white px-3 py-1 rounded-full hover:bg-red-600 transition-colors duration-200"
-        >
-          Open PDF
-        </a>
-      </div>
-    );
-  };
+
 
   useEffect(() => {
     if (user) {

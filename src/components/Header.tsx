@@ -76,12 +76,15 @@ const Header: React.FC = () => {
                 </a>
               )
             ))}
+            {/* Sign In button - Hidden as requested */}
+            {/*
             <button
               onClick={() => navigate('/login')}
               className="text-text-secondary hover:text-text-link transition-colors duration-200 font-medium text-sm lg:text-base"
             >
               Sign In
             </button>
+            */}
             <a 
               href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
               target="_blank"
@@ -128,6 +131,8 @@ const Header: React.FC = () => {
                   </a>
                 )
               ))}
+              {/* Sign In button - Hidden as requested */}
+              {/*
               <button
                 onClick={() => {
                   navigate('/login');
@@ -137,6 +142,7 @@ const Header: React.FC = () => {
               >
                 Sign In
               </button>
+              */}
               <a 
                 href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
                 target="_blank"

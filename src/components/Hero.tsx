@@ -3,10 +3,9 @@ import { Play } from 'lucide-react';
 
 interface HeroProps {
   onShowLogin: () => void;
-  onShowSignUp: () => void;
 }
 
-const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
+const Hero: React.FC<HeroProps> = ({ onShowLogin }) => {
 
 
   return (
@@ -26,12 +25,14 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin, onShowSignUp }) => {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start mb-8 sm:mb-12">
-              <button 
-                onClick={onShowSignUp}
-                className="bg-gradient-primary text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-medium text-base sm:text-lg hover:opacity-90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-1"
+              <a 
+                href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-gradient-primary text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-medium text-base sm:text-lg hover:opacity-90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-1 text-center"
               >
-                Start Free Trial
-              </button>
+                Join Waitlist
+              </a>
               <a 
                 href="https://youtu.be/wJ6iOkoH-pg"
                 target="_blank"

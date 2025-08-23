@@ -82,12 +82,14 @@ const Header: React.FC = () => {
             >
               Sign In
             </button>
-            <button 
-              onClick={() => navigate('/signup')}
-              className="bg-primary text-white px-4 lg:px-6 py-2 rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover text-sm lg:text-base"
+            <a 
+              href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-primary text-white px-4 lg:px-6 py-2 rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover text-sm lg:text-base text-center"
             >
-              Start Free Trial
-            </button>
+              Join Waitlist
+            </a>
           </nav>
 
           {/* Mobile menu button */}
@@ -135,15 +137,15 @@ const Header: React.FC = () => {
               >
                 Sign In
               </button>
-              <button 
-                onClick={() => {
-                  navigate('/signup');
-                  setIsMenuOpen(false);
-                }}
+              <a 
+                href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setIsMenuOpen(false)}
                 className="block w-full text-left px-3 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-all duration-200"
               >
-                Start Free Trial
-              </button>
+                Join Waitlist
+              </a>
             </div>
           </div>
         )}

@@ -17,9 +17,7 @@ const Homepage: React.FC = () => {
     navigate('/login');
   };
 
-  const handleShowSignUp = () => {
-    navigate('/signup');
-  };
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -28,14 +26,12 @@ const Homepage: React.FC = () => {
       <main>
         <Hero 
           onShowLogin={handleShowLogin}
-          onShowSignUp={handleShowSignUp}
         />
         
         <HowItWorks />
         
         <Benefits 
           onShowLogin={handleShowLogin}
-          onShowSignUp={handleShowSignUp}
         />
         
         <Testimonials />
@@ -44,7 +40,6 @@ const Homepage: React.FC = () => {
         
         <CTA 
           onShowLogin={handleShowLogin}
-          onShowSignUp={handleShowSignUp}
         />
       </main>
       

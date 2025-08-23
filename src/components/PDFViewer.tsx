@@ -125,7 +125,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ url, alt, className }) => {
                       {/* Interactive PDF overlay similar to screenshots */}
             <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center group">
               {/* PDF Document Label */}
-              <div className="absolute bottom-2 left-2 bg-white bg-opacity-90 text-gray-800 px-2 py-1 rounded text-xs font-medium shadow-lg">
+              <div className="absolute bottom-2 left-2 bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs font-medium shadow-lg">
                 PDF Document
               </div>
               

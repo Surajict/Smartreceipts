@@ -1144,11 +1144,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {
-      case 'critical': return 'border-red-600 bg-red-100';
-      case 'high': return 'border-accent-red bg-red-50';
-      case 'medium': return 'border-accent-yellow bg-yellow-50';
-      case 'low': return 'border-primary bg-green-50';
-      default: return 'border-gray-300 bg-gray-50';
+      case 'critical': return 'border-red-600 bg-red-100 text-red-900';
+      case 'high': return 'border-accent-red bg-red-50 text-red-800';
+      case 'medium': return 'border-accent-yellow bg-yellow-50 text-yellow-900';
+      case 'low': return 'border-primary bg-green-50 text-green-800';
+      default: return 'border-gray-300 bg-gray-50 text-gray-800';
     }
   };
 
@@ -1942,9 +1942,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                           <div className="flex-shrink-0">
                             {getUrgencyIcon(alert.urgency)}
                           </div>
-                          <h3 className="text-sm sm:text-base font-bold text-text-primary truncate min-w-0">{alert.itemName}</h3>
+                          <h3 className="text-sm sm:text-base font-bold truncate min-w-0">{alert.itemName}</h3>
                         </div>
-                        <div className="text-xs sm:text-sm text-text-secondary space-y-1 min-w-0">
+                        <div className="text-xs sm:text-sm space-y-1 min-w-0 opacity-90">
                           <div className="flex items-center space-x-2 min-w-0">
                             <Calendar className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
                             <span className="truncate min-w-0">Purchased: {formatDate(alert.purchaseDate)}</span>
@@ -1953,12 +1953,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                             <Clock className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
                             <span className="truncate min-w-0">Expires: {formatDate(alert.expiryDate)}</span>
                           </div>
-                          <div className="font-medium text-text-primary text-xs sm:text-sm truncate">
+                          <div className="font-medium text-xs sm:text-sm truncate">
                             {alert.daysLeft} days remaining
                           </div>
                         </div>
                       </div>
-                      <button className="text-primary hover:text-primary/80 transition-colors duration-200 flex-shrink-0 ml-1 sm:ml-2">
+                      <button className="opacity-70 hover:opacity-100 transition-opacity duration-200 flex-shrink-0 ml-1 sm:ml-2">
                         <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
                     </div>
@@ -2004,7 +2004,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                 recentReceipts.map((receipt) => (
                   <div
                     key={receipt.id}
-                    className="flex items-center justify-between p-3 sm:p-4 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer group min-w-0 max-w-full overflow-hidden"
+                    className="flex items-center justify-between p-3 sm:p-4 rounded-lg hover:bg-blue-900 transition-colors duration-200 cursor-pointer group min-w-0 max-w-full overflow-hidden"
                     onClick={() => navigate('/library', { state: { openReceiptId: receipt.id } })}
                   >
                     <div className="flex items-center space-x-2 sm:space-x-4 min-w-0 flex-1 max-w-full overflow-hidden">
@@ -2016,10 +2016,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                         )}
                       </div>
                       <div className="flex-1 min-w-0 max-w-full overflow-hidden">
-                        <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-primary transition-colors duration-200 truncate min-w-0" title={receipt.productName}>
+                        <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-white transition-colors duration-200 truncate min-w-0" title={receipt.productName}>
                           {receipt.productName}
                         </h3>
-                        <div className="text-xs sm:text-sm text-text-secondary space-y-1 min-w-0">
+                        <div className="text-xs sm:text-sm text-text-secondary group-hover:text-blue-100 space-y-1 min-w-0">
                           <div className="flex items-center space-x-1 min-w-0">
                             <span className="font-medium flex-shrink-0">Store:</span>
                             <span className="truncate min-w-0">{receipt.storeName}</span>
@@ -2035,11 +2035,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                               }
                             </span>
                           </div>
-                          <div className="text-xs text-text-secondary truncate">
+                          <div className="text-xs group-hover:text-blue-100 truncate">
                             {formatDate(receipt.date)} • {receipt.items} {receipt.items === 1 ? 'item' : 'items'}
                           </div>
                           {receipt.type === 'group' && receipt.receipts && (
-                            <div className="text-xs text-text-secondary bg-blue-50 rounded px-2 py-1 mt-2 max-w-full overflow-hidden">
+                            <div className="text-xs text-text-secondary group-hover:text-blue-100 bg-blue-50 group-hover:bg-blue-800 rounded px-2 py-1 mt-2 max-w-full overflow-hidden">
                               <span className="truncate block">
                                 Products: {receipt.receipts.map(r => r.product_description).join(', ')}
                               </span>
@@ -2049,15 +2049,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0 ml-1 sm:ml-2">
-                      <div className="text-sm sm:text-base font-bold text-text-primary whitespace-nowrap">
+                      <div className="text-sm sm:text-base font-bold text-text-primary group-hover:text-white whitespace-nowrap">
                         {formatCurrency(receipt.amount)}
                       </div>
                       {receipt.type === 'group' && (
-                        <div className="text-xs text-text-secondary whitespace-nowrap">
+                        <div className="text-xs text-text-secondary group-hover:text-blue-100 whitespace-nowrap">
                           Total Receipt
                         </div>
                       )}
-                      <ChevronRight className="h-4 w-4 text-text-secondary group-hover:text-primary transition-colors duration-200 ml-auto mt-1" />
+                      <ChevronRight className="h-4 w-4 text-text-secondary group-hover:text-blue-100 transition-colors duration-200 ml-auto mt-1" />
                     </div>
                   </div>
                 ))

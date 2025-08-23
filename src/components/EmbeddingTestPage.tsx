@@ -124,7 +124,7 @@ const EmbeddingTestPage: React.FC<EmbeddingTestPageProps> = ({ onBack }) => {
   return (
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
       {/* Header */}
-      <header className="bg-white shadow-card border-b border-gray-200">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-white shadow-card border-b border-gray-200">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
@@ -144,7 +144,7 @@ const EmbeddingTestPage: React.FC<EmbeddingTestPageProps> = ({ onBack }) => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-20 sm:pt-24">
         {/* Status Section */}
         <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 mb-8">
           <div className="flex items-center justify-between mb-6">

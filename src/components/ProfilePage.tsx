@@ -422,7 +422,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
   return (
     <div className="min-h-screen bg-background font-['Inter',sans-serif]">
       {/* Header */}
-      <header className="bg-white shadow-card border-b border-gray-200">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-white shadow-card border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
           <div className="flex justify-between items-center h-16 min-w-0">
             {/* Logo - Clickable to Dashboard */}
@@ -509,7 +509,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBackToDashboard }) => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 py-6 sm:py-8">
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 py-6 sm:py-8 pt-20 sm:pt-24">
         {/* Page Title */}
         <div className="text-center mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-text-primary mb-3 sm:mb-4">

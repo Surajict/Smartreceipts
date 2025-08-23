@@ -27,10 +27,13 @@ const CTA: React.FC<CTAProps> = ({ onShowLogin }) => {
           <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6 tracking-tight">
             Ready to Never Lose Another Receipt?
           </h2>
+          {/* Main marketing message highlighting user base and value proposition.
+              Emphasizes social proof (50k+ users), key benefits (warranty claims),
+              and reduces friction (no credit card required) 
           <p className="text-xl text-white/90 max-w-3xl mx-auto leading-relaxed">
             Join 50,000+ users who've transformed their receipt management and recovered 
             thousands in warranty claims. Start your free account today – no credit card required.
-          </p>
+          </p>*/}
         </div>
 
         {/* Main CTA */}
@@ -45,45 +48,50 @@ const CTA: React.FC<CTAProps> = ({ onShowLogin }) => {
           </a>
         </div>
 
-        {/* Trust Badges */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          {trustBadges.map((badge, index) => {
-            const Icon = badge.icon;
-            return (
-              <div 
-                key={index}
-                className="flex items-center justify-center space-x-3 bg-white/10 backdrop-blur-sm rounded-xl p-4 text-white hover:bg-white/20 transition-colors duration-300 border border-white/10"
-              >
-                <Icon className="h-5 w-5 text-white/80" />
-                <span className="font-medium text-sm">{badge.text}</span>
-              </div>
-            );
-          })}
-        </div>
+                 {/* Trust Badges - Commented out as requested */}
+         {/*
+         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+           {trustBadges.map((badge, index) => {
+             const Icon = badge.icon;
+             return (
+               <div 
+                 key={index}
+                 className="flex items-center justify-center space-x-3 bg-white/10 backdrop-blur-sm rounded-xl p-4 text-white hover:bg-white/20 transition-colors duration-300 border border-white/10"
+               >
+                 <Icon className="h-5 w-5 text-white/80" />
+                 <span className="font-medium text-sm">{badge.text}</span>
+               </div>
+             );
+           })}
+         </div>
+         */}
 
-        {/* Urgency Element */}
-        <div className="text-center mb-8">
-          <div className="bg-gradient-to-r from-accent-yellow to-accent-red rounded-full px-8 py-3 inline-block shadow-lg">
-            <div className="flex items-center space-x-2">
-              <Clock className="h-5 w-5 text-text-primary" />
-              <span className="font-bold text-text-primary">Limited Time: Get 3 Months Premium Free</span>
-            </div>
-          </div>
-          <p className="text-white/90 mt-4 max-w-2xl mx-auto">
-            New users who sign up this month receive complimentary premium features including 
-            unlimited receipt storage, advanced analytics, and priority warranty support.
-          </p>
-        </div>
+                 {/* Urgency Element - Commented out as requested */}
+         {/*
+         <div className="text-center mb-8">
+           <div className="bg-gradient-to-r from-accent-yellow to-accent-red rounded-full px-8 py-3 inline-block shadow-lg">
+             <div className="flex items-center space-x-2">
+               <Clock className="h-5 w-5 text-text-primary" />
+               <span className="font-bold text-text-primary">Limited Time: Get 3 Months Premium Free</span>
+             </div>
+           </div>
+           <p className="text-white/90 mt-4 max-w-2xl mx-auto">
+             New users who sign up this month receive complimentary premium features including 
+             unlimited receipt storage, advanced analytics, and priority warranty support.
+           </p>
+         </div>
 
-        {/* Additional CTA Options */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-          <button className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-xl font-medium hover:bg-white hover:text-primary transition-all duration-300 shadow-sm hover:shadow-md">
-            Watch 2-Minute Demo
-          </button>
-          <button className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-xl font-medium hover:bg-white hover:text-primary transition-all duration-300 shadow-sm hover:shadow-md">
-            Talk to Sales Team
-          </button>
-        </div>
+         {/* Additional CTA Options */}
+         {/*
+         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+           <button className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-xl font-medium hover:bg-white hover:text-primary transition-all duration-300 shadow-sm hover:shadow-md">
+             Watch 2-Minute Demo
+           </button>
+           <button className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-xl font-medium hover:bg-white hover:text-primary transition-all duration-300 shadow-sm hover:shadow-md">
+             Talk to Sales Team
+           </button>
+         </div>
+         */}
 
         {/* Privacy Assurance */}
         <div className="text-center">
@@ -115,7 +123,7 @@ const CTA: React.FC<CTAProps> = ({ onShowLogin }) => {
                 <div className="bg-white/10 rounded-lg p-3 mb-2">
                   <Award className="h-6 w-6 text-white/80 mx-auto" />
                 </div>
-                <span className="text-xs text-white/80">GDPR Compliant</span>
+                <span className="text-xs text-white/80">APP Compliant</span>
               </div>
             </div>
           </div>

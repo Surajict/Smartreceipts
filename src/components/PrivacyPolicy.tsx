@@ -150,7 +150,7 @@ const PrivacyPolicy: React.FC = () => {
                 <li>• <strong>Access Controls:</strong> Strict employee access controls with regular audits</li>
                 <li>• <strong>Monitoring:</strong> 24/7 security monitoring and threat detection</li>
                 <li>• <strong>Backups:</strong> Regular encrypted backups with disaster recovery procedures</li>
-                <li>• <strong>Compliance:</strong> SOC 2 certified data centers and GDPR compliance</li>
+                <li>• <strong>Compliance:</strong> SOC 2 certified data centers and APP compliance</li>
               </ul>
 
               <p className="text-text-secondary mb-4">

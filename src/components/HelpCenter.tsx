@@ -53,8 +53,8 @@ const HelpCenter: React.FC = () => {
         {
           title: 'Creating Your Account',
           content: `
-            <h3>Step 1: Sign Up</h3>
-            <p>Visit our homepage and click "Start Free Trial" or "Sign Up". Enter your email address and create a secure password.</p>
+            <h3>Step 1: Join Waitlist</h3>
+            <p>Visit our homepage and click "Join Waitlist". Enter your name and email address to join our early access program.</p>
             
             <h3>Step 2: Verify Your Email</h3>
             <p>Check your email inbox for a verification link from Smart Receipts. Click the link to activate your account.</p>
@@ -360,7 +360,7 @@ const HelpCenter: React.FC = () => {
     {
       category: 'Account',
       question: 'How do I create an account and get started?',
-      answer: 'Getting started is simple: visit Smart Receipts in your browser, click "Sign Up", enter your email and create a password, verify your email, and start scanning receipts immediately. The entire process takes less than 2 minutes, and you can scan your first receipt right away.'
+      answer: 'Getting started is simple: visit Smart Receipts in your browser, click "Join Waitlist", enter your name and email to join our early access program. We\'ll notify you as soon as the app is available for full access.'
     },
     {
       category: 'Account',

@@ -3,10 +3,9 @@ import { Shield, CreditCard, RotateCcw, Lock, Award, Clock } from 'lucide-react'
 
 interface CTAProps {
   onShowLogin: () => void;
-  onShowSignUp: () => void;
 }
 
-const CTA: React.FC<CTAProps> = ({ onShowLogin, onShowSignUp }) => {
+const CTA: React.FC<CTAProps> = ({ onShowLogin }) => {
   const trustBadges = [
     { icon: CreditCard, text: 'No credit card required' },
     { icon: RotateCcw, text: 'Cancel anytime' },
@@ -36,12 +35,14 @@ const CTA: React.FC<CTAProps> = ({ onShowLogin, onShowSignUp }) => {
 
         {/* Main CTA */}
         <div className="text-center mb-12">
-          <button 
-            onClick={onShowSignUp}
-            className="bg-white text-primary px-12 py-6 rounded-2xl font-bold text-xl hover:bg-gray-100 transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:-translate-y-2 hover:scale-105"
+          <a 
+            href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block bg-white text-primary px-12 py-6 rounded-2xl font-bold text-xl hover:bg-gray-100 transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:-translate-y-2 hover:scale-105"
           >
-            Start Free Account – Scan First Receipt
-          </button>
+            Join Waitlist
+          </a>
         </div>
 
         {/* Trust Badges */}

@@ -99,9 +99,9 @@ const HomepageFooter: React.FC<HomepageFooterProps> = () => {
             <h3 className="text-lg font-semibold text-white mb-4">Get Started</h3>
             <ul className="space-y-3 text-gray-300">
               <li>
-                <Link to="/signup" className="hover:text-white transition-colors duration-200">
-                  Sign Up / Register
-                </Link>
+                <a href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors duration-200">
+                  Join Waitlist
+                </a>
               </li>
               <li>
                 <Link to="/login" className="hover:text-white transition-colors duration-200">
@@ -109,9 +109,9 @@ const HomepageFooter: React.FC<HomepageFooterProps> = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/signup" className="inline-flex items-center bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 text-sm">
-                  Start Free Trial
-                </Link>
+                <a href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494" target="_blank" rel="noopener noreferrer" className="inline-flex items-center bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 text-sm">
+                  Join Waitlist
+                </a>
               </li>
             </ul>
           </div>

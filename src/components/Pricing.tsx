@@ -30,8 +30,8 @@ const Pricing: React.FC = () => {
         'No export features',
         'Basic warranty alerts only'
       ],
-      cta: 'Start Free Trial',
-      ctaLink: '/signup'
+      cta: 'Join Waitlist',
+      ctaLink: 'https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494'
     },
     {
       name: 'Premium',
@@ -55,8 +55,8 @@ const Pricing: React.FC = () => {
         'Mobile app access'
       ],
       limitations: [],
-      cta: 'Upgrade to Premium',
-      ctaLink: '/signup?plan=premium'
+      cta: 'Join Waitlist',
+      ctaLink: 'https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494'
     }
   ];
 
@@ -184,18 +184,35 @@ const Pricing: React.FC = () => {
                     ))}
                   </div>
 
-                  <Link
-                    to={plan.ctaLink}
-                    className={`block w-full text-center py-3 px-6 rounded-lg font-semibold transition-colors duration-200 ${
-                      plan.popular
-                        ? 'bg-primary text-white hover:bg-primary/90'
-                        : plan.name === 'Free'
-                        ? 'bg-gray-100 text-text-primary hover:bg-gray-200'
-                        : 'bg-secondary text-white hover:bg-secondary/90'
-                    }`}
-                  >
-                    {plan.cta}
-                  </Link>
+                  {plan.ctaLink.startsWith('http') ? (
+                    <a
+                      href={plan.ctaLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`block w-full text-center py-3 px-6 rounded-lg font-semibold transition-colors duration-200 ${
+                        plan.popular
+                          ? 'bg-primary text-white hover:bg-primary/90'
+                          : plan.name === 'Free'
+                          ? 'bg-gray-100 text-text-primary hover:bg-gray-200'
+                          : 'bg-secondary text-white hover:bg-secondary/90'
+                      }`}
+                    >
+                      {plan.cta}
+                    </a>
+                  ) : (
+                    <Link
+                      to={plan.ctaLink}
+                      className={`block w-full text-center py-3 px-6 rounded-lg font-semibold transition-colors duration-200 ${
+                        plan.popular
+                          ? 'bg-primary text-white hover:bg-primary/90'
+                          : plan.name === 'Free'
+                          ? 'bg-gray-100 text-text-primary hover:bg-gray-200'
+                          : 'bg-secondary text-white hover:bg-secondary/90'
+                      }`}
+                    >
+                      {plan.cta}
+                    </Link>
+                  )}
                 </div>
               ))}
             </div>
@@ -294,12 +311,14 @@ const Pricing: React.FC = () => {
               Try free with 5 receipts, then just AU$7/month for unlimited access.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link 
-                to="/signup" 
-                className="bg-white text-primary px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors duration-200"
+              <a 
+                href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-white text-primary px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors duration-200 text-center"
               >
-                Start Free Trial
-              </Link>
+                Join Waitlist
+              </a>
               <Link 
                 to="/contact" 
                 className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-primary transition-colors duration-200"

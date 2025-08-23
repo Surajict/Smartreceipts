@@ -158,13 +158,15 @@ const FeaturesPage: React.FC = () => {
               Discover all the intelligent features that make Smart Receipts the most advanced 
               receipt management solution available.
             </p>
-            <Link 
-              to="/signup"
+            <a 
+              href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center bg-primary text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-semibold hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover text-base sm:text-lg"
             >
-              Try All Features Free
+              Join Waitlist
               <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
-            </Link>
+            </a>
           </div>
         </section>
 
@@ -305,12 +307,14 @@ const FeaturesPage: React.FC = () => {
               your receipt management experience
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link 
-                to="/signup"
-                className="bg-primary text-white px-8 py-4 rounded-xl font-semibold hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover"
+              <a 
+                href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-primary text-white px-8 py-4 rounded-xl font-semibold hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover text-center"
               >
-                Start Free Trial
-              </Link>
+                Join Waitlist
+              </a>
               <Link 
                 to="/how-it-works"
                 className="border border-primary text-primary px-8 py-4 rounded-xl font-semibold hover:bg-primary/10 transition-all duration-200"

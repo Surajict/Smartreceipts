@@ -402,12 +402,14 @@ const TermsOfService: React.FC = () => {
               Try Smart Receipts free with 5 receipts, then AU$7/month for unlimited access.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link 
-                to="/signup" 
-                className="bg-primary text-white px-8 py-3 rounded-lg font-semibold hover:bg-primary/90 transition-colors duration-200"
+              <a 
+                href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-primary text-white px-8 py-3 rounded-lg font-semibold hover:bg-primary/90 transition-colors duration-200 text-center"
               >
-                Create Account
-              </Link>
+                Join Waitlist
+              </a>
               <Link 
                 to="/contact" 
                 className="border-2 border-primary text-primary px-8 py-3 rounded-lg font-semibold hover:bg-primary hover:text-white transition-colors duration-200"

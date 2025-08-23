@@ -95,13 +95,15 @@ const HowItWorksPage: React.FC = () => {
               Transform your receipt chaos into organized digital records in just 4 simple steps. 
               Our AI-powered system makes receipt management effortless and intelligent.
             </p>
-            <Link 
-              to="/signup"
+            <a 
+              href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center bg-primary text-white px-8 py-4 rounded-xl font-semibold hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover text-lg"
             >
-              Try It Free Now
+              Join Waitlist
               <ArrowRight className="ml-2 h-5 w-5" />
-            </Link>
+            </a>
           </div>
         </section>
 
@@ -196,12 +198,14 @@ const HowItWorksPage: React.FC = () => {
               Join thousands of users who have transformed their receipt management with Smart Receipts
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link 
-                to="/signup"
-                className="bg-primary text-white px-8 py-4 rounded-xl font-semibold hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover"
+              <a 
+                href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-primary text-white px-8 py-4 rounded-xl font-semibold hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover text-center"
               >
-                Start Free Trial
-              </Link>
+                Join Waitlist
+              </a>
               <Link 
                 to="/help-center"
                 className="border border-primary text-primary px-8 py-4 rounded-xl font-semibold hover:bg-primary/10 transition-all duration-200"

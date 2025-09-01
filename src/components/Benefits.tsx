@@ -21,7 +21,7 @@ const Benefits: React.FC<BenefitsProps> = ({ onShowLogin }) => {
     {
       icon: 'Headphones',
       title: 'Customer Care Support',
-      description: 'Expert assistance with warranty claims, manufacturer contacts, and full support throughout the process.'
+      description: 'Expert assistance with warranty claim support, manufacturer contacts, and full support throughout the process.'
     },
     {
       icon: 'Smartphone',

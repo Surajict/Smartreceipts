@@ -52,7 +52,7 @@ const Header: React.FC = () => {
       isExternal: true
     },
     {
-      label: 'Warranty Claims',
+      label: 'Warranty Claim Support',
       href: '/warranty-claims',
       isExternal: true
     }

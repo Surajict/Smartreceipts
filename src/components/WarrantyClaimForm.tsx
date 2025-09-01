@@ -231,7 +231,7 @@ const WarrantyClaimForm: React.FC<WarrantyClaimFormProps> = ({ onSubmitted, onCa
                   <p className="text-text-secondary">
                     {searchQuery 
                       ? 'Try adjusting your search terms'
-                      : 'You need to scan some receipts first before submitting warranty claims'
+                      : 'You need to scan some receipts first before submitting warranty claim support requests'
                     }
                   </p>
                 </div>

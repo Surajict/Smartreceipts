@@ -85,7 +85,7 @@ const Disclaimer: React.FC = () => {
               <ul className="text-text-secondary mb-6 space-y-2">
                 <li>• Financial record keeping</li>
                 <li>• Tax reporting and compliance</li>
-                <li>• Warranty claims</li>
+                <li>• Warranty claim support</li>
                 <li>• Business expense reporting</li>
                 <li>• Insurance claims</li>
               </ul>
@@ -122,11 +122,11 @@ const Disclaimer: React.FC = () => {
                 tax-related matters.
               </p>
 
-              <h3 className="text-xl font-semibold text-text-primary mb-4">Warranty Claims</h3>
+              <h3 className="text-xl font-semibold text-text-primary mb-4">Warranty Claim Support</h3>
               <p className="text-text-secondary mb-4">
                 Smart Receipts A/NZ provides warranty tracking as a convenience feature. We do 
                 not guarantee the accuracy of warranty period calculations or the success of 
-                warranty claims. Users should verify warranty terms directly with manufacturers 
+                warranty claim support. Users should verify warranty terms directly with manufacturers 
                 and retailers.
               </p>
             </section>

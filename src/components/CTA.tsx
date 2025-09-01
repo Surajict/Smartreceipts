@@ -28,11 +28,11 @@ const CTA: React.FC<CTAProps> = ({ onShowLogin }) => {
             Ready to Never Lose Another Receipt?
           </h2>
           {/* Main marketing message highlighting user base and value proposition.
-              Emphasizes social proof (50k+ users), key benefits (warranty claims),
+              Emphasizes social proof (50k+ users), key benefits (warranty claim support),
               and reduces friction (no credit card required) 
           <p className="text-xl text-white/90 max-w-3xl mx-auto leading-relaxed">
             Join 50,000+ users who've transformed their receipt management and recovered 
-            thousands in warranty claims. Start your free account today – no credit card required.
+            thousands through warranty claim support. Start your free account today – no credit card required.
           </p>*/}
         </div>
 

@@ -308,8 +308,8 @@ const HelpCenter: React.FC = () => {
     },
     {
       category: 'Warranty',
-      question: 'Can Smart Receipts help me file warranty claims?',
-      answer: 'While Smart Receipts doesn\'t file claims directly, it provides everything you need: organized receipt images, product details, purchase dates, warranty periods, and store information. This makes filing warranty claims much easier and faster when you need to contact manufacturers or retailers.'
+      question: 'Can Smart Receipts help me with warranty claim support?',
+      answer: 'While Smart Receipts doesn\'t file claims directly, it provides everything you need: organized receipt images, product details, purchase dates, warranty periods, and store information. This makes warranty claim support much easier and faster when you need to contact manufacturers or retailers.'
     },
 
     // AI & Smart Features

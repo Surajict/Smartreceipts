@@ -5,18 +5,16 @@ import { Testimonial } from '../types';
 const Testimonials: React.FC = () => {
   const testimonials: Testimonial[] = [
     {
-      name: 'Sarah Chen',
-      role: 'Small Business Owner',
-      company: 'TechStart Solutions',
-      avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=2',
+      name: 'Harry',
+      role: 'Data Analyst',
+      company: 'Equifax',
       rating: 5,
-      content: 'Smart Receipt saved me over $1,200 in warranty claims last year. The AI is incredibly accurate and the alerts are perfectly timed.'
+      content: 'I recently discovered Smart Receipts and it has truly transformed how I manage my expenses. The app makes scanning and organizing receipts effortless—whether snapping a photo or importing PDFs, the AI-powered OCR extracts all the crucial details like merchant name, date, total, and tax. I love how I can categorize expenses, track mileage, and generate sleek PDF or CSV reports in just a few taps. The automatic cloud backups give me peace of mind, and having all my data under my control—thanks to its open‑source nature—is incredibly reassuring. Whether you\'re a solo freelancer or running a small business, Smart Receipts is smart, simple, and secure—highly recommend!'
     },
     {
       name: 'Michael Rodriguez',
       role: 'IT Manager',
       company: 'Global Enterprises',
-      avatar: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=2',
       rating: 5,
       content: 'Managing receipts for our entire department was a nightmare until Smart Receipt. Now everything is organized and accessible instantly.'
     },
@@ -24,7 +22,6 @@ const Testimonials: React.FC = () => {
       name: 'Emily Johnson',
       role: 'Freelance Designer',
       company: 'Creative Studio',
-      avatar: 'https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=2',
       rating: 5,
       content: 'The customer support team helped me claim a warranty on my expensive camera equipment. Exceptional service and results!'
     },
@@ -32,7 +29,6 @@ const Testimonials: React.FC = () => {
       name: 'David Park',
       role: 'Operations Director',
       company: 'Manufacturing Co',
-      avatar: 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=2',
       rating: 5,
       content: 'The ROI on Smart Receipt is incredible. We\'ve recovered thousands in warranty claims and saved countless hours on organization.'
     },
@@ -40,7 +36,6 @@ const Testimonials: React.FC = () => {
       name: 'Lisa Thompson',
       role: 'Restaurant Owner',
       company: 'Bistro Moderne',
-      avatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=2',
       rating: 5,
       content: 'Perfect for managing all our equipment warranties. The mobile app makes it easy to scan receipts on the go.'
     },
@@ -48,22 +43,12 @@ const Testimonials: React.FC = () => {
       name: 'James Wilson',
       role: 'Tech Consultant',
       company: 'Digital Solutions',
-      avatar: 'https://images.pexels.com/photos/1043471/pexels-photo-1043471.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=2',
       rating: 5,
       content: 'Smart Receipt has transformed how I handle client equipment purchases. Everything is tracked and organized automatically.'
     }
   ];
 
-  const partnerLogos = [
-    { name: 'Apple', logo: '🍎' },
-    { name: 'Samsung', logo: '📱' },
-    { name: 'Dell', logo: '💻' },
-    { name: 'HP', logo: '🖨️' },
-    { name: 'Canon', logo: '📷' },
-    { name: 'Sony', logo: '🎵' },
-    { name: 'LG', logo: '📺' },
-    { name: 'Microsoft', logo: '🪟' }
-  ];
+
 
   const renderStars = (rating: number) => {
     return Array.from({ length: 5 }, (_, i) => (
@@ -87,7 +72,7 @@ const Testimonials: React.FC = () => {
         {/* Testimonials */}
         <div className="text-center mb-16">
           <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4 tracking-tight">
-            Trusted by <span className="text-primary">50,000+</span> Happy Users
+            What Our Users Say
           </h2>
           <p className="text-xl text-text-secondary max-w-3xl mx-auto">
             See what our users say about their experience with Smart Receipt 
@@ -114,11 +99,6 @@ const Testimonials: React.FC = () => {
 
               {/* Author */}
               <div className="flex items-center">
-                <img
-                  src={testimonial.avatar}
-                  alt={`${testimonial.name} avatar`}
-                  className="w-12 h-12 rounded-full object-cover mr-4 border-2 border-white shadow-sm"
-                />
                 <div>
                   <h4 className="font-bold text-text-primary">{testimonial.name}</h4>
                   <p className="text-sm text-text-secondary">
@@ -130,52 +110,7 @@ const Testimonials: React.FC = () => {
           ))}
         </div>
 
-        {/* Partner Logos */}
-        <div className="text-center">
-          <h3 className="text-2xl font-bold text-text-primary mb-8">
-            Partnered with Leading Brands
-          </h3>
-          <p className="text-text-secondary mb-12 max-w-2xl mx-auto">
-            We work directly with major manufacturers to streamline warranty processes 
-            and ensure you get the support you deserve.
-          </p>
 
-          <div className="grid grid-cols-4 md:grid-cols-8 gap-8 items-center">
-            {partnerLogos.map((partner, index) => (
-              <div
-                key={index}
-                className="bg-white p-4 rounded-lg shadow-card hover:shadow-card-hover transition-shadow duration-300 flex items-center justify-center group"
-              >
-                <div className="text-3xl group-hover:scale-110 transition-transform duration-300">
-                  {partner.logo}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Trust Indicators */}
-        <div className="mt-16 text-center">
-          <div className="bg-gradient-feature rounded-2xl p-8 border border-gray-100 shadow-lg">
-            <div className="grid md:grid-cols-3 gap-8">
-              <div>
-                <div className="text-3xl font-bold bg-gradient-to-r from-primary to-teal-600 bg-clip-text text-transparent mb-2">94%</div>
-                <div className="text-text-primary font-medium">Claim Success Rate</div>
-                <div className="text-sm text-text-secondary mt-1">Higher than industry average</div>
-              </div>
-              <div>
-                <div className="text-3xl font-bold bg-gradient-to-r from-secondary to-purple-600 bg-clip-text text-transparent mb-2">4.9/5</div>
-                <div className="text-text-primary font-medium">Average Rating</div>
-                <div className="text-sm text-text-secondary mt-1">Based on 12,000+ reviews</div>
-              </div>
-              <div>
-                <div className="text-3xl font-bold bg-gradient-to-r from-accent-purple to-indigo-600 bg-clip-text text-transparent mb-2">24/7</div>
-                <div className="text-text-primary font-medium">Customer Support</div>
-                <div className="text-sm text-text-secondary mt-1">Always here to help</div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
   );

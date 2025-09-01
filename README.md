@@ -563,6 +563,7 @@ Key fields in the subscription_codes table:
 - **Agentic Features Preview**: Coming soon - AI-powered status tracking and automated follow-ups
 - **User Information Capture**: Automatically includes user name and email with each claim
 - **Response Storage**: Stores and displays detailed support responses from warranty providers
+- **HTML Response Formatting**: Support responses render with proper HTML formatting including bold text, lists, and clickable links
 - **Professional UI**: Clean, intuitive interface with expandable details and proper error handling
 
 ### **Admin Portal & Subscription Management (NEW!)**
@@ -937,6 +938,10 @@ supabase functions deploy smart-search
   - Comprehensive claim history with expandable details view
   - User information capture and response storage
   - Professional UI with proper error handling and loading states
+  - **HTML Response Parsing**: Support responses now properly render HTML formatting
+    - Bold text, bulleted lists, and clickable links display correctly
+    - Professional email-style formatting for warranty claim responses
+    - Safe HTML rendering with XSS protection and styled elements
 - 🖼️ **Enhanced Profile Picture System**: Robust profile image loading and refresh
   - Automatic signed URL refresh every 5 minutes to prevent expiration
   - File existence verification before creating signed URLs
@@ -953,6 +958,7 @@ supabase functions deploy smart-search
   - Improved warranty claims tile styling with unique color scheme
   - Enhanced header consistency across all authenticated pages
   - Better error handling and user feedback throughout the system
+  - **Terminology Update**: Changed "Warranty Claims" to "Warranty Claim Support" across all interfaces for better user experience
 
 ### **v5.4.0 (2025-08-20) - Voice Transcription & Markdown Formatting** (NEW!)
 - 🎤 **Voice Input for Smart Search**: Click microphone button to speak search queries

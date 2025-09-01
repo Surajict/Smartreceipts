@@ -491,16 +491,24 @@ const WarrantyClaims: React.FC = () => {
                               <h4 className="text-sm font-medium text-text-primary mb-2">Support Response:</h4>
                               <div className="text-sm text-text-secondary bg-blue-50 border border-blue-200 p-3 rounded-lg max-h-40 overflow-y-auto overflow-x-hidden">
                                 <div 
-                                  className="max-w-full"
+                                  className="max-w-full prose prose-sm max-w-none"
                                   style={{
                                     wordWrap: 'break-word',
                                     overflowWrap: 'break-word',
                                     wordBreak: 'break-word',
                                     whiteSpace: 'pre-wrap'
                                   }}
-                                >
-                                  {claim.webhook_response}
-                                </div>
+                                  dangerouslySetInnerHTML={{
+                                    __html: claim.webhook_response
+                                      .replace(/\n/g, '<br>')
+                                      .replace(/<b>/g, '<strong>')
+                                      .replace(/<\/b>/g, '</strong>')
+                                      .replace(/<ul>/g, '<ul class="list-disc list-inside ml-4 my-2">')
+                                      .replace(/<li>/g, '<li class="mb-1">')
+                                      .replace(/<p>/g, '<p class="mb-2">')
+                                      .replace(/<a /g, '<a class="text-primary hover:text-primary/80 underline" ')
+                                  }}
+                                />
                               </div>
                             </div>
                           )}

@@ -154,7 +154,7 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ userId }) =
                   <div className="flex-1 min-w-0 pr-2">
                     <div className="text-xs sm:text-sm font-medium text-text-primary mb-1 break-words">{n.message}</div>
                     <div className="text-xs text-text-secondary">
-                      {n.type.replace('_', ' ')} • {new Date(n.created_at).toLocaleDateString()}
+                      {n.type.replace('_', ' ')} • {new Date(n.created_at).toLocaleDateString('en-AU')}
                     </div>
                   </div>
                   <button

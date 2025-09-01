@@ -35,7 +35,7 @@ const HomepageFooter: React.FC<HomepageFooterProps> = () => {
               </li>
               <li className="flex items-start space-x-2 text-sm">
                 <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <span>47 Waitara Avenue<br />Waitara NSW 2177<br />Australia</span>
+                <span>47 Waitara Avenue<br />Waitara NSW 2077<br />Australia</span>
               </li>
             </ul>
           </div>
@@ -109,7 +109,7 @@ const HomepageFooter: React.FC<HomepageFooterProps> = () => {
                 </Link>
               </li>
               <li>
-                <a href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494" target="_blank" rel="noopener noreferrer" className="inline-flex items-center bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 text-sm">
+                <a href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494" target="_blank" rel="noopener noreferrer" className="inline-flex items-center bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white px-4 py-2 rounded-lg font-medium transition-all duration-300 text-sm shadow-md hover:shadow-lg transform hover:-translate-y-0.5 border border-primary/20">
                   Join Waitlist
                 </a>
               </li>
@@ -122,18 +122,25 @@ const HomepageFooter: React.FC<HomepageFooterProps> = () => {
           <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
             
             {/* Logo & Branding */}
-            <div className="flex items-center space-x-3">
-              <img 
-                src="/Smart Receipt Logo.png" 
-                alt="Smart Receipts A/NZ Logo" 
-                className="h-10 w-10 object-contain filter brightness-150"
-              />
-              <div className="flex flex-col">
-                <span className="text-xl font-bold bg-gradient-to-r from-teal-300 to-blue-400 bg-clip-text text-transparent">
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <img 
+                  src="/Smart Receipt Logo.png" 
+                  alt="Smart Receipts A/NZ Logo" 
+                  className="h-14 w-14 object-contain filter brightness-150 drop-shadow-lg"
+                />
+                {/* Subtle brand glow for footer */}
+                <div className="absolute inset-0 bg-primary/20 rounded-full blur-md opacity-30"></div>
+              </div>
+              <div className="flex flex-col space-y-1">
+                <span className="text-2xl font-bold bg-gradient-to-r from-primary to-teal-300 bg-clip-text text-transparent">
                   Smart Receipts A/NZ
                 </span>
-                <span className="text-xs text-gray-400">
+                <span className="text-sm text-primary/80 font-semibold">
                   AI-Powered Receipt Management
+                </span>
+                <span className="text-xs text-gray-400 leading-relaxed max-w-xs">
+                  Transform your receipt chaos into organized digital records
                 </span>
               </div>
             </div>
@@ -144,7 +151,7 @@ const HomepageFooter: React.FC<HomepageFooterProps> = () => {
                 © {currentYear} Smart Receipts A/NZ. All rights reserved.
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Transform your receipt chaos into organized digital records
+                Proudly serving Australia & New Zealand
               </p>
             </div>
           </div>

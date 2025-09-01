@@ -29,7 +29,7 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin }) => {
                 href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-gradient-primary text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-medium text-base sm:text-lg hover:opacity-90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-1 text-center"
+                className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-medium text-base sm:text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1 text-center border border-primary/20 hover:border-primary/40"
               >
                 Join Waitlist
               </a>
@@ -37,7 +37,7 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin }) => {
                 href="https://youtu.be/wJ6iOkoH-pg"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center space-x-2 text-text-secondary hover:text-secondary transition-colors duration-200 px-4 sm:px-6 py-3 sm:py-4 rounded-lg border-2 border-gray-300 hover:border-secondary font-medium bg-white/90 backdrop-blur-sm text-sm sm:text-base"
+                className="flex items-center justify-center space-x-2 text-text-secondary hover:text-primary transition-colors duration-300 px-4 sm:px-6 py-3 sm:py-4 rounded-lg border-2 border-gray-300 hover:border-primary font-medium bg-white/90 backdrop-blur-sm text-sm sm:text-base hover:bg-primary/5"
               >
                 <Play className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
                 <span className="truncate">Smart Receipts Explainer</span>

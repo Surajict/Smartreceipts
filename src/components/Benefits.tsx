@@ -89,7 +89,7 @@ const Benefits: React.FC<BenefitsProps> = ({ onShowLogin }) => {
         <div className="text-center mt-16">
           <button 
             onClick={() => window.open('https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494', '_blank')}
-            className="bg-gradient-primary text-white px-8 py-4 rounded-lg font-medium text-lg hover:opacity-90 transition-all duration-200 shadow-button hover:shadow-button-hover transform hover:-translate-y-1"
+            className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white px-8 py-4 rounded-lg font-medium text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1 border border-primary/20 hover:border-primary/40"
           >
             Join Waitlist
           </button>

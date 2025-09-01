@@ -8,6 +8,7 @@ import AuthLayout from './components/AuthLayout';
 import Dashboard from './components/Dashboard';
 import MyLibrary from './components/MyLibrary';
 import WarrantyPage from './components/WarrantyPage';
+import WarrantyClaims from './components/WarrantyClaims';
 import ProfilePage from './components/ProfilePage';
 import SubscriptionManagement from './components/SubscriptionManagement';
 import AdminPortal from './components/AdminPortal';
@@ -107,6 +108,14 @@ const AppContent: React.FC = () => {
             onBackToDashboard={() => window.location.href = '/dashboard'}
             onShowProfile={() => window.location.href = '/profile'}
           />
+        ) : (
+          <Navigate to="/login" replace />
+        )
+      } />
+      
+      <Route path="/warranty-claims" element={
+        user ? (
+          <WarrantyClaims />
         ) : (
           <Navigate to="/login" replace />
         )

@@ -15,6 +15,7 @@ interface UserContextType {
   profilePicture: string | null;
   isLoading: boolean;
   refreshUser: () => Promise<void>;
+  refreshProfilePicture: () => Promise<void>;
   updateProfilePicture: (newPictureUrl: string) => void;
 }
 
@@ -44,6 +45,22 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     }
 
     try {
+      console.log('Loading profile picture for avatar_url:', avatarUrl);
+      
+      // First, check if the file exists in storage
+      const { data: fileData, error: fileError } = await supabase.storage
+        .from('profile-pictures')
+        .list(avatarUrl.split('/')[0], {
+          search: avatarUrl.split('/')[1]
+        });
+
+      if (fileError || !fileData || fileData.length === 0) {
+        console.log('Profile picture file not found in storage:', avatarUrl);
+        setProfilePicture(null);
+        return;
+      }
+
+      // Create signed URL for the existing file
       const { data, error } = await supabase.storage
         .from('profile-pictures')
         .createSignedUrl(avatarUrl, 365 * 24 * 60 * 60); // 1 year expiry
@@ -52,7 +69,11 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         console.error('Error creating signed URL:', error);
         setProfilePicture(null);
       } else if (data?.signedUrl) {
+        console.log('Profile picture loaded successfully:', data.signedUrl);
         setProfilePicture(data.signedUrl);
+      } else {
+        console.log('No signed URL returned');
+        setProfilePicture(null);
       }
     } catch (error) {
       console.error('Error loading profile picture:', error);
@@ -64,6 +85,9 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     try {
       const currentUser = await getCurrentUser();
       if (currentUser) {
+        console.log('Loading user profile:', currentUser.id);
+        console.log('User metadata:', currentUser.user_metadata);
+        
         const userProfile: UserProfile = {
           id: currentUser.id,
           email: currentUser.email || '',
@@ -74,8 +98,17 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         };
         
         setUser(userProfile);
-        await loadProfilePicture(userProfile.avatar_url);
+        
+        // Load profile picture if avatar_url exists
+        if (userProfile.avatar_url) {
+          console.log('Found avatar_url, loading profile picture:', userProfile.avatar_url);
+          await loadProfilePicture(userProfile.avatar_url);
+        } else {
+          console.log('No avatar_url found in user metadata');
+          setProfilePicture(null);
+        }
       } else {
+        console.log('No current user found');
         setUser(null);
         setProfilePicture(null);
       }
@@ -91,6 +124,13 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
   const refreshUser = async () => {
     setIsLoading(true);
     await loadUser();
+  };
+
+  const refreshProfilePicture = async () => {
+    if (user?.avatar_url) {
+      console.log('Refreshing profile picture...');
+      await loadProfilePicture(user.avatar_url);
+    }
   };
 
   const updateProfilePicture = (newPictureUrl: string) => {
@@ -114,20 +154,32 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         setIsLoading(false);
       } else if (event === 'USER_UPDATED' && session?.user) {
         // User data updated (like profile picture), reload
+        console.log('User updated, reloading profile');
         loadUser();
       }
     });
 
+    // Periodic refresh of profile picture (every 5 minutes)
+    // This helps with expired signed URLs
+    const intervalId = setInterval(() => {
+      if (user?.avatar_url) {
+        console.log('Periodic refresh of profile picture');
+        loadProfilePicture(user.avatar_url);
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
     return () => {
       subscription?.unsubscribe();
+      clearInterval(intervalId);
     };
-  }, []);
+  }, [user?.avatar_url]);
 
   const value: UserContextType = {
     user,
     profilePicture,
     isLoading,
     refreshUser,
+    refreshProfilePicture,
     updateProfilePicture
   };
 

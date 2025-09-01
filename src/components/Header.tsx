@@ -39,6 +39,25 @@ const Header: React.FC = () => {
     }
   ];
 
+  // Additional navigation links for authenticated users
+  const authenticatedLinks = [
+    {
+      label: 'Dashboard',
+      href: '/dashboard',
+      isExternal: true
+    },
+    {
+      label: 'My Library',
+      href: '/library',
+      isExternal: true
+    },
+    {
+      label: 'Warranty Claims',
+      href: '/warranty-claims',
+      isExternal: true
+    }
+  ];
+
   return (
     <header className="bg-white shadow-card fixed w-full top-0 z-50">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">

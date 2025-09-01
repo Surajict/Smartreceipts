@@ -80,6 +80,17 @@ Smart Receipts is an intelligent receipt management application that uses AI to 
 - **Data Privacy**: Your receipts are private and secure
 - **Subscription Integration**: Seamless premium feature access via subscription codes
 
+### 🛡️ **Warranty Claims System** (NEW!)
+- **Comprehensive Claim Management**: Submit and track warranty support requests
+- **Intelligent Data Integration**: Automatically pulls product details from your receipt library
+- **Webhook Integration**: Connects with n8n workflows for automated support processing
+- **Unique Claim IDs**: Auto-generated alphanumeric identifiers (WC-XXXXXX format)
+- **Status Tracking**: Monitor claims from submission through completion
+- **Response Storage**: Stores and displays support responses from warranty providers
+- **Dashboard Integration**: View claim statistics and quick access from main dashboard
+- **User Information Tracking**: Automatically includes user name and email with claims
+- **Agentic Features**: Future AI-powered status tracking and follow-up automation
+
 ### 📊 **Enhanced Receipt Library**
 - **Grouped Display**: Multi-product receipts are grouped together visually
 - **PDF Document Support**: Proper viewing of PDF receipts with attractive viewer component
@@ -188,6 +199,9 @@ To enable Google Sign-In:
    
    # Voice Transcription (uses n8n webhook - no additional API key needed)
    # Webhook URL is configured in the application code
+   
+   # Warranty Claims Webhook (for n8n integration)
+   VITE_WARRANTY_WEBHOOK_URL=https://bisnen.app.n8n.cloud/webhook/c5ba546b-e450-4838-ad22-4cf024a31244
    
    # Google Cloud Vision (for enhanced OCR)
    VITE_GOOGLE_CLOUD_VISION_API_KEY=your_google_cloud_vision_key_here
@@ -310,6 +324,7 @@ The app uses React Router with the following primary routes:
 - `/profile` Profile and settings (`ProfilePage`)
 - `/library` Your saved receipts (`MyLibrary`)
 - `/warranty` Warranty manager
+- `/warranty-claims` Warranty claims management (NEW!)
 - `/subscription` Subscription management
 - `/admin` Admin portal
 
@@ -365,7 +380,16 @@ Notes:
 - Get notifications before warranties expire
 - Access detailed warranty information in "My Library"
 
-### **7. Organize Your Library**
+### **7. Submit Warranty Claims** (NEW!)
+- Access "Warranties Claimed" from the dashboard
+- Click "New Claim" to start a warranty support request
+- Select a product from your receipt library or enter manually
+- Describe your issue in detail
+- Submit the claim to receive a unique claim ID (WC-XXXXXX format)
+- Track claim status and view support responses
+- Monitor all past claims with detailed history
+
+### **8. Organize Your Library**
 - Access "My Library" to view all receipts
 - View both image and PDF receipts with proper display
 - Use search and filters to find specific items
@@ -373,7 +397,7 @@ Notes:
 - Edit receipt details anytime
 - Export receipt data when needed
 
-### **8. Admin Portal (Administrators Only)** (NEW!)
+### **9. Admin Portal (Administrators Only)** (NEW!)
 - Access the admin portal at `/admin` route
 - Login with admin credentials:
   - **Username**: `smartreceiptsau@gmail.com`
@@ -480,6 +504,7 @@ Create `.cursor/mcp.json` for enhanced development experience:
 
 The app uses PostgreSQL with the following main tables:
 - **receipts**: Stores receipt data with multi-product support
+- **warranty_claims**: Warranty support requests and responses (NEW!)
 - **users**: User profiles and settings
 - **user_notification_settings**: Notification preferences
 - **user_privacy_settings**: Privacy controls
@@ -497,6 +522,15 @@ Key fields in the receipts table:
 - `receipt_group_id`, `is_group_receipt` (for multi-product support)
 - `embedding` (for vector search)
 - `image_url`, `user_id`
+
+Key fields in the warranty_claims table:
+- `id`, `claim_id` (unique WC-XXXXXX identifier), `user_id`
+- `user_name`, `user_email` (captured at claim submission)
+- `product_name`, `brand_name`, `model_number`
+- `warranty_period`, `amount`, `receipt_image_url`
+- `store_name`, `purchase_location`, `issue_description`
+- `webhook_response` (support response from n8n workflow)
+- `status` ('submitted', 'completed'), `created_at`, `updated_at`
 
 Key fields in the subscription_codes table:
 - `code`, `status` ('generated', 'used', 'expired')
@@ -519,6 +553,17 @@ Key fields in the subscription_codes table:
   - **Organized Lists**: Numbered and bullet point lists with proper styling
   - **Clean Paragraphs**: Automatic paragraph separation with appropriate spacing
   - **Consistent Styling**: All formatting matches the app's Tailwind design system
+
+### **Warranty Claims Management System (NEW!)**
+- **Comprehensive Claim Tracking**: Submit and manage warranty support requests with unique claim IDs
+- **Automated Data Integration**: Seamlessly pulls product information from your receipt library
+- **n8n Webhook Integration**: Connects with automated workflows for intelligent support processing
+- **Real-time Status Updates**: Track claims from submission through resolution
+- **Dashboard Integration**: Quick access tile and statistics display on main dashboard
+- **Agentic Features Preview**: Coming soon - AI-powered status tracking and automated follow-ups
+- **User Information Capture**: Automatically includes user name and email with each claim
+- **Response Storage**: Stores and displays detailed support responses from warranty providers
+- **Professional UI**: Clean, intuitive interface with expandable details and proper error handling
 
 ### **Admin Portal & Subscription Management (NEW!)**
 - **Secure Admin Interface**: Dedicated portal with hardcoded authentication for security
@@ -643,10 +688,11 @@ The project includes comprehensive database migrations in `supabase/migrations/`
 - **User management** - Profile and settings tables
 - **File storage** - Receipt image storage with security policies
 - **Performance optimization** - Indexes and triggers
+- **Warranty claims system** - Complete warranty support request management (NEW!)
 - **Admin portal setup** - Admin tables and functions (NEW!)
 - **Subscription management** - Subscription codes and user linking (NEW!)
 - **Admin settings** - System configuration table (NEW!)
- - **Notifications** - User notifications tables and helpers (NEW!)
+- **Notifications** - User notifications tables and helpers (NEW!)
 
 To apply migrations:
 ```bash
@@ -782,7 +828,15 @@ To enable push notifications:
    - Ensure the service worker `src/sw.ts` is being served and registered
    - Test from a secure origin (HTTPS or localhost)
 
-11. **Google sign-in redirect issues**
+11. **Warranty Claims Issues** (NEW!)
+    - **Claims not submitting**: Check that `VITE_WARRANTY_WEBHOOK_URL` is set correctly
+    - **Webhook timeouts**: n8n webhook may be slow, wait for response
+    - **Missing claim statistics**: Ensure `get_user_warranty_claims_stats()` function exists
+    - **Claim ID not generating**: Verify `generate_claim_id()` function and trigger are active
+    - **Profile picture not loading**: Check Supabase storage permissions and signed URL generation
+    - **Dashboard count not updating**: Claims stats refresh automatically, try manual refresh
+
+12. **Google sign-in redirect issues**
     - Confirm `VITE_GOOGLE_OAUTH_CLIENT_ID` matches your Google OAuth Client ID
     - Verify redirect URIs include `/auth/v1/callback` and your app domain
     - Ensure Google provider is enabled in Supabase
@@ -865,12 +919,40 @@ supabase functions deploy smart-search
 - [ ] **NEW**: Enable push notifications and receive warranty alerts
 - [ ] **NEW**: Test voice transcription by clicking microphone button in Smart Search
 - [ ] **NEW**: Verify AI responses display with proper markdown formatting
+- [ ] **NEW**: Set up warranty claims webhook URL in environment variables
+- [ ] **NEW**: Test warranty claims submission and tracking system
+- [ ] **NEW**: Verify profile pictures load correctly across all signed pages
 
 **Need help?** [Create an issue](https://github.com/Surajict/Smartreceipts/issues) or contact the development team.
 
 ---
 
 ## 🔄 Version History
+
+### **v5.5.0 (2025-01-30) - Warranty Claims System & Profile Improvements** (NEW!)
+- 🛡️ **Complete Warranty Claims System**: Submit and track warranty support requests
+  - Unique claim ID generation (WC-XXXXXX format) with automated triggers
+  - n8n webhook integration for automated support processing
+  - Dashboard integration with real-time statistics and quick access
+  - Comprehensive claim history with expandable details view
+  - User information capture and response storage
+  - Professional UI with proper error handling and loading states
+- 🖼️ **Enhanced Profile Picture System**: Robust profile image loading and refresh
+  - Automatic signed URL refresh every 5 minutes to prevent expiration
+  - File existence verification before creating signed URLs
+  - Error handling with automatic retry mechanisms
+  - Comprehensive logging for debugging profile picture issues
+  - Cross-page consistency for profile pictures in all signed pages
+- 🗃️ **Database Consolidation**: Streamlined SQL migration system
+  - Consolidated all warranty claims SQL into single comprehensive migration
+  - Idempotent migration design safe for multiple runs
+  - Cleaned up redundant SQL files from `/sql/` directory
+  - Enhanced database comments and documentation
+- 🎨 **UI/UX Improvements**: 
+  - Australian date format (DD/MM/YYYY) in notification dropdown
+  - Improved warranty claims tile styling with unique color scheme
+  - Enhanced header consistency across all authenticated pages
+  - Better error handling and user feedback throughout the system
 
 ### **v5.4.0 (2025-08-20) - Voice Transcription & Markdown Formatting** (NEW!)
 - 🎤 **Voice Input for Smart Search**: Click microphone button to speak search queries

@@ -24,7 +24,8 @@ import {
   Sun,
   Mic,
   MicOff,
-  Square
+  Square,
+  FileText
 } from 'lucide-react';
 import { signOut, supabase, getUserReceiptStats, getUserNotifications, archiveNotification, archiveAllNotifications, createNotification, wasNotificationDismissed, cleanupDuplicateNotifications, Notification } from '../lib/supabase';
 import { useUser } from '../contexts/UserContext';
@@ -33,13 +34,14 @@ import { RAGService } from '../services/ragService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import subscriptionService from '../services/subscriptionService';
 import onboardingService from '../services/onboardingService';
+import warrantyClaimsService from '../services/warrantyClaimsService';
 import { UserSubscriptionInfo } from '../types/subscription';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { useTheme } from '../contexts/ThemeContext';
 import UsageIndicator from './UsageIndicator';
 import OnboardingTour from './OnboardingTour';
 import ContextualTooltip from './ContextualTooltip';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Footer from './Footer';
 // Removed PushNotificationSetup import - push notifications disabled
 
@@ -99,7 +101,7 @@ interface RAGResult {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning, onShowProfile, onShowLibrary, onShowWarranty }) => {
-  const { user, profilePicture } = useUser();
+  const { user, profilePicture, refreshProfilePicture } = useUser();
   const { theme, toggleTheme } = useTheme();
   const { subscriptionInfo: globalSubscriptionInfo } = useSubscription();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -127,6 +129,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
     itemsCaptured: 0,
     warrantiesClaimed: 0
   });
+  const [warrantyClaimsStats, setWarrantyClaimsStats] = useState({ total_claims: 0, submitted_claims: 0, completed_claims: 0 });
   const [warrantyAlerts, setWarrantyAlerts] = useState<WarrantyAlert[]>([]);
   const [recentReceipts, setRecentReceipts] = useState<RecentReceipt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -143,6 +146,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const [showOnboardingTour, setShowOnboardingTour] = useState(false);
   
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     // Load actual data from database when user is available
@@ -151,9 +155,69 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       loadEmbeddingStatus(user.id);
       loadNotifications(user.id);
       loadSubscriptionData(user.id);
+      
+      // Load warranty claims stats with a slight delay to ensure other data is loaded first
+      setTimeout(() => {
+        loadWarrantyClaimsStats(user.id);
+      }, 500);
+      
       checkAndShowTour(user.id);
     }
   }, [user]);
+
+  // Auto-refresh warranty claims stats
+  useEffect(() => {
+    if (!user) return;
+
+    // Set up periodic refresh every 30 seconds
+    const refreshInterval = setInterval(() => {
+      console.log('⏰ Dashboard: Periodic refresh of warranty claims stats');
+      loadWarrantyClaimsStats(user.id);
+    }, 30000); // 30 seconds
+
+    const handleFocus = () => {
+      console.log('🔄 Dashboard: Window focused, refreshing warranty claims stats');
+      loadWarrantyClaimsStats(user.id);
+    };
+
+    // Also listen for visibility change (when switching tabs)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('🔄 Dashboard: Tab visible again, refreshing warranty claims stats');
+        loadWarrantyClaimsStats(user.id);
+      }
+    };
+
+    // Listen for route changes (when user navigates back to dashboard)
+    const handleRouteChange = () => {
+      console.log('🔄 Dashboard: Route changed, refreshing warranty claims stats');
+      setTimeout(() => {
+        loadWarrantyClaimsStats(user.id);
+      }, 100);
+    };
+    
+    // Add event listeners
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('popstate', handleRouteChange);
+
+    return () => {
+      clearInterval(refreshInterval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('popstate', handleRouteChange);
+    };
+  }, [user]);
+
+  // Refresh warranty claims when navigating to dashboard
+  useEffect(() => {
+    if (user && location.pathname === '/dashboard') {
+      console.log('🔄 Dashboard: Navigated to dashboard, refreshing warranty claims stats');
+      setTimeout(() => {
+        loadWarrantyClaimsStats(user.id);
+      }, 200);
+    }
+  }, [location.pathname, user]);
 
   useEffect(() => {
     // Update time every minute
@@ -174,6 +238,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
   const loadDashboardData = async (userId: string) => {
     try {
       setIsLoading(true);
+      
+      console.log('📊 Dashboard: Starting to load all dashboard data for user:', userId);
 
       // Load grouped receipts using the new service
       const groupedReceipts = await MultiProductReceiptService.getGroupedReceipts(userId);
@@ -290,6 +356,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       console.error('Error loading dashboard data:', error);
     } finally {
       setIsLoading(false);
+      
+      // Load warranty claims stats after main dashboard data is loaded
+      console.log('📊 Dashboard: Main data loaded, now loading warranty claims stats');
+      setTimeout(() => {
+        loadWarrantyClaimsStats(userId);
+      }, 100);
     }
   };
 
@@ -363,6 +435,45 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
       setEmbeddingStatus(status);
     } catch (error) {
       console.error('Failed to load embedding status:', error);
+    }
+  };
+
+  const loadWarrantyClaimsStats = async (userId: string) => {
+    try {
+      console.log('🔍 Dashboard: Loading warranty claims stats for user:', userId);
+      
+      // Use the exact same call as WarrantyClaims component
+      const { data: statsData, error: statsError } = await warrantyClaimsService.getClaimsStats(userId);
+      console.log('📊 Dashboard: Warranty claims stats response:', { statsData, statsError });
+      
+      if (!statsError && statsData) {
+        console.log('✅ Dashboard: Setting warranty claims stats:', statsData);
+        setWarrantyClaimsStats(statsData);
+        
+        // Update the summary stats with actual warranty claims count
+        setSummaryStats(prev => {
+          const updated = {
+            ...prev,
+            warrantiesClaimed: statsData.total_claims
+          };
+          console.log('📈 Dashboard: Updated summary stats with warranties claimed:', updated.warrantiesClaimed);
+          return updated;
+        });
+      } else {
+        console.log('❌ Dashboard: No warranty claims data or error:', statsError);
+        // Set zero stats if there's an error or no data
+        setSummaryStats(prev => ({
+          ...prev,
+          warrantiesClaimed: 0
+        }));
+      }
+    } catch (error) {
+      console.error('❌ Dashboard: Failed to load warranty claims stats:', error);
+      // Set zero stats on error
+      setSummaryStats(prev => ({
+        ...prev,
+        warrantiesClaimed: 0
+      }));
     }
   };
 
@@ -1510,7 +1621,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
                         src={profilePicture}
                         alt="Profile"
                         className="w-full h-full object-cover"
-                        onError={() => {}}
+                        onError={(e) => {
+                          console.log('Profile picture failed to load, retrying...');
+                          // Try to refresh the profile picture URL
+                          refreshProfilePicture();
+                        }}
+                        onLoad={() => {
+                          console.log('Profile picture loaded successfully');
+                        }}
                       />
                     ) : (
                       <User className="h-4 w-4 text-white" />
@@ -1618,7 +1736,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
         {/* Note: Only in-app notifications are enabled. Android push notifications when app is closed have been disabled. */}
 
         {/* Quick Access Tiles */}
-        <div className="grid md:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 sm:mb-12">
           {/* Scan Receipt Card - Modified to handle free tier limits */}
           {subscriptionInfo && subscriptionInfo.plan === 'free' && subscriptionInfo.receipts_used >= subscriptionInfo.receipts_limit ? (
             // Disabled state for free users who reached limit
@@ -1703,6 +1821,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
               <p className="text-white/90 text-sm sm:text-base">Track and manage your product warranties</p>
             </div>
           </button>
+
+          <button 
+            onClick={() => navigate('/warranty-claims')}
+            className="group bg-gradient-to-br from-pink-400 to-rose-500 p-6 sm:p-8 rounded-xl sm:rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 text-white"
+            data-tour="warranty-claims"
+          >
+            <div className="flex flex-col items-center text-center">
+              <div className="bg-white/20 rounded-full p-3 sm:p-4 mb-3 sm:mb-4 group-hover:bg-white/30 transition-colors duration-300">
+                <FileText className="h-6 w-6 sm:h-8 sm:w-8" />
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold mb-2">Warranties Claimed</h3>
+              <p className="text-white/90 text-sm sm:text-base">Submit and track warranty support requests</p>
+            </div>
+          </button>
         </div>
 
         {/* Summary Stats */}
@@ -1743,21 +1875,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
             <div className="text-xs sm:text-sm text-text-secondary">Products Captured</div>
           </div>
 
-          <div className="bg-gray-100 p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl shadow-card border border-gray-200 relative opacity-60 cursor-not-allowed">
-            {/* Coming Soon Ribbon */}
-            <div className="absolute -top-1 -right-1 bg-gradient-to-r from-orange-400 to-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg transform rotate-12 z-10">
-              Coming Soon
-            </div>
-            
+          <div className="bg-white p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl shadow-card border border-gray-100">
             <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
-              <div className="bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg p-2 sm:p-3 flex-shrink-0">
-                <Shield className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-gray-500" />
+              <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-lg p-2 sm:p-3 flex-shrink-0">
+                <Shield className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-green-600" />
               </div>
             </div>
-            <div className="text-lg sm:text-xl lg:text-2xl xl:text-3xl font-bold text-gray-500 mb-1">
+            <div className="text-lg sm:text-xl lg:text-2xl xl:text-3xl font-bold text-text-primary mb-1">
               {summaryStats.warrantiesClaimed}
             </div>
-            <div className="text-xs sm:text-sm text-gray-400">Warranties Claimed</div>
+            <div className="text-xs sm:text-sm text-text-secondary">
+              Warranties Claimed
+            </div>
           </div>
         </div>
 

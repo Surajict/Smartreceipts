@@ -49,36 +49,40 @@ const Hero: React.FC<HeroProps> = ({ onShowLogin }) => {
 
           {/* Right Column - Demo Video */}
           <div className="relative">
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card p-4 sm:p-6 lg:p-8 relative overflow-hidden">
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-card p-2 sm:p-3 lg:p-4 relative overflow-hidden">
               {/* Background Pattern */}
               <div className="absolute inset-0 opacity-5">
                 <div className="w-full h-full bg-gradient-to-br from-primary to-secondary"></div>
               </div>
               
-              {/* Video Placeholder */}
+              {/* Video - Bigger Size */}
               <div className="relative rounded-lg overflow-hidden aspect-video shadow-lg bg-gradient-to-br from-gray-900 to-gray-800">
                 <iframe
-                  src="https://www.youtube.com/embed/qWJCuc1kUoI"
+                  src="https://www.youtube.com/embed/qWJCuc1kUoI?autoplay=1&loop=1&playlist=qWJCuc1kUoI&mute=1"
                   title="Smart Receipts Demo"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
                   className="absolute inset-0 w-full h-full border-0"
                 ></iframe>
               </div>
-              
-              {/* Feature Highlights */}
-              <div className="mt-4 sm:mt-6 grid grid-cols-3 gap-2 sm:gap-4 text-center">
-                <div className="p-2 sm:p-3">
-                  <div className="text-lg sm:text-2xl font-bold text-secondary">AI</div>
-                  <div className="text-xs sm:text-sm text-text-secondary">Powered</div>
-                </div>
-                <div className="p-2 sm:p-3">
-                  <div className="text-lg sm:text-2xl font-bold text-primary">Secure</div>
-                  <div className="text-xs sm:text-sm text-text-secondary">Encrypted</div>
-                </div>
-                <div className="p-2 sm:p-3">
-                  <div className="text-lg sm:text-2xl font-bold text-accent-purple">Smart</div>
-                  <div className="text-xs sm:text-sm text-text-secondary">Alerts</div>
+            </div>
+            
+            {/* Feature Highlights - Unified Box */}
+            <div className="mt-4 sm:mt-6">
+              <div className="bg-white/95 backdrop-blur-sm rounded-xl p-4 sm:p-6 shadow-card border border-gray-100">
+                <div className="grid grid-cols-3 gap-4 sm:gap-8 text-center">
+                  <div className="flex flex-col items-center">
+                    <div className="text-2xl sm:text-3xl font-bold text-secondary mb-2">AI</div>
+                    <div className="text-sm sm:text-base text-text-secondary font-medium">Powered</div>
+                  </div>
+                  <div className="flex flex-col items-center border-l border-r border-gray-200 px-2">
+                    <div className="text-2xl sm:text-3xl font-bold text-primary mb-2">Secure</div>
+                    <div className="text-sm sm:text-base text-text-secondary font-medium">Encrypted</div>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <div className="text-2xl sm:text-3xl font-bold text-accent-purple mb-2">Smart</div>
+                    <div className="text-sm sm:text-base text-text-secondary font-medium">Alerts</div>
+                  </div>
                 </div>
               </div>
             </div>

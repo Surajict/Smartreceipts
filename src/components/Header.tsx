@@ -44,15 +44,24 @@ const Header: React.FC = () => {
       <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2 sm:space-x-3 group min-w-0 flex-shrink-0">
-            <img 
-              src="/Smart Receipt Logo.png" 
-              alt="Smart Receipts Logo" 
-              className="h-8 w-8 sm:h-10 sm:w-10 object-contain transition-transform duration-300 group-hover:scale-110 flex-shrink-0"
-            />
-            <span className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent truncate">
-              Smart Receipts
-            </span>
+          <Link to="/" className="flex items-center space-x-3 sm:space-x-4 group min-w-0 flex-shrink-0">
+            <div className="relative">
+              <img 
+                src="/Smart Receipt Logo.png" 
+                alt="Smart Receipts A/NZ Logo" 
+                className="h-10 w-10 sm:h-12 sm:w-12 object-contain transition-all duration-300 group-hover:scale-110 flex-shrink-0 drop-shadow-sm group-hover:drop-shadow-md"
+              />
+              {/* Subtle glow effect on hover */}
+              <div className="absolute inset-0 bg-primary/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-md -z-10"></div>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent truncate group-hover:from-primary/90 group-hover:to-secondary/90 transition-all duration-300">
+                Smart Receipts
+              </span>
+              <span className="text-xs sm:text-sm text-primary/70 font-medium truncate opacity-0 group-hover:opacity-100 transition-all duration-300 -mt-1">
+                A/NZ
+              </span>
+            </div>
           </Link>
 
           {/* Desktop Navigation */}
@@ -89,7 +98,7 @@ const Header: React.FC = () => {
               href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-primary text-white px-4 lg:px-6 py-2 rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 shadow-card hover:shadow-card-hover text-sm lg:text-base text-center"
+              className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white px-4 lg:px-6 py-2 rounded-lg font-medium transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm lg:text-base text-center border border-primary/20"
             >
               Join Waitlist
             </a>
@@ -148,7 +157,7 @@ const Header: React.FC = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setIsMenuOpen(false)}
-                className="block w-full text-left px-3 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-all duration-200"
+                className="block w-full text-left px-3 py-2 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white rounded-lg font-medium transition-all duration-300 shadow-md hover:shadow-lg border border-primary/20"
               >
                 Join Waitlist
               </a>

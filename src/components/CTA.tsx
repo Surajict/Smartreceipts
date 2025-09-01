@@ -42,7 +42,7 @@ const CTA: React.FC<CTAProps> = ({ onShowLogin }) => {
             href="https://docs.google.com/forms/d/e/1FAIpQLScD0r0uJ7lsegRhFL5gsdpdCIrsuuwBizPwPvu0sq6J2Pr0tg/viewform?usp=sharing&ouid=115412616738636624494"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block bg-white text-primary px-12 py-6 rounded-2xl font-bold text-xl hover:bg-gray-100 transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:-translate-y-2 hover:scale-105"
+            className="inline-block bg-white text-primary px-12 py-6 rounded-2xl font-bold text-xl hover:bg-primary/5 hover:text-primary/90 transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:-translate-y-2 hover:scale-105 border-2 border-primary/10 hover:border-primary/30"
           >
             Join Waitlist
           </a>

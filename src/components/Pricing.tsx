@@ -245,26 +245,18 @@ const Pricing: React.FC = () => {
                         <td className="px-6 py-4 text-center text-sm text-text-secondary">5 receipts total</td>
                         <td className="px-6 py-4 text-center text-sm text-text-secondary">Unlimited</td>
                       </tr>
-                      <tr>
-                        <td className="px-6 py-4 text-sm text-text-primary">AI Accuracy</td>
-                        <td className="px-6 py-4 text-center text-sm text-text-secondary">95%</td>
-                        <td className="px-6 py-4 text-center text-sm text-text-secondary">99.5%</td>
-                      </tr>
+
                       <tr>
                         <td className="px-6 py-4 text-sm text-text-primary">Smart Search</td>
-                        <td className="px-6 py-4 text-center"><X className="h-5 w-5 text-red-400 mx-auto" /></td>
+                        <td className="px-6 py-4 text-center"><Check className="h-5 w-5 text-green-500 mx-auto" /></td>
                         <td className="px-6 py-4 text-center"><Check className="h-5 w-5 text-green-500 mx-auto" /></td>
                       </tr>
                       <tr>
                         <td className="px-6 py-4 text-sm text-text-primary">Multi-Product Detection</td>
-                        <td className="px-6 py-4 text-center"><X className="h-5 w-5 text-red-400 mx-auto" /></td>
+                        <td className="px-6 py-4 text-center"><Check className="h-5 w-5 text-green-500 mx-auto" /></td>
                         <td className="px-6 py-4 text-center"><Check className="h-5 w-5 text-green-500 mx-auto" /></td>
                       </tr>
-                      <tr>
-                        <td className="px-6 py-4 text-sm text-text-primary">Bulk Upload & Export</td>
-                        <td className="px-6 py-4 text-center"><X className="h-5 w-5 text-red-400 mx-auto" /></td>
-                        <td className="px-6 py-4 text-center"><Check className="h-5 w-5 text-green-500 mx-auto" /></td>
-                      </tr>
+
                       <tr>
                         <td className="px-6 py-4 text-sm text-text-primary">Priority Support</td>
                         <td className="px-6 py-4 text-center"><X className="h-5 w-5 text-red-400 mx-auto" /></td>

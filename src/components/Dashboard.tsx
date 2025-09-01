@@ -1831,7 +1831,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
               <div className="bg-white/20 rounded-full p-3 sm:p-4 mb-3 sm:mb-4 group-hover:bg-white/30 transition-colors duration-300">
                 <FileText className="h-6 w-6 sm:h-8 sm:w-8" />
               </div>
-              <h3 className="text-lg sm:text-xl font-bold mb-2">Warranties Claimed</h3>
+              <h3 className="text-lg sm:text-xl font-bold mb-2">Warranty Claim Support</h3>
               <p className="text-white/90 text-sm sm:text-base">Submit and track warranty support requests</p>
             </div>
           </button>
@@ -1885,7 +1885,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onShowReceiptScanning,
               {summaryStats.warrantiesClaimed}
             </div>
             <div className="text-xs sm:text-sm text-text-secondary">
-              Warranties Claimed
+              Warranty Claim Support
             </div>
           </div>
         </div>

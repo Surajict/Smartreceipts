@@ -30,7 +30,7 @@ const Testimonials: React.FC = () => {
       role: 'Operations Director',
       company: 'Manufacturing Co',
       rating: 5,
-      content: 'The ROI on Smart Receipt is incredible. We\'ve recovered thousands in warranty claims and saved countless hours on organization.'
+      content: 'The ROI on Smart Receipt is incredible. We\'ve recovered thousands through warranty claim support and saved countless hours on organization.'
     },
     {
       name: 'Lisa Thompson',

@@ -62,7 +62,7 @@ const WarrantyClaims: React.FC = () => {
         setClaims(data || []);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load warranty claims');
+      setError(err.message || 'Failed to load warranty claim support');
     } finally {
       setIsLoading(false);
     }
@@ -141,7 +141,7 @@ const WarrantyClaims: React.FC = () => {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-text-secondary">Loading warranty claims...</p>
+          <p className="text-text-secondary">Loading warranty claim support...</p>
         </div>
       </div>
     );
@@ -268,7 +268,7 @@ const WarrantyClaims: React.FC = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8">
           <div>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-text-primary mb-2">
-              Warranty Claims
+              Warranty Claim Support
             </h1>
             <p className="text-base sm:text-lg lg:text-xl text-text-secondary">
               Manage your warranty support requests
@@ -344,7 +344,7 @@ const WarrantyClaims: React.FC = () => {
         <div className="bg-white rounded-xl shadow-card border border-gray-100">
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-text-primary">Your Warranty Claims</h2>
+              <h2 className="text-lg font-semibold text-text-primary">Your Warranty Claim Support</h2>
               {claims.length > 0 && (
                 <span className="text-sm text-text-secondary">
                   {claims.length} {claims.length === 1 ? 'claim' : 'claims'}
@@ -371,7 +371,7 @@ const WarrantyClaims: React.FC = () => {
             <div className="p-6">
               <div className="text-center py-12">
                 <Shield className="h-16 w-16 text-text-secondary mx-auto mb-4" />
-                <h3 className="text-xl font-medium text-text-primary mb-2">No warranty claims yet</h3>
+                <h3 className="text-xl font-medium text-text-primary mb-2">No warranty claim support requests yet</h3>
                 <p className="text-text-secondary mb-6 max-w-md mx-auto">
                   Start by submitting your first warranty claim. We'll help you get the support you need for your products.
                 </p>

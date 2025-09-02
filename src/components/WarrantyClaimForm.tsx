@@ -42,6 +42,7 @@ const WarrantyClaimForm: React.FC<WarrantyClaimFormProps> = ({ onSubmitted, onCa
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionStage, setSubmissionStage] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -87,9 +88,20 @@ const WarrantyClaimForm: React.FC<WarrantyClaimFormProps> = ({ onSubmitted, onCa
 
     try {
       setIsSubmitting(true);
+      setSubmissionStage(0);
       setError(null);
       setSuccess(null);
 
+      // Stage 1: Preparing claim data
+      setSubmissionStage(1);
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      // Stage 2: Contacting support team
+      setSubmissionStage(2);
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      // Stage 3: Processing warranty claim
+      setSubmissionStage(3);
       const { data, error: submitError } = await warrantyClaimsService.submitClaim(user.id, {
         receipt_id: selectedReceipt.id,
         issue_description: issueDescription.trim()
@@ -98,6 +110,10 @@ const WarrantyClaimForm: React.FC<WarrantyClaimFormProps> = ({ onSubmitted, onCa
       if (submitError) {
         setError(submitError);
       } else if (data) {
+        // Stage 4: Finalizing submission
+        setSubmissionStage(4);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         setSuccess('Warranty claim submitted successfully! You will receive a response shortly.');
         setTimeout(() => {
           onSubmitted();
@@ -107,6 +123,7 @@ const WarrantyClaimForm: React.FC<WarrantyClaimFormProps> = ({ onSubmitted, onCa
       setError(err.message || 'Failed to submit warranty claim');
     } finally {
       setIsSubmitting(false);
+      setSubmissionStage(0);
     }
   };
 
@@ -379,6 +396,71 @@ const WarrantyClaimForm: React.FC<WarrantyClaimFormProps> = ({ onSubmitted, onCa
           </form>
         )}
       </main>
+
+      {/* Beautiful Loading Overlay */}
+      {isSubmitting && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md mx-4 text-center">
+            {/* Animated Logo/Icon */}
+            <div className="mb-6">
+              <div className="relative mx-auto w-20 h-20">
+                {/* Outer rotating ring */}
+                <div className="absolute inset-0 border-4 border-primary/20 rounded-full animate-spin"></div>
+                {/* Inner pulsing ring */}
+                <div className="absolute inset-2 border-4 border-primary rounded-full animate-pulse"></div>
+                {/* Center icon */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Shield className="h-8 w-8 text-primary animate-pulse" />
+                </div>
+              </div>
+            </div>
+
+            {/* Stage-based Messages */}
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold text-text-primary">
+                {submissionStage === 1 && "Preparing Your Claim"}
+                {submissionStage === 2 && "Connecting to Support Team"}
+                {submissionStage === 3 && "Processing Warranty Request"}
+                {submissionStage === 4 && "Finalizing Submission"}
+                {submissionStage === 0 && "Initiating Process"}
+              </h3>
+              
+              <p className="text-text-secondary">
+                {submissionStage === 1 && "Gathering your product information and warranty details..."}
+                {submissionStage === 2 && "Establishing secure connection with our warranty support system..."}
+                {submissionStage === 3 && "Your claim is being reviewed and processed by our AI support assistant..."}
+                {submissionStage === 4 && "Almost done! Generating your unique claim ID and confirmation..."}
+                {submissionStage === 0 && "Please wait while we process your warranty claim support request..."}
+              </p>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
+                <div 
+                  className="bg-gradient-to-r from-primary to-primary/80 h-2 rounded-full transition-all duration-700 ease-out"
+                  style={{ 
+                    width: `${submissionStage === 0 ? 10 : submissionStage === 1 ? 25 : submissionStage === 2 ? 50 : submissionStage === 3 ? 85 : 100}%` 
+                  }}
+                ></div>
+              </div>
+
+              {/* Elegant loading dots */}
+              <div className="flex justify-center space-x-1 mt-4">
+                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+
+              {/* Reassuring message */}
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  ✨ <strong>We're working on your request!</strong><br/>
+                  Our advanced AI system is analyzing your warranty claim and will connect you with the appropriate support channel for the fastest resolution.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>

@@ -17,13 +17,35 @@ class SubscriptionService implements UsageTracker {
       const storedInfo = this.getStoredSubscriptionInfo(userId);
       if (storedInfo) {
         console.log('📱 Using development premium subscription data');
+        
+        // Check if stored subscription has expired
+        if (storedInfo.current_period_end) {
+          const expiryDate = new Date(storedInfo.current_period_end);
+          const now = new Date();
+          
+          if (now > expiryDate) {
+            console.log('⚠️ Development subscription has expired, reverting to free plan');
+            // Remove expired development subscription
+            localStorage.removeItem(`subscription_${userId}`);
+            return {
+              plan: 'free',
+              status: 'active',
+              cancel_at_period_end: false,
+              receipts_used: 0,
+              receipts_limit: 5,
+              usage_month: new Date().toISOString().substring(0, 7)
+            };
+          }
+        }
+        
         return {
           plan: storedInfo.plan,
           status: storedInfo.status,
           cancel_at_period_end: false,
           receipts_used: storedInfo.receipts_used || 0,
           receipts_limit: storedInfo.receipts_limit || 999999,
-          usage_month: new Date().toISOString().substring(0, 7)
+          usage_month: new Date().toISOString().substring(0, 7),
+          current_period_end: storedInfo.current_period_end
         };
       }
 
@@ -40,7 +62,23 @@ class SubscriptionService implements UsageTracker {
         return null;
       }
 
-      return data[0];
+      const subscriptionInfo = data[0];
+      
+      // Additional client-side validation for extra safety
+      if (subscriptionInfo.current_period_end && subscriptionInfo.plan === 'premium') {
+        const expiryDate = new Date(subscriptionInfo.current_period_end);
+        const now = new Date();
+        
+        if (now > expiryDate) {
+          console.log('⚠️ Subscription has expired, should be handled by database function');
+          // The database function should handle this, but add client-side fallback
+          subscriptionInfo.plan = 'free';
+          subscriptionInfo.status = 'past_due';
+          subscriptionInfo.receipts_limit = 5;
+        }
+      }
+
+      return subscriptionInfo;
     } catch (err: any) {
       console.error('Subscription service error:', err);
       return null;

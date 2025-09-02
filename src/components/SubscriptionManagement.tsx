@@ -188,6 +188,11 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
     });
   };
 
+  const isSubscriptionExpired = (endDate: string | undefined): boolean => {
+    if (!endDate) return false;
+    return new Date() > new Date(endDate);
+  };
+
   const formatCurrency = (amount: number, currency: string = 'AUD') => {
     return stripeService.formatCurrency(amount / 100, currency); // Stripe amounts are in cents
   };
@@ -370,9 +375,16 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
                 <div className="flex justify-between">
                   <span className="text-text-secondary">Status:</span>
                   <span className={`font-medium ${
-                    subscriptionInfo.status === 'active' ? 'text-green-600' : 'text-orange-600'
+                    subscriptionInfo.status === 'active' && !isSubscriptionExpired(subscriptionInfo.current_period_end)
+                      ? 'text-green-600' 
+                      : subscriptionInfo.status === 'past_due' || isSubscriptionExpired(subscriptionInfo.current_period_end)
+                      ? 'text-red-600'
+                      : 'text-orange-600'
                   }`}>
-                    {subscriptionInfo.status.charAt(0).toUpperCase() + subscriptionInfo.status.slice(1)}
+                    {isSubscriptionExpired(subscriptionInfo.current_period_end) || subscriptionInfo.status === 'past_due'
+                      ? 'Expired' 
+                      : subscriptionInfo.status.charAt(0).toUpperCase() + subscriptionInfo.status.slice(1)
+                    }
                   </span>
                 </div>
 
@@ -464,7 +476,24 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
             </div>
           )}
 
-          {subscriptionInfo.cancel_at_period_end && (
+          {/* Expired Subscription Warning */}
+          {(isSubscriptionExpired(subscriptionInfo.current_period_end) || subscriptionInfo.status === 'past_due') && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="w-5 h-5 text-red-500" />
+                <div className="text-sm text-red-700">
+                  <span className="font-medium">Subscription Expired.</span> Your Premium subscription expired on {subscriptionInfo.current_period_end ? formatDate(subscriptionInfo.current_period_end) : 'an unknown date'}. 
+                  {subscriptionSystem === 'code_based' 
+                    ? ' Please contact support or redeem a new subscription code to restore Premium access.'
+                    : ' Please update your payment method or contact support to restore Premium access.'
+                  }
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Cancelled Subscription Warning */}
+          {subscriptionInfo.cancel_at_period_end && !isSubscriptionExpired(subscriptionInfo.current_period_end) && (
             <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
               <div className="flex items-center space-x-2">
                 <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 20 20">

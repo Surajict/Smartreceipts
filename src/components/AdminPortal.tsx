@@ -96,11 +96,13 @@ const AdminPortal: React.FC = () => {
 
     try {
       // Load admin stats using RPC function (this works!)
+      console.log('📊 Loading admin stats...');
       const { data: statsData, error: statsError } = await supabase.rpc('get_admin_subscription_stats');
       if (statsError) {
-        console.error('Stats error:', statsError);
+        console.error('❌ Stats error:', statsError);
         throw statsError;
       }
+      console.log('✅ Stats loaded successfully:', statsData);
       setAdminStats(statsData);
 
       // Load subscription system setting from localStorage (avoid database calls)
@@ -109,14 +111,83 @@ const AdminPortal: React.FC = () => {
         setSubscriptionSystem(savedSystem as 'code_based' | 'stripe');
       }
 
-      // Note: We don't load subscription codes from database due to RLS restrictions
-      // The codes will be managed through local state when generated
+      // Load all subscription codes from database
+      await loadSubscriptionCodes();
 
     } catch (err: any) {
       console.error('Error loading admin data:', err);
       setError(`Failed to load admin data: ${err.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateExpiredCodes = async () => {
+    try {
+      console.log('⏰ Checking for expired codes to update...');
+      
+      // Use RPC function to update expired codes
+      const { data, error } = await supabase.rpc('update_expired_subscription_codes');
+      
+      if (error) {
+        console.error('❌ Failed to update expired codes:', error);
+        return;
+      }
+      
+      if (data && data.updated_count > 0) {
+        console.log(`✅ Updated ${data.updated_count} expired codes in database`);
+      } else {
+        console.log('ℹ️ No expired codes found to update');
+      }
+    } catch (err: any) {
+      console.error('💥 Error updating expired codes:', err);
+    }
+  };
+
+  const loadSubscriptionCodes = async () => {
+    try {
+      console.log('🔍 Loading subscription codes...');
+      
+      // First, update any expired codes in the database
+      await updateExpiredCodes();
+      
+      // Test if the RPC function exists first
+      console.log('🧪 Testing RPC function: get_admin_subscription_codes');
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_admin_subscription_codes');
+      
+      if (rpcError) {
+        console.error('❌ RPC function failed:', rpcError);
+        console.log('📝 RPC Error details:', {
+          message: rpcError.message,
+          details: rpcError.details,
+          hint: rpcError.hint,
+          code: rpcError.code
+        });
+        
+        // Try direct query as fallback
+        console.log('🔄 Attempting direct query as fallback...');
+        const { data: codesData, error: codesError } = await supabase
+          .from('subscription_codes')
+          .select('*')
+          .order('generated_at', { ascending: false })
+          .limit(50);
+          
+        if (codesError) {
+          console.error('❌ Direct query also failed:', codesError);
+          console.warn('⚠️ Could not load subscription codes from database. Only showing session codes.');
+          return;
+        }
+        
+        console.log('✅ Direct query succeeded, loaded codes:', codesData?.length || 0);
+        setSubscriptionCodes(codesData || []);
+      } else {
+        console.log('✅ RPC function succeeded, loaded codes:', rpcData?.length || 0);
+        console.log('📋 Sample code data:', rpcData?.[0]);
+        setSubscriptionCodes(rpcData || []);
+      }
+    } catch (err: any) {
+      console.error('💥 Error loading subscription codes:', err);
+      console.warn('⚠️ Could not load subscription codes from database. Only showing session codes.');
     }
   };
 
@@ -138,19 +209,7 @@ const AdminPortal: React.FC = () => {
         setSuccessMessage(`✅ New subscription code generated: ${data.code}`);
         setCodeNotes('');
         
-        // Add the new code to the local state immediately for better UX
-        const newCode: SubscriptionCode = {
-          id: data.id,
-          code: data.code,
-          status: 'generated',
-          generated_at: new Date().toISOString(),
-          expires_at: data.expires_at,
-          duration_months: durationMonths,
-          notes: codeNotes || undefined
-        };
-        setSubscriptionCodes(prev => [newCode, ...prev]);
-        
-        // Refresh stats
+        // Refresh all data including codes and stats
         await loadAdminData();
       } else {
         setError('Failed to generate subscription code');
@@ -192,16 +251,39 @@ const AdminPortal: React.FC = () => {
     });
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, expiresAt: string) => {
+    const now = new Date();
+    const expirationDate = new Date(expiresAt);
+    const isExpired = now > expirationDate;
+    
+    // Determine actual status based on current date and database status
+    let actualStatus = status;
+    if (isExpired && status === 'generated') {
+      actualStatus = 'expired';
+    }
+    
     const styles = {
-      generated: 'bg-blue-100 text-blue-800',
-      used: 'bg-green-100 text-green-800',
+      generated: 'bg-green-100 text-green-800',
+      used: 'bg-gray-100 text-gray-800',
       expired: 'bg-red-100 text-red-800'
     };
 
+    const getStatusLabel = (actualStatus: string) => {
+      switch (actualStatus) {
+        case 'generated':
+          return 'Active';
+        case 'expired':
+          return 'Expired';
+        case 'used':
+          return 'Used';
+        default:
+          return actualStatus.charAt(0).toUpperCase() + actualStatus.slice(1);
+      }
+    };
+
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status as keyof typeof styles]}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[actualStatus as keyof typeof styles]}`}>
+        {getStatusLabel(actualStatus)}
       </span>
     );
   };
@@ -464,9 +546,9 @@ const AdminPortal: React.FC = () => {
         {/* Subscription Codes Table */}
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Recently Generated Codes</h2>
+            <h2 className="text-lg font-semibold text-gray-900">All Subscription Codes</h2>
             <p className="text-sm text-blue-600 mt-1">
-              📋 Codes generated in this session are shown below. Copy them immediately for use.
+              📋 All subscription codes with their current status. Copy active codes for distribution.
             </p>
           </div>
           
@@ -487,6 +569,9 @@ const AdminPortal: React.FC = () => {
                     Expires
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Used At
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Duration
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -505,16 +590,25 @@ const AdminPortal: React.FC = () => {
                         <code className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">
                           {code.code}
                         </code>
-                        <button
-                          onClick={() => copyToClipboard(code.code)}
-                          className="text-gray-400 hover:text-gray-600"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </button>
+                        {(() => {
+                          const now = new Date();
+                          const expirationDate = new Date(code.expires_at);
+                          const isExpired = now > expirationDate;
+                          const isActive = code.status === 'generated' && !isExpired;
+                          
+                          return isActive ? (
+                            <button
+                              onClick={() => copyToClipboard(code.code)}
+                              className="text-gray-400 hover:text-gray-600"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </button>
+                          ) : null;
+                        })()}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(code.status)}
+                      {getStatusBadge(code.status, code.expires_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatDate(code.generated_at)}
@@ -523,18 +617,32 @@ const AdminPortal: React.FC = () => {
                       {formatDate(code.expires_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {code.used_at ? formatDate(code.used_at) : '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {code.duration_months} month{code.duration_months !== 1 ? 's' : ''}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {code.notes || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button
-                        onClick={() => copyToClipboard(code.code)}
-                        className="text-primary hover:text-primary-dark"
-                      >
-                        Copy
-                      </button>
+                      {(() => {
+                        const now = new Date();
+                        const expirationDate = new Date(code.expires_at);
+                        const isExpired = now > expirationDate;
+                        const isActive = code.status === 'generated' && !isExpired;
+                        
+                        return isActive ? (
+                          <button
+                            onClick={() => copyToClipboard(code.code)}
+                            className="text-primary hover:text-primary-dark"
+                          >
+                            Copy
+                          </button>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}
@@ -545,11 +653,11 @@ const AdminPortal: React.FC = () => {
           {subscriptionCodes.length === 0 && !loading && (
             <div className="text-center py-12">
               <CreditCard className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No codes generated yet</h3>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No subscription codes found</h3>
               <p className="mt-1 text-sm text-gray-500">
                 Generate your first subscription code using the form above.
                 <br />
-                Codes will appear here for easy copying and reference.
+                All codes will appear here with their status and usage information.
               </p>
             </div>
           )}

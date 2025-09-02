@@ -20,13 +20,12 @@ export class MultiProductReceiptService {
   ): Promise<ReceiptScanResult> {
     try {
       // Check usage limits before allowing receipt creation (FREEMIUM CONTROL)
-      const canScan = await subscriptionService.checkCanScan(userId);
+      const scanCheck = await subscriptionService.canUserScanReceipt(userId);
       
-      if (!canScan) {
-        const usageInfo = await subscriptionService.getUsageInfo(userId);
+      if (!scanCheck.canScan) {
         const subscriptionError: SubscriptionError = {
           type: 'usage_limit',
-          message: `Monthly limit reached! You've used ${usageInfo.receipts_used}/${usageInfo.receipts_limit} receipts. Upgrade to Premium for unlimited scanning.`,
+          message: scanCheck.reason,
           action: 'upgrade'
         };
         

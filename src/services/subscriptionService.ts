@@ -9,6 +9,58 @@ import {
 
 class SubscriptionService implements UsageTracker {
   /**
+   * Check if user can scan more receipts based on lifetime limit
+   */
+  async canUserScanReceipt(userId: string): Promise<{
+    canScan: boolean;
+    reason: string;
+    receiptsUsed: number;
+    receiptsLimit: number;
+  }> {
+    try {
+      const { data, error } = await supabase.rpc('can_user_scan_receipt', {
+        user_uuid: userId
+      });
+
+      if (error) {
+        console.error('Error checking scan permission:', error);
+        // Default to allowing scan if we can't check (fail open)
+        return {
+          canScan: true,
+          reason: 'Unable to verify scan limit',
+          receiptsUsed: 0,
+          receiptsLimit: 5
+        };
+      }
+
+      if (data && data.length > 0) {
+        return {
+          canScan: data[0].can_scan,
+          reason: data[0].reason,
+          receiptsUsed: data[0].receipts_used,
+          receiptsLimit: data[0].receipts_limit
+        };
+      }
+
+      // Fallback
+      return {
+        canScan: false,
+        reason: 'Unable to verify scan permission',
+        receiptsUsed: 0,
+        receiptsLimit: 5
+      };
+    } catch (error) {
+      console.error('Error in canUserScanReceipt:', error);
+      return {
+        canScan: true,
+        reason: 'Error checking scan limit',
+        receiptsUsed: 0,
+        receiptsLimit: 5
+      };
+    }
+  }
+
+  /**
    * Get user's current subscription info with usage
    */
   async getSubscriptionInfo(userId: string): Promise<UserSubscriptionInfo | null> {
@@ -106,7 +158,12 @@ class SubscriptionService implements UsageTracker {
         return false; // Fail safely - don't allow scan if we can't check
       }
 
-      return data === true;
+      // The RPC function returns a table with rows, not a boolean
+      if (data && data.length > 0) {
+        return data[0].can_scan;
+      }
+
+      return false; // No data returned
     } catch (err: any) {
       console.error('Usage check error:', err);
       return false; // Fail safely

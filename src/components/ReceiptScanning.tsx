@@ -25,6 +25,7 @@ import { signOut, uploadReceiptImage, testOpenAIConnection, extractReceiptDataWi
 import { useUser } from '../contexts/UserContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { useTheme } from '../contexts/ThemeContext';
+import subscriptionService from '../services/subscriptionService';
 import { extractTextFromImage } from '../services/ocrService';
 import { MultiProductReceiptService } from '../services/multiProductReceiptService';
 import { ExtractedReceiptData } from '../types/receipt';
@@ -398,6 +399,20 @@ const ReceiptScanning: React.FC<ReceiptScanningProps> = ({ onBackToDashboard, on
     if (!capturedImage && !uploadedFile) {
       setError('Please capture or upload an image first');
       return;
+    }
+
+    // Check if user can scan more receipts
+    if (user) {
+      try {
+        const scanCheck = await subscriptionService.canUserScanReceipt(user.id);
+        if (!scanCheck.canScan) {
+          setError(scanCheck.reason);
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking scan permission:', err);
+        // Continue with processing if check fails
+      }
     }
 
     if (!user) {

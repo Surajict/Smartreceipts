@@ -433,11 +433,58 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
 
             {/* Usage Statistics */}
             <div>
-              <UsageIndicator
-                receiptsUsed={subscriptionInfo.receipts_used}
-                receiptsLimit={subscriptionInfo.receipts_limit}
-                plan={subscriptionInfo.plan}
-              />
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-medium mb-3">
+                  {subscriptionInfo.plan === 'premium' ? 'Receipt Usage' : 'Free Trial Usage'}
+                </h4>
+                
+                {subscriptionInfo.plan === 'free' ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Receipts scanned (lifetime):</span>
+                      <span className="font-semibold">
+                        {subscriptionInfo.receipts_used} of {subscriptionInfo.receipts_limit}
+                      </span>
+                    </div>
+                    
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full ${
+                          subscriptionInfo.receipts_used >= subscriptionInfo.receipts_limit
+                            ? 'bg-red-500'
+                            : subscriptionInfo.receipts_used >= subscriptionInfo.receipts_limit * 0.8
+                            ? 'bg-yellow-500'
+                            : 'bg-blue-500'
+                        }`}
+                        style={{
+                          width: `${Math.min((subscriptionInfo.receipts_used / subscriptionInfo.receipts_limit) * 100, 100)}%`
+                        }}
+                      ></div>
+                    </div>
+                    
+                    {subscriptionInfo.receipts_used >= subscriptionInfo.receipts_limit ? (
+                      <div className="text-sm text-red-600 font-medium">
+                        ⚠️ Free trial limit reached. Upgrade to Premium to continue scanning.
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-600">
+                        {subscriptionInfo.receipts_limit - subscriptionInfo.receipts_used} receipts remaining in your free trial
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Total receipts scanned:</span>
+                      <span className="font-semibold">{subscriptionInfo.receipts_used}</span>
+                    </div>
+                    
+                    <div className="text-sm text-green-600 font-medium">
+                      ✅ Unlimited receipt scanning
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -483,6 +530,13 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({
                 <AlertCircle className="w-5 h-5 text-red-500" />
                 <div className="text-sm text-red-700">
                   <span className="font-medium">Subscription Expired.</span> Your Premium subscription expired on {subscriptionInfo.current_period_end ? formatDate(subscriptionInfo.current_period_end) : 'an unknown date'}. 
+                  {subscriptionInfo.receipts_used > 5 && (
+                    <>
+                      <br />
+                      <span className="font-medium">⚠️ Receipt Limit Exceeded:</span> You have scanned {subscriptionInfo.receipts_used} receipts (limit: 5 for free users). You must upgrade to Premium to continue using the app.
+                    </>
+                  )}
+                  <br />
                   {subscriptionSystem === 'code_based' 
                     ? ' Please contact support or redeem a new subscription code to restore Premium access.'
                     : ' Please update your payment method or contact support to restore Premium access.'

@@ -24,27 +24,6 @@ const Testimonials: React.FC = () => {
       company: 'Creative Studio',
       rating: 5,
       content: 'The customer support team helped me claim a warranty on my expensive camera equipment. Exceptional service and results!'
-    },
-    {
-      name: 'David Park',
-      role: 'Operations Director',
-      company: 'Manufacturing Co',
-      rating: 5,
-      content: 'The ROI on Smart Receipt is incredible. We\'ve recovered thousands through warranty claim support and saved countless hours on organization.'
-    },
-    {
-      name: 'Lisa Thompson',
-      role: 'Restaurant Owner',
-      company: 'Bistro Moderne',
-      rating: 5,
-      content: 'Perfect for managing all our equipment warranties. The mobile app makes it easy to scan receipts on the go.'
-    },
-    {
-      name: 'James Wilson',
-      role: 'Tech Consultant',
-      company: 'Digital Solutions',
-      rating: 5,
-      content: 'Smart Receipt has transformed how I handle client equipment purchases. Everything is tracked and organized automatically.'
     }
   ];
 
@@ -82,7 +61,7 @@ const Testimonials: React.FC = () => {
 
         {/* Testimonials Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
-          {testimonials.slice(0, 6).map((testimonial, index) => (
+          {testimonials.map((testimonial, index) => (
             <div
               key={index}
               className="bg-white p-6 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 transform hover:-translate-y-2 border border-gray-100 backdrop-blur-sm"
